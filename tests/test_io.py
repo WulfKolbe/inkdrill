@@ -6,6 +6,8 @@ import unittest
 import zlib
 
 from inkdrill.io import CorruptPNG, UnsupportedPNG, _chunks, _parse_ihdr, _parse_phys, _is_neutral, _decode_gray_neutral, _decode_gray_colour
+from inkdrill.io import PngImage, read_png, load_mask
+from inkdrill.raster import INK, BG
 
 SIG = b"\x89PNG\r\n\x1a\n"
 
@@ -328,3 +330,84 @@ class T0_7_ColourPath(unittest.TestCase):
             with self.subTest(filter=ft):
                 self.assertEqual(_decode_gray_colour(dec, 9, len(GRAD)),
                                  _decode_gray_neutral(dec, 9, len(GRAD)))
+
+
+class T0_8_ReadPng(unittest.TestCase):
+
+    def test_dimensions_and_length(self):
+        img = read_png(build_png(GRAD, filters=[2] * len(GRAD)))
+        self.assertEqual((img.width, img.height), (9, len(GRAD)))
+        self.assertEqual(len(img.gray), 9 * len(GRAD))       # G3
+
+    def test_neutral_flag_reports_the_path_taken(self):
+        self.assertTrue(read_png(build_png(GRAD)).neutral)
+        self.assertFalse(read_png(build_png(COLOUR)).neutral)
+
+    def test_gray_matches_oracle_luma_either_path(self):
+        for rows, label in ((GRAD, "neutral"), (COLOUR, "colour")):
+            fts = [i % 5 for i in range(len(rows))]
+            png = build_png(rows, filters=fts)
+            with self.subTest(label):
+                self.assertEqual(read_png(png).gray,
+                                 luma(reference_decode(raw_scanlines(png), 9,
+                                                       len(rows))))
+
+    def test_multi_idat_is_concatenated_before_inflate(self):
+        """G1. A decoder that inflates each IDAT separately fails here."""
+        one = read_png(build_png(GRAD, filters=[4] * len(GRAD), idat_split=1))
+        many = read_png(build_png(GRAD, filters=[4] * len(GRAD), idat_split=7))
+        self.assertEqual(one.gray, many.gray)
+
+    def test_dpi_from_phys(self):
+        img = read_png(build_png(GRAD, phys=(11811, 11811, 1)))
+        self.assertAlmostEqual(img.dpi[0], 300.0, places=1)
+
+    def test_dpi_none_when_phys_absent(self):
+        self.assertIsNone(read_png(build_png(GRAD)).dpi)
+
+    def test_missing_ihdr_rejected(self):
+        raw = SIG + _chunk(b"IEND", b"")
+        with self.assertRaises(CorruptPNG):
+            read_png(raw)
+
+    def test_missing_idat_rejected(self):
+        raw = SIG + ihdr(4, 4) + _chunk(b"IEND", b"")
+        with self.assertRaises(CorruptPNG):
+            read_png(raw)
+
+    def test_inflated_length_mismatch_rejected(self):
+        """IDAT that inflates to the wrong number of bytes must raise, not
+        silently produce a short image."""
+        raw = SIG + ihdr(9, 9) + _chunk(b"IDAT", zlib.compress(b"\x00" * 10)) \
+            + _chunk(b"IEND", b"")
+        with self.assertRaises(CorruptPNG):
+            read_png(raw)
+
+    def test_bad_deflate_stream_rejected(self):
+        raw = SIG + ihdr(4, 4) + _chunk(b"IDAT", b"not deflate") \
+            + _chunk(b"IEND", b"")
+        with self.assertRaises(CorruptPNG):
+            read_png(raw)
+
+    def test_reads_from_path(self):
+        import pathlib
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            p = pathlib.Path(d) / "page.png"
+            p.write_bytes(build_png(GRAD, filters=[2] * len(GRAD)))
+            self.assertEqual(read_png(p).gray, read_png(p.read_bytes()).gray)
+
+
+class T0_9_LoadMask(unittest.TestCase):
+
+    def test_threshold_is_applied_by_u2(self):
+        rows = [[(10, 10, 10), (250, 250, 250)]]
+        mask = load_mask(build_png(rows), threshold=128)
+        self.assertEqual(mask.width, 2)
+        self.assertEqual(mask.height, 1)
+        self.assertEqual(mask.data, bytes([INK, BG]))
+
+    def test_polarity_flag_reaches_binarize(self):
+        rows = [[(10, 10, 10), (250, 250, 250)]]
+        mask = load_mask(build_png(rows), threshold=128, ink_is_dark=False)
+        self.assertEqual(mask.data, bytes([BG, INK]))

@@ -54,10 +54,14 @@ Non-guarantees (out of scope for U0)
 
 from __future__ import annotations
 
+import os
 import struct
 import zlib
+from dataclasses import dataclass
 from itertools import accumulate
 from typing import Iterator
+
+from .raster import InkMask, binarize
 
 __all__ = ["CorruptPNG", "UnsupportedPNG", "PngImage", "read_png", "load_mask"]
 
@@ -272,3 +276,73 @@ def _decode_gray_colour(dec: bytes, w: int, h: int) -> bytes:
             (line[i] * 299 + line[i + 1] * 587 + line[i + 2] * 114 + 500) // 1000
             for i in range(0, row_len, _BPP)))
     return b"".join(out)
+
+
+@dataclass(frozen=True, slots=True)
+class PngImage:
+    """A decoded page. `gray` is row-major, length width * height."""
+    width: int
+    height: int
+    gray: bytes
+    dpi: tuple[float, float] | None
+    neutral: bool
+
+    def __repr__(self) -> str:
+        return (f"PngImage({self.width}x{self.height}, "
+                f"dpi={self.dpi}, neutral={self.neutral})")
+
+
+def read_png(src: bytes | bytearray | str | os.PathLike) -> PngImage:
+    """Decode a ghostscript png16m PNG to greyscale.
+
+    `src` is raw PNG bytes or a path. Raises UnsupportedPNG outside the
+    stated scope, CorruptPNG for a malformed file.
+    """
+    if isinstance(src, (bytes, bytearray)):
+        raw = bytes(src)
+    else:
+        with open(src, "rb") as fh:
+            raw = fh.read()
+
+    width = height = None
+    dpi: tuple[float, float] | None = None
+    idat: list[bytes] = []
+    for typ, data in _chunks(raw):
+        if typ == b"IHDR":
+            width, height = _parse_ihdr(data)
+        elif typ == b"pHYs":
+            dpi = _parse_phys(data)
+        elif typ == b"IDAT":
+            idat.append(data)
+        elif typ == b"IEND":
+            break
+
+    if width is None:
+        raise CorruptPNG("no IHDR chunk")
+    if not idat:
+        raise CorruptPNG("no IDAT chunk")
+
+    try:
+        dec = zlib.decompress(b"".join(idat))        # G1
+    except zlib.error as exc:
+        raise CorruptPNG(f"inflate failed: {exc}") from None
+
+    expect = height * (width * 3 + 1)
+    if len(dec) != expect:
+        raise CorruptPNG(
+            f"inflated to {len(dec)} bytes, expected {expect} "
+            f"for {width}x{height}")
+
+    neutral = _is_neutral(dec, width, height)
+    gray = (_decode_gray_neutral(dec, width, height) if neutral
+            else _decode_gray_colour(dec, width, height))
+    return PngImage(width, height, gray, dpi, neutral)
+
+
+def load_mask(src: bytes | bytearray | str | os.PathLike, *,
+              threshold: int = 128, ink_is_dark: bool = True) -> InkMask:
+    """read_png then U2's binarize. The only place this unit crosses into
+    mask space, and it does so by calling U2 rather than duplicating it."""
+    img = read_png(src)
+    return binarize(img.gray, img.width, img.height,
+                    threshold=threshold, ink_is_dark=ink_is_dark)
