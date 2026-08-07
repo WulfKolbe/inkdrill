@@ -41,6 +41,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from inkdrill.pngio import _is_neutral, read_png            # noqa: E402
 from inkdrill.raster import INK, InkMask, binarize          # noqa: E402
 from inkdrill.aggregate import component_moments, moments_of_mask  # noqa: E402
+from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
 
@@ -416,8 +417,38 @@ def m_moments(root, n, rng):
     print(f"\nG2 on real ink: {pages_ok}/{n} pages, {comps} components compared")
 
 
+def m_nesting(root, n, rng):
+    """units.md G1/assumption 3: nest's hole count, computed as background
+    components of the inverted mask, must equal U3's cycle rank. The two
+    share no code -- each is the other's oracle."""
+    agree = disagree = 0
+    examples = []
+    for f in rng.sample(pages(root), n):
+        img = read_png(f)
+        mask = binarize(img.gray, img.width, img.height)
+        band = InkMask(mask.data[:mask.width * 400], mask.width, 400)
+        for (x0, y0, x1, y1), sub in components(band, min_area=1, min_side=1):
+            res = sweep(sub, axis="row", conn=8, capture=Capture.GRAPH)
+            got = nest(sub).hole_count
+            if got == res.cycle_count:
+                agree += 1
+            else:
+                disagree += 1
+                if len(examples) < 5:
+                    examples.append((res.cycle_count, got, sub.width, sub.height))
+        print(f"  {f.parent.parent.parent.name[:32]:32} "
+              f"{agree + disagree:5} components so far")
+    tot = agree + disagree
+    print(f"\ncomponents compared            {tot}")
+    print(f"nest holes == U3 cycle_count   {agree} ({agree/max(1,tot):.2%})")
+    print(f"disagree                       {disagree}")
+    for cyc, got, w, h in examples:
+        print(f"    cycle_count={cyc} nest={got}  ({w}x{h})")
+
+
 MEASUREMENTS = {
     "moments": (m_moments, 3),
+    "nesting": (m_nesting, 2),
     "neutrality": (m_neutrality, 400),
     "colour": (m_colour, 60),
     "throughput": (m_throughput, 5),

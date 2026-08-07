@@ -133,9 +133,17 @@ the design discussion — `hole_of`, `ink_in_hole`, `bbox_contains`,
 the table case (hole lattice of a connected frame) and its disconnected
 counterpart (collinear rule grouping).
 Tests: hole count from `nest` equals `Component.cycle_count` from U3 —
-**two independent computations, one the oracle for the other**; nested
-frames give depth 0/1/2; a synthetic table frame yields an m×n hole
-lattice; a `\fbox`-like fixture yields `ink_in_hole` and *not* `hole_of`.
+**two independent computations, one the oracle for the other** — on the
+U3 fixtures, 120 random masks, and 222 components of real page ink;
+nested frames give depth 0/1/2; a synthetic table frame yields an m×n
+hole lattice; a `\fbox`-like fixture yields `ink_in_hole` and *not*
+`hole_of`; a diagonal wall does not leak, holding the paired-connectivity
+rule. Depth parity (even = ink, odd = background) is a runtime check,
+not a convention.
+**Scope limit:** the *disconnected* table frame — collinear rule grouping
+— is not implemented. That counterpart case needs U5 geometry and is
+named here rather than half-built.
+**Status: 29 tests passed.**
 
 ### Parallelism
 
@@ -573,15 +581,15 @@ corpus cannot supply it: those pages are already deskewed (§3 above).
    relabelling, and the result is structurally equal to a genuine sweep
    of the flipped mask on all six U3 fixtures, on 40 random masks, and on
    three real page bands. Four orientations cost two scans, as designed.
-3. **Cycle rank equals hole count for conn-8 foreground.** The identity
-   `cycles == E − V + C` is verified (it is arithmetic). That it counts
-   *holes* was verified only on the fixtures — ring, figure-8, A, nested
-   frames — plus the duality argument. **Now also measured on 8,453 real
-   isolated glyphs, 2026-08-07: every character tested holds its expected
-   hole count at 98.7–100% consistency against pdfminer's character
-   identity — `o e a b d p q R A 0` → 1, `g` → 2, `i l n r s t u v w x`
-   → 0.** U6 still provides the independent oracle; this is corroboration
-   on real ink at scale, not a substitute for it.
+3. ~~**Cycle rank equals hole count for conn-8 foreground.**~~
+   **VERIFIED 2026-08-07 (U6 G1).** The identity `cycles == E − V + C`
+   was always arithmetic; that it counts *holes* rested on the duality
+   argument plus six fixtures. U6 now computes holes a completely
+   different way — background components of the inverted mask at
+   `conn=4`, sharing no code with the sweep — and the two agree on the
+   fixtures, on 120 random masks, and on **222 components of real page
+   ink across two independent samples, 100%**. Each is now the other's
+   oracle, which is what the plan asked for.
 4. ~~**Moment aggregates will be axis-invariant.**~~ **VERIFIED
    2026-08-07 (U5 G2).** The caution was right that it does not follow
    from U2's pixel-set agreement — but it does follow from EXACTNESS.

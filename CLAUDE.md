@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 219, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 248, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -47,7 +47,7 @@ written as a docstring *before* the implementation. Every module states
 guarantees `G1`–`G7` at the top of that docstring; the tests exist to hold those
 specific numbered guarantees, so a test named for `G4` is not incidental.
 
-Built (U0–U5), all independent of each other except `reeb`/`aggregate` → `sweep` → `raster` and
+Built (U0–U6), all independent of each other except `reeb`/`aggregate`/`nest` → `sweep` → `raster` and
 `pngio.load_mask` → `raster.binarize`:
 
 - **`inkdrill/pngio.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
@@ -63,6 +63,9 @@ Built (U0–U5), all independent of each other except `reeb`/`aggregate` → `sw
 - **`inkdrill/aggregate.py`** — moment aggregates. `Moments`,
   `moments_of_mask`, `moments_per_component`. Raw sums are exact
   integers; that is what makes axis invariance exact. Moments add.
+- **`inkdrill/nest.py`** — holes and the containment forest. `nest()` →
+  `Nesting`. Computes holes independently of `sweep`, so the two check
+  each other. `hole_of` and `ink_in_hole` are deliberately distinct.
 
 Planned U4–U14 (`reeb`, `aggregate`, `nest`, `band`, `sched`, `font`, `gold`,
 `coverage`, `domains`, `classify`, `mathstruct`) are specified in `units.md`
