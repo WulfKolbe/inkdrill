@@ -39,6 +39,18 @@ dependencies' tests pass.
 
 ### Foundation
 
+**U0 `io.py` — ghostscript png16m ingest.**
+*No dependencies.*
+Contract: `read_png` returning `PngImage(width, height, gray, dpi, neutral)`;
+`load_mask` composing it with U2's `binarize`. G1–G7.
+**Scope limit stated up front:** IHDR exactly `(8, 2, 0, 0, 0)` — the output
+of the ghostscript `png16m` device. Everything else raises `UnsupportedPNG`.
+Tests: CRC and truncation rejection; every rejected IHDR variant; all five
+scanline filters against a naive reference decoder held as the oracle;
+multi-IDAT concatenation; `pHYs` present and absent; the neutrality
+equivalence G5 that the two-path decode rests on.
+**Status: 39 tests passed.**
+
 **U1 `space.py` — affine algebra, transform graph, CTM decomposition.**
 *No dependencies.*
 Contract: `Affine`, `Decomposition`, `SpaceGraph`, the two angle-boundary
@@ -207,16 +219,22 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 103 tests — OK
+Ran 142 tests — OK
 ```
 
 | Unit | Tests | Result |
 |---|---|---|
+| U0 `io.py` | 39 | passed |
 | U1 `space.py` | 36 | passed |
 | U2 `raster.py` | 31 | passed |
 | U3 `sweep.py` | 36 | passed |
 
-Regression: U1 and U2 re-run clean after U3 landed.
+Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
+depends on U2 (`binarize`) alone; the full suite stays green.
+
+Corpus smoke test (opt-in, `tests/test_io_corpus.py`, skipped in the count
+above unless `INKDRILL_CORPUS` is set): 4 tests passed on 2026-08-07 against
+real ghostscript output at `~/pdfdrill-library`.
 
 ### Hand-verified event streams
 
@@ -266,6 +284,43 @@ overhead — one `RunNode` per run plus dict operations. If that becomes
 the bottleneck, the fix is a struct-of-arrays `RunNode` store, not
 numpy; deferred until U8 shows whether it matters.
 
+### U0 decode throughput
+
+Real ghostscript `png16m` pages from `~/pdfdrill-library`, single core, pure
+Python, no numpy.
+
+| Operation | Throughput |
+|---|---|
+| `read_png`, neutral fast path (`_decode_gray_neutral`, SWAR) | **median 24.3 Mpx/s** (range 20.8–25.4) |
+| `read_png`, colour path (`_decode_gray_colour`, 3-channel + luma) | **median 1.78 Mpx/s** |
+| naive per-byte reference decoder | median 1.82 Mpx/s |
+| speedup, fast path over naive | **13.3×** |
+
+Corpus scanline filter mix: Up 74.5%, Paeth 18.5%, Sub 5.7%, None 1.2%.
+
+**The colour path is the majority case, not an edge case.** 56.5% of 200
+sampled pages are non-neutral and take the colour path — real colour
+figures, not a rarity. Neutrality is a per-document property: of 187
+documents sampled, none mixed neutral and non-neutral pages, which
+suggests it tracks a render setting rather than page content.
+
+**The colour path is, measured, essentially unoptimised.** At 1.78 Mpx/s it
+is indistinguishable from the 1.82 Mpx/s naive reference decoder — the
+three-channel unfilter plus the unconditional luma reduction dominate, and
+neither is vectorised. Because this path runs on the majority of pages,
+**corpus-wide effective throughput is dominated by it, roughly 3 Mpx/s, not
+the 24.3 Mpx/s of the neutral fast path.** This is recorded as a known,
+measured limitation, not hidden behind the fast-path number.
+
+**Deferred optimisation opportunity, not implemented.** The Up filter is
+byte-position-agnostic, so the SWAR trick used in the neutral path
+generalises directly to the three-channel row using masks of width `w*3`
+— no channel separation needed. That would accelerate the ~74.5% of colour
+rows that are Up-filtered. It is capped by the unconditional per-pixel luma
+reduction and by the remaining ~26% Sub/Average/Paeth rows, which stay
+sequential, so the expectation is a few-fold gain on the colour path, not
+parity with the neutral path's 24.3 Mpx/s. Out of scope for this task.
+
 ---
 
 ## 4. Assumptions that remain unverified
@@ -304,3 +359,7 @@ numpy; deferred until U8 shows whether it matters.
    gain is unmeasured.
 10. **`inkdrill` is the right package name.** Cosmetic, but the cost of
     changing it rises with every unit.
+11. **The corpus is entirely ghostscript `png16m`.** Every sampled page
+    matches the stated IHDR, no variation. The unit fails loudly rather
+    than mis-decoding if that is wrong, so the risk is a refused file
+    rather than a wrong answer.
