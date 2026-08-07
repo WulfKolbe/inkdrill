@@ -5,7 +5,7 @@ import struct
 import unittest
 import zlib
 
-from inkdrill.io import CorruptPNG, UnsupportedPNG, _chunks, _parse_ihdr, _parse_phys, _is_neutral, _decode_gray_neutral
+from inkdrill.io import CorruptPNG, UnsupportedPNG, _chunks, _parse_ihdr, _parse_phys, _is_neutral, _decode_gray_neutral, _decode_gray_colour
 
 SIG = b"\x89PNG\r\n\x1a\n"
 
@@ -296,3 +296,35 @@ class T0_6_NeutralFastPath(unittest.TestCase):
             with self.subTest(width=w):
                 self.assertEqual(_decode_gray_neutral(dec, w, 6),
                                  reference_decode(dec, w, 6)[0::3])
+
+
+class T0_7_ColourPath(unittest.TestCase):
+
+    def test_matches_oracle_luma_for_every_filter(self):
+        for ft in range(5):
+            with self.subTest(filter=ft):
+                dec = raw_scanlines(build_png(COLOUR, filters=[ft] * len(COLOUR)))
+                self.assertEqual(_decode_gray_colour(dec, 9, len(COLOUR)),
+                                 luma(reference_decode(dec, 9, len(COLOUR))))
+
+    def test_matches_oracle_luma_on_random_colour_mixed_filters(self):
+        rng = random.Random(8072026)
+        for trial in range(20):
+            w = rng.randint(1, 17)
+            h = rng.randint(1, 17)
+            rows = [[(rng.randrange(256), rng.randrange(256), rng.randrange(256))
+                     for _ in range(w)] for _ in range(h)]
+            fts = [rng.randrange(5) for _ in range(h)]
+            dec = raw_scanlines(build_png(rows, filters=fts))
+            with self.subTest(trial=trial, w=w, h=h):
+                self.assertEqual(_decode_gray_colour(dec, w, h),
+                                 luma(reference_decode(dec, w, h)))
+
+    def test_both_paths_agree_on_neutral_input(self):
+        """A neutral image must decode identically whichever path runs --
+        luma of (v, v, v) is exactly v."""
+        for ft in range(5):
+            dec = raw_scanlines(build_png(GRAD, filters=[ft] * len(GRAD)))
+            with self.subTest(filter=ft):
+                self.assertEqual(_decode_gray_colour(dec, 9, len(GRAD)),
+                                 _decode_gray_neutral(dec, 9, len(GRAD)))
