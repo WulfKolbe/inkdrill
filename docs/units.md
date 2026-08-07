@@ -342,9 +342,39 @@ sample showed.
 400 sampled pages (216 of 400) are non-neutral and take the colour path —
 real colour figures, not a rarity. Neutrality is *almost always* a
 per-document property — of 361 documents sampled, only 2 mix neutral and
-non-neutral pages — consistent with it tracking a render setting rather
-than page content. It is not absolute, though: a decoder must not assume a
+non-neutral pages. It is not absolute, though: a decoder must not assume a
 document's first page predicts the rest.
+
+**Is the colour real, or a rendering artefact?** This is the premise the
+whole two-path design rests on, so it was measured rather than assumed. If
+non-identical RGB were merely anti-aliasing fringe, the right fix would be
+upstream — re-render with `-sDEVICE=pnggray` and delete the colour path,
+the probe and the luma reduction outright. 60 non-neutral pages were fully
+unfiltered and classified by how many pixels carry a channel spread above
+32, a difference a reader would see:
+
+| Class | Share of non-neutral pages | Share of all pages |
+|---|---|---|
+| Substantial colour (≥0.1% of pixels strongly coloured) | 70.0% | ~37.8% |
+| Minor colour (<0.1% strongly coloured) | 11.7% | ~6.3% |
+| Fringing only (max spread ≤ 16) | 18.3% | ~9.9% |
+
+**The colour is overwhelmingly real content, not an artefact.** Roughly 38%
+of all corpus pages carry colour a reader would call colour; the strongest
+cases reach 95.7% of pixels strongly coloured, and are slide decks and video
+frames rather than papers — the corpus has broadened past arXiv PDFs. Taking
+the red channel on those pages would render red ink near-white and blue ink
+near-black across more than a third of the corpus. **The two-path decode is
+justified on measured evidence, and the greyscale re-render is not a
+substitute for it.**
+
+Re-rendering with `pnggray` remains attractive for a different and narrower
+reason: this unit reduces to luma anyway, so letting Ghostscript do that in C
+would delete the colour path, the probe and ~260 lines, at no information
+cost *for mask extraction specifically*. That is a corpus-management decision
+with a real cost (re-rendering 18,494 pages) and a real consequence (colour
+becomes unrecoverable without re-rendering again, which forecloses any later
+unit that wants it). It is recorded here as an open option, not a plan.
 
 **The colour path is, measured, essentially unoptimised.** At 1.78 Mpx/s it
 is indistinguishable from the 1.82 Mpx/s naive reference decoder — the
