@@ -400,22 +400,77 @@ fast-path number.
 figures above are the measured record; performance of the ingest path is a
 render-pipeline concern, not a U0 concern.
 
+### U4 premise check — run 2026-08-07, before U4 was planned
+
+Assumption 1 had stood since the plan was written with "argued
+structurally, no evidence". Measured before writing U4, on real ink rather
+than fixtures.
+
+**Method.** 42 corpus documents carry both `<doc>.chars.json` — pdfminer's
+per-character text, font, CTM and bbox — and rendered pages. Three pages
+were swept whole; each connected component was rebuilt from *its own runs*
+into a clean sub-mask and matched to a glyph by centre containment, so no
+neighbouring ink can enter and no stroke is clipped. 8,453 glyph
+components. The signature used is a proxy over U3 alone — cycle count plus
+birth/merge/split counts on both axes — which is faithful because
+degree-2 contraction removes chain nodes without changing any branching.
+It lacks persistence, which the real `signature()` will add.
+
+**A first attempt cropped each glyph's pdfminer bbox and gave a useless
+result** — 0/18 characters stable. That box is the *advance* box, not the
+ink box, so crops swallowed neighbours and clipped strokes. This is
+assumption 7 biting early, and it is why the component-isolation method
+above is the only sound one. Recorded because the failure is instructive.
+
+| Question | Result |
+|---|---|
+| Hole count vs character identity | **98.7–100%** consistency, every character tested |
+| Within-class signature stability | modal signature ≥90% for **9 of 16** commonest letters; 98–100% for `t n o c u p h m d` |
+| Between-class purity | **26.9%** of glyphs get a signature unique to one character; 56 signatures over 73 characters |
+| Worst collisions | `n h 3 N` · `i . / : j ; ?` · `e 6` |
+
+**Conclusions that bind U4's contract.**
+
+1. **Hole count is the strongest single topological feature** and it is
+   real. This is corroboration of assumption 3 at a scale the fixtures
+   cannot reach.
+2. **The signature is a partition, not a classifier.** U13 already says
+   the bitmap and the signature are two channels, with aspect ratio and
+   absolute extents carried separately because `- − – —` and `. ·` are
+   otherwise unrecoverable. The measured collisions are exactly that set.
+   U4 must therefore deliver a *comparable, stable* signature and must not
+   promise identification.
+3. **A glyph is not always one component.** `i j : ; = %` are multi-part,
+   and a per-component signature is not a per-glyph signature. U4's
+   `signature()` must be defined over a component *set*, with the
+   single-component case falling out as the degenerate one. This was not
+   visible from the U3 fixtures, all of which are single blobs.
+
 ---
 
 ## 4. Assumptions that remain unverified
 
-1. **Reeb signatures discriminate math symbols.** Argued structurally,
-   no evidence. U4 and U13 are where it gets tested; if it fails, U12's
-   shape domain loses its most interesting dimension.
+1. **Reeb signatures discriminate math symbols.** ~~Argued structurally,
+   no evidence.~~ **Partly measured, 2026-08-07 — see §3 "U4 premise
+   check". A signature alone is NOT a classifier (26.9% of real glyphs get
+   a signature unique to one character), but it is a stable partition:
+   within a character class the modal signature holds 98–100% for most
+   letters. It earns its place as one channel, exactly as U13 already
+   specifies, not as the classifier.** U12's shape domain keeps the
+   dimension; U13 must not lean on it alone.
 2. **Row↑ is derivable from the row RAG without rescanning.** Follows
    from adjacency being symmetric, but the implementation is U4 and
    untested. This is the claim that makes four orientations cost two
    scans.
 3. **Cycle rank equals hole count for conn-8 foreground.** The identity
    `cycles == E − V + C` is verified (it is arithmetic). That it counts
-   *holes* is verified only on the fixtures — ring, figure-8, A, nested
-   frames — plus the duality argument. U6 provides the independent
-   oracle.
+   *holes* was verified only on the fixtures — ring, figure-8, A, nested
+   frames — plus the duality argument. **Now also measured on 8,453 real
+   isolated glyphs, 2026-08-07: every character tested holds its expected
+   hole count at 98.7–100% consistency against pdfminer's character
+   identity — `o e a b d p q R A 0` → 1, `g` → 2, `i l n r s t u v w x`
+   → 0.** U6 still provides the independent oracle; this is corroboration
+   on real ink at scale, not a substitute for it.
 4. **Moment aggregates will be axis-invariant.** U2 proves the *pixel
    sets* agree; that the moments agree is U5's test and does not follow
    automatically, since the accumulation order differs.
