@@ -68,27 +68,58 @@ The counts are integers and deliberately so: they are EXACTLY invariant
 under translation, because nothing in them refers to position.
 
 **They are NOT rotation invariant, and the plan's expectation that they
-would be is refuted.** Measured 2026-08-07 on 158 real glyph components
-lifted from rendered corpus pages, rotated by nearest-neighbour
+would be is refuted.** Measured 2026-08-07 on real glyph components
+lifted from rendered corpus pages and rotated by nearest-neighbour
 resampling:
 
-        rotation     full signature kept     cycle count kept
-        +0.5 deg          50.0%                   89.2%
-        +1.0 deg          49.4%                   87.3%
-        +3.0 deg          46.8%                   83.5%
-        -3.0 deg          54.4%                   84.2%
-        0.0 (control)    100.0%                  100.0%
+        at +-3 deg      full signature kept     cycle count kept
+        four samples        41 - 78%                80 - 99%
+        0.0 (control)         100%                    100%
 
-The control is exact, so the loss is rotation and not the resampler
-being lossy in general. Thin strokes gain and lose junctions under
-resampling, and birth/merge/split counts move with them.
+Four independent 120-component samples. The control is exact every time,
+so the loss is rotation and not the resampler being lossy in general.
+Thin strokes gain and lose junctions under resampling, and the
+birth/merge/split counts move with them.
+
+The SPREAD is wide and page-dependent, so no point estimate here is
+meaningful -- an earlier revision of this docstring quoted 47-54% from a
+single sample and that figure does not reproduce. What DOES reproduce, on
+every sample taken, is the ordering: the cycle count survives rotation by
+20-40 percentage points more than the full signature. That ordering is
+the claim; the percentages are context.
+
+Re-run it with:  python3 tools/premise/measure.py --corpus <dir> rotation
 
 The load-bearing consequence for U13: **`cycles` is the durable
 component of this vector and the branch counts are the fragile one.** A
 consumer comparing signatures across a skewed page should weight them
-accordingly, or deskew first. Whether a genuine re-render at 3 degrees --
-antialiased, then thresholded -- is gentler than nearest-neighbour
-resampling is untested and is the one measurement that would settle it.
+accordingly, or deskew first.
+
+**That durability has one exception, and it is the math population.**
+For NEAR-HORIZONTAL SEPARATED STROKES rotation can merge components and
+CREATE cycles, so there `cycles` is the least durable part:
+
+        two 40-wide bars, 1-row gap      0 deg: parts=2 cycles=0
+                                        +-3 deg: parts=1 cycles=1
+        three 50-wide bars, 1-row gaps   0 deg: parts=3 cycles=0
+                                        +-3 deg: parts=1 cycles=4
+
+At 3 degrees a 50-px-wide bar rises ~2.6 px across its width, so a 1-px
+gap closes and the bars genuinely become one component. The rotated image
+really is connected -- this is finite resolution, not a resampler
+artefact. The affected shapes are `=`, `≡`, `÷`, fraction bars, `\\hline`
+and the radical overbar, which is exactly what U14 depends on and what
+U13 will lean on hardest. A consumer must not treat a cycle count on
+separated horizontal strokes as stable under skew.
+
+Note also that clean synthetic ink is mostly rotation-STABLE -- rings at
+14/20/32/48 px with 1-3 px strokes, a 40-row H, a 48-row figure-8 and a
+comb are all bit-stable under +-3 degrees. The fragility is a property
+of real glyph ink under resampling, not of the signature in general --
+which is why the fixtures in T4_6 had to be found by search. Whether a genuine re-render at 3 degrees -- antialiased, then
+thresholded -- is gentler than nearest-neighbour resampling is untested,
+and is now the single load-bearing measurement for this guarantee rather
+than a caveat on it.
 
 Guarantees
 ----------
@@ -100,10 +131,12 @@ G3  `orient(rag, ROW_UP)` is structurally equal to a genuine sweep of the
     vertically flipped mask -- assumption 2, tested rather than argued
 G4  reversal is an involution: orienting twice returns the original
     labelling
-G5  `signature()` is invariant under translation, EXACTLY. It is not
-    claimed to be invariant under rotation -- see the measurement above;
-    `cycles` survives rotation far better than the branch counts, and
-    that asymmetry is itself under test
+G5  `signature()` is invariant under translation, EXACTLY. It is NOT
+    claimed to be invariant under rotation. `cycles` survives rotation
+    far better than the branch counts on CLOSED forms; on near-horizontal
+    separated strokes that inverts and rotation creates cycles. Both
+    halves are under test, and both fixtures fail if the rotation is
+    turned into a no-op
 G6  persistence separates a 2-px speck from a stroke, and equals
     `hi_line - lo_line + 1` for every node
 G7  `signature_of()` on a single graph equals `signature()` on it, with

@@ -364,41 +364,124 @@ def rotate(mask, deg):
     return InkMask(bytes(out), nw, nh)
 
 
+# Fixtures whose signature genuinely moves under +/-3 degrees. Clean
+# synthetic ink is mostly rotation-stable -- rings at 14/20/32/48 px with
+# 1-3 px strokes, a 40-row H, a 48-row figure-8 and a comb are all
+# bit-stable -- so these were found by search, and without them T4_6
+# cannot tell rotation from a no-op.
+E_32 = (["#" * 32]
+        + ["####" + "." * 28] * 6
+        + ["####" + "#" * 22 + "." * 6]
+        + ["####" + "." * 28] * 6
+        + ["#" * 32])
+
+SERIF_I = (["#" * 20]
+           + ["." * 8 + "##" + "." * 10] * 20
+           + ["#" * 20])
+
+# Near-horizontal separated strokes -- the shape of =, equiv, fraction
+# bars, hline and the radical overbar.
+TWO_BARS = ["#" * 40, "." * 40, "#" * 40]
+THREE_BARS = ["#" * 50, "." * 50, "#" * 50, "." * 50, "#" * 50]
+
+THICK_RING = (["#" * 14] * 3
+              + ["###" + "." * 8 + "###" for _ in range(8)]
+              + ["#" * 14] * 3)
+
+
 class T4_6_RotationIsNotAnInvariance(unittest.TestCase):
     """G5's negative half. The plan expected signature invariance under
-    +/-3 degrees; measurement on 158 real glyph components refuted it
-    (full signature kept ~47-54%, cycle count ~84%). These tests pin the
-    asymmetry so the false claim cannot quietly return."""
+    +/-3 degrees; measurement on 158 real glyph components refuted it.
+
+    Every test here must be able to FAIL if `rotate` is turned into the
+    identity -- an earlier version of this class passed with the rotator
+    disabled, which made it decorative."""
 
     def test_rotation_by_zero_is_exact(self):
-        """The control. If this ever fails, the resampler is lossy and
-        every rotation number above is meaningless."""
-        for rows in (RING, LETTER_A, LETTER_H, NESTED, FIGURE_8):
-            with self.subTest(rows[0]):
-                base = signature(graph_of(m(rows)))
+        """The control. If this fails the resampler is lossy and every
+        rotation number in units.md is meaningless."""
+        for rows in (RING, LETTER_A, LETTER_H, NESTED, FIGURE_8, E_32):
+            with self.subTest(rows[0][:12]):
                 self.assertEqual(signature(graph_of(rotate(m(rows), 0.0))),
-                                 base)
+                                 signature(graph_of(m(rows))))
 
-    def test_cycle_count_survives_rotation_better_than_branch_counts(self):
-        """A thick ring keeps its hole through a 3 degree rotation; that
-        is the durable component U13 should lean on."""
-        thick = ["#" * 14] * 3 + \
-                ["###" + "." * 8 + "###" for _ in range(8)] + \
-                ["#" * 14] * 3
-        base = signature(graph_of(m(thick)))
+    def test_rotation_changes_the_signature_while_cycles_survive(self):
+        """Both halves of the asymmetry G5 states, in one assertion --
+        which is also what proves rotation is being applied at all."""
+        for name, rows in (("E_32", E_32), ("SERIF_I", SERIF_I)):
+            base = signature(graph_of(m(rows)))
+            for ang in (-3.0, 3.0):
+                with self.subTest(name, angle=ang):
+                    rot = signature(graph_of(rotate(m(rows), ang)))
+                    self.assertNotEqual(rot, base)          # rotation bites
+                    self.assertEqual(rot.cycles, base.cycles)  # cycles hold
+
+    def test_branch_counts_are_the_fragile_component(self):
+        base = signature(graph_of(m(E_32)))
+        rot = signature(graph_of(rotate(m(E_32), -3.0)))
+        self.assertEqual((base.merges, base.splits), (0, 0))
+        self.assertGreater(rot.merges + rot.splits, 0)
+
+    def test_cycles_survive_rotation_on_a_closed_form(self):
+        base = signature(graph_of(m(THICK_RING)))
         self.assertEqual(base.cycles, 1)
         for ang in (-3.0, 3.0):
             with self.subTest(angle=ang):
                 self.assertEqual(
-                    signature(graph_of(rotate(m(thick), ang))).cycles, 1)
+                    signature(graph_of(rotate(m(THICK_RING), ang))).cycles, 1)
 
-    def test_translation_invariance_is_exact_where_rotation_is_not(self):
-        """The contrast that G5 now states: position never enters the
-        counts, orientation does."""
-        thick = ["#" * 14] * 3 + \
-                ["###" + "." * 8 + "###" for _ in range(8)] + \
-                ["#" * 14] * 3
-        base = signature(graph_of(m(thick)))
-        w = len(thick[0]) + 6
-        shifted = ["." * w] * 4 + ["." * 6 + r for r in thick]
+    def test_rotation_creates_cycles_in_separated_horizontal_strokes(self):
+        r"""The exception to "cycles is durable", and it is not a corner
+        case: this is the shape of =, equiv, fraction bars and \hline.
+
+        At 3 degrees a 50-px-wide bar rises ~2.6 px across its width, so a
+        1-px gap closes and the bars genuinely become one component. The
+        rotated image really is connected -- this is finite resolution,
+        not a resampler artefact."""
+        for name, rows, extra in (("two bars", TWO_BARS, 1),
+                                  ("three bars", THREE_BARS, 4)):
+            base = signature(graph_of(m(rows)))
+            self.assertEqual(base.cycles, 0)
+            self.assertGreater(base.parts, 1)
+            for ang in (-3.0, 3.0):
+                with self.subTest(name, angle=ang):
+                    rot = signature(graph_of(rotate(m(rows), ang)))
+                    self.assertEqual(rot.parts, 1)          # merged
+                    self.assertEqual(rot.cycles, extra)     # cycles created
+                    self.assertGreater(rot.cycles, base.cycles)
+
+    def test_translation_invariance_is_exact(self):
+        """The contrast G5 states: position never enters the counts,
+        orientation does."""
+        base = signature(graph_of(m(THICK_RING)))
+        w = len(THICK_RING[0]) + 6
+        shifted = ["." * w] * 4 + ["." * 6 + r for r in THICK_RING]
         self.assertEqual(signature(graph_of(m(shifted))), base)
+
+
+class T4_7_SignatureIsAPartitionNotAClassifier(unittest.TestCase):
+    """units.md records 26.9% purity over 8,453 real glyph components,
+    with n/h/3/N, i/./:/j and e/6 colliding. Nothing encoded that, so a
+    future change could silently claim more discriminative power than the
+    measurement supports. These fixtures encode it."""
+
+    def test_distinct_shapes_can_share_a_signature(self):
+        # A bar and an L: different shapes, no branching in either.
+        bar = ["#", "#", "#", "#"]
+        ell = ["#..", "#..", "#..", "###"]
+        self.assertEqual(signature(graph_of(m(bar))),
+                         signature(graph_of(m(ell))))
+
+    def test_a_ring_and_a_thicker_ring_share_a_signature(self):
+        small = ["####", "#..#", "#..#", "####"]
+        big = ["######", "#....#", "#....#", "#....#", "######"]
+        self.assertEqual(signature(graph_of(m(small))),
+                         signature(graph_of(m(big))))
+
+    def test_collisions_are_expected_so_cycles_alone_cannot_identify(self):
+        """RING and LETTER_A both have one hole. Cycle count is the most
+        durable feature and is still not an identifier."""
+        self.assertEqual(signature(graph_of(m(RING))).cycles,
+                         signature(graph_of(m(LETTER_A))).cycles)
+        self.assertNotEqual(signature(graph_of(m(RING))),
+                            signature(graph_of(m(LETTER_A))))

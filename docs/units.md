@@ -105,7 +105,7 @@ Tests: node/edge counts on the U3 fixtures; **row↑ derived by reversal
 equals a genuine reversed sweep**, on the fixtures, on 40 random masks and
 on real page ink; persistence separates a 2-px speck from a stroke;
 signature is invariant under translation, **exactly**.
-**Status: 31 tests passed. Rotation invariance is refuted — see §3.**
+**Status: 37 tests passed. Rotation invariance is refuted — see §3.**
 
 **U5 `aggregate.py` — moment aggregates per component.**
 *Depends: U3.*
@@ -478,20 +478,46 @@ above is the only sound one. Recorded because the failure is instructive.
 smaller object to carry into U12/U13 than the RAG, as the design assumed.
 
 **Rotation invariance is refuted.** The plan expected `signature()` to be
-invariant under ±3°. Measured on 158 real glyph components lifted from
-rendered pages and rotated by nearest-neighbour resampling:
+invariant under ±3°. Measured on real glyph components lifted from
+rendered pages and rotated by nearest-neighbour resampling — four
+independent 120-component samples:
 
-| Rotation | Full signature kept | Cycle count kept |
+| Sample | Full signature kept at ±3° | Cycle count kept | 0° control |
+|---|---|---|---|
+| seed 11 | 40.8% / 52.5% | 80.0% / 81.7% | 100% |
+| seed 99 | 78.3% / 73.3% | 98.3% / 99.2% | 100% |
+| seed 2026 | 70.0% / 75.0% | 91.7% / 94.2% | 100% |
+| seed 7 | 65.0% / 64.2% | 91.7% / 92.5% | 100% |
+
+The 0° control is exact every time, so the loss is rotation and not a
+lossy resampler. **The spread is wide and page-dependent, so no point
+estimate is meaningful** — an earlier revision of this section quoted
+"47–54%" from a single 158-component sample and that figure does not
+reproduce. This is the U0 sampling failure recurring one level up, caught
+this time because the harness exists. What *does* reproduce on every
+sample is the **ordering**: the cycle count survives rotation by 20–40
+percentage points more than the full signature. The ordering is the
+claim; the percentages are context.
+
+Clean synthetic ink is mostly rotation-*stable* — rings at 14/20/32/48 px
+with 1–3 px strokes, a 40-row H, a 48-row figure-8 and a comb are all
+bit-stable under ±3°. The fragility belongs to real glyph ink under
+resampling, which is why the T4_6 fixtures had to be found by search.
+
+**The exception, and it is the math population.** For near-horizontal
+separated strokes rotation *creates* cycles, inverting the durability
+claim:
+
+| Fixture | 0° | ±3° |
 |---|---|---|
-| +0.5° | 50.0% | 89.2% |
-| +1.0° | 49.4% | 87.3% |
-| +3.0° | 46.8% | 83.5% |
-| −3.0° | 54.4% | 84.2% |
-| 0.0° (control) | **100.0%** | **100.0%** |
+| two 40-wide bars, 1-row gap | `parts=2, cycles=0` | `parts=1, cycles=1` |
+| three 50-wide bars, 1-row gaps | `parts=3, cycles=0` | `parts=1, cycles=4` |
 
-The control is exact, so the loss is rotation and not a lossy resampler.
-Thin strokes gain and lose junctions under resampling and the
-birth/merge/split counts move with them.
+At 3° a 50-px-wide bar rises ~2.6 px across its width, so a 1-px gap
+closes and the bars genuinely become one component — finite resolution,
+not a resampler artefact. The affected shapes are `=`, `≡`, `÷`, fraction
+bars, `\hline` and the radical overbar: exactly what U14 depends on and
+what U13 will lean on hardest.
 
 **Consequence for U13.** `cycles` is the durable component of the
 signature and the branch counts are the fragile one; a consumer comparing
@@ -499,6 +525,19 @@ signatures across a skewed page must weight them accordingly, or deskew
 first. This sits beside the premise-check finding that hole count is
 98.7–100% stable across *natural* instances of a character — the same
 conclusion reached from two directions.
+
+**Every figure in this section is re-runnable.** `tools/premise/measure.py`
+holds the harness — outside the package, excluded from the suite, taking a
+corpus path:
+
+    python3 tools/premise/measure.py --corpus ~/pdfdrill-library all
+    python3 tools/premise/measure.py --corpus ~/pdfdrill-library rotation
+
+Subcommands: `neutrality colour throughput skew premise contraction
+rotation`. It exists so the next measurement is a re-run rather than a
+re-implementation — when the corpus grows, when `signature()` gains
+persistence, or when a reviewer wants to check a number. It is what caught
+the non-reproducible rotation figure above.
 
 **What would settle the open half.** These numbers come from
 nearest-neighbour resampling, which is the harsh case. Whether a genuine
