@@ -40,6 +40,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from inkdrill.pngio import _is_neutral, read_png            # noqa: E402
 from inkdrill.raster import INK, InkMask, binarize          # noqa: E402
+from inkdrill.aggregate import component_moments, moments_of_mask  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
 
@@ -394,7 +395,29 @@ def m_rotation(root, n, rng):
               f"{cyc/len(glyphs):6.1%}{tag}")
 
 
+def m_moments(root, n, rng):
+    """units.md: row and col moments are IDENTICAL, per component and in
+    total -- assumption 4, on real ink rather than random masks."""
+    raw = lambda x: (x.area, x.sx, x.sy, x.sxx, x.syy, x.sxy)
+    pages_ok = comps = 0
+    for f in rng.sample(pages(root), n):
+        img = read_png(f)
+        mask = binarize(img.gray, img.width, img.height)
+        band = InkMask(mask.data[:mask.width * 700], mask.width, 700)
+        r = [raw(x) for x in component_moments(band, "row")]
+        c = [raw(x) for x in component_moments(band, "col")]
+        total = moments_of_mask(band)
+        g7 = sum(x.area for x in component_moments(band, "row")) == total.area
+        pages_ok += r == c
+        comps += len(r)
+        print(f"  {f.parent.parent.parent.name[:32]:32} {len(r):5} components"
+              f"   G2 {'OK' if r == c else 'MISMATCH'}"
+              f"   G7 area {'OK' if g7 else 'MISMATCH'}")
+    print(f"\nG2 on real ink: {pages_ok}/{n} pages, {comps} components compared")
+
+
 MEASUREMENTS = {
+    "moments": (m_moments, 3),
     "neutrality": (m_neutrality, 400),
     "colour": (m_colour, 60),
     "throughput": (m_throughput, 5),

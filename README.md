@@ -8,4 +8,4 @@ recognition. Pure standard library, no numpy, no GPU.
 The implementation plan, the locked conventions, the measured performance
 numbers and the list of unverified assumptions are in `docs/units.md`.
 
-Status: U0 `pngio`, U1 `space`, U2 `raster`, U3 `sweep`, U4 `reeb` — 189 tests passed (193 collected, 4 corpus tests skip by default).
+Status: U0 `pngio`, U1 `space`, U2 `raster`, U3 `sweep`, U4 `reeb`, U5 `aggregate` — 215 tests passed (219 collected, 4 corpus tests skip by default).

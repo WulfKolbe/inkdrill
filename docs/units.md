@@ -113,9 +113,16 @@ Contract: area, extents, `Σx Σy Σxx Σyy Σxy` accumulated from runs in
 closed form; centroid; central moments; principal axis as a **unit
 vector**, never an angle; elongation with the λ₂ ≥ 1/12 floor (the
 variance of a unit pixel) so 1-px strokes stay finite.
-Tests: hand-computed values on a 20×20 fixture; **row-sweep and col-sweep
-produce identical moments**; a synthetic rotated rule recovers its angle
-through `angle_deg_screen`; the λ₂ floor engages exactly at 1-px width.
+Contract addition, from the premise check: **every raw sum is an exact
+integer and no float enters before a ratio is taken.** That is what makes
+axis invariance exact rather than approximate — see assumption 4 below.
+`Moments.__add__` gives the addition algebra U7 will stitch bands with.
+Tests: hand-computed values against a per-pixel oracle; **row-sweep and
+col-sweep produce identical moments**, per component and in total, on
+random masks and on real page ink; a synthetic rotated rule recovers its
+angle through `angle_deg_screen`; the λ₂ floor engages exactly at 1-px
+width and not at 2.
+**Status: 26 tests passed.**
 
 **U6 `nest.py` — holes, containment forest, ordering relations.**
 *Depends: U3, U5.*
@@ -575,9 +582,17 @@ corpus cannot supply it: those pages are already deskewed (§3 above).
    identity — `o e a b d p q R A 0` → 1, `g` → 2, `i l n r s t u v w x`
    → 0.** U6 still provides the independent oracle; this is corroboration
    on real ink at scale, not a substitute for it.
-4. **Moment aggregates will be axis-invariant.** U2 proves the *pixel
-   sets* agree; that the moments agree is U5's test and does not follow
-   automatically, since the accumulation order differs.
+4. ~~**Moment aggregates will be axis-invariant.**~~ **VERIFIED
+   2026-08-07 (U5 G2).** The caution was right that it does not follow
+   from U2's pixel-set agreement — but it does follow from EXACTNESS.
+   Every raw sum is a Python `int`, so a row sweep and a column sweep
+   grouping the same pixels into different runs and summing them in a
+   different order must agree, integer addition being associative and
+   exact. Measured identical on 400 random masks whole-mask, 300 random
+   masks per component, and 635 components of real page ink. In floating
+   point the same code would drift and this would hold only
+   approximately — which is why integer accumulation is stated in the
+   contract rather than left as an implementation choice.
 5. **Band stitching preserves everything but `closed_at`.** The moment
    algebra adds by construction; run and node re-sorting is the open
    part and is U7's main risk.
