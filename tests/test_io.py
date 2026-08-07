@@ -4,7 +4,7 @@ import struct
 import unittest
 import zlib
 
-from inkdrill.io import CorruptPNG, UnsupportedPNG, _chunks, _parse_ihdr, _parse_phys
+from inkdrill.io import CorruptPNG, UnsupportedPNG, _chunks, _parse_ihdr, _parse_phys, _is_neutral
 
 SIG = b"\x89PNG\r\n\x1a\n"
 
@@ -204,3 +204,44 @@ class T0_4_TestInfrastructure(unittest.TestCase):
     def test_luma_is_identity_on_neutral_pixels(self):
         rgb = bytes(v for v in range(256) for _ in range(3))
         self.assertEqual(luma(rgb), bytes(range(256)))
+
+
+def decoded_is_neutral(dec, w, h):
+    rgb = reference_decode(dec, w, h)
+    return rgb[0::3] == rgb[1::3] == rgb[2::3]
+
+
+class T0_5_NeutralityProbe(unittest.TestCase):
+    """G5: neutrality of the FILTERED stream equals neutrality of the
+    DECODED image. The two-path decode is only exact if this holds."""
+
+    def test_neutral_image_detected_under_every_filter(self):
+        for ft in range(5):
+            with self.subTest(filter=ft):
+                png = build_png(GRAD, filters=[ft] * len(GRAD))
+                dec = raw_scanlines(png)
+                self.assertTrue(_is_neutral(dec, 9, len(GRAD)))
+
+    def test_colour_image_detected_under_every_filter(self):
+        for ft in range(5):
+            with self.subTest(filter=ft):
+                png = build_png(COLOUR, filters=[ft] * len(COLOUR))
+                dec = raw_scanlines(png)
+                self.assertFalse(_is_neutral(dec, 9, len(COLOUR)))
+
+    def test_probe_agrees_with_full_decode_on_mixed_filters(self):
+        for rows, label in ((GRAD, "neutral"), (COLOUR, "colour")):
+            fts = [i % 5 for i in range(len(rows))]
+            png = build_png(rows, filters=fts)
+            dec = raw_scanlines(png)
+            with self.subTest(label):
+                self.assertEqual(_is_neutral(dec, 9, len(rows)),
+                                 decoded_is_neutral(dec, 9, len(rows)))
+
+    def test_single_off_channel_pixel_breaks_neutrality(self):
+        rows = [[(7, 7, 7)] * 9 for _ in range(9)]
+        rows[4][4] = (7, 8, 7)          # one channel, one pixel, off by one
+        for ft in range(5):
+            with self.subTest(filter=ft):
+                dec = raw_scanlines(build_png(rows, filters=[ft] * 9))
+                self.assertFalse(_is_neutral(dec, 9, 9))
