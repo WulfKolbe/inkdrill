@@ -93,10 +93,19 @@ Contract: contract degree-2 chains of the RAG into `ReebNode`s;
 directions from the two stored RAGs; per-branch persistence as
 `h(close) − h(birth)`; a `signature()` reducing a Reeb graph to a
 comparable feature vector.
+Contract correction, from the premise check: `signature()` has **two
+entry points** — `signature(graph)` and `signature_of(graphs)` — because a
+glyph is not always one component (`i j : ; = %`), and every U3 fixture is
+a single blob so this was invisible from fixtures. A `ReebNode` is an
+**arc**: contraction splits on junctions (`|up|≥2` or `|down|≥2`), not on
+degree-2, because a birth and a close are not branch points and cutting
+there would leave a plain bar as three nodes instead of one — and would
+stop `persistence` reading as `h(close) − h(birth)`.
 Tests: node/edge counts on the U3 fixtures; **row↑ derived by reversal
-equals a genuine reversed sweep**; persistence separates a 2-px speck from
-a stroke; signature is invariant under translation and under a ±3° rotation
-of the fixture.
+equals a genuine reversed sweep**, on the fixtures, on 40 random masks and
+on real page ink; persistence separates a 2-px speck from a stroke;
+signature is invariant under translation, **exactly**.
+**Status: 31 tests passed. Rotation invariance is refuted — see §3.**
 
 **U5 `aggregate.py` — moment aggregates per component.**
 *Depends: U3.*
@@ -459,6 +468,47 @@ above is the only sound one. Recorded because the failure is instructive.
 
 ---
 
+### U4 results — measured 2026-08-07
+
+`31 tests passed.` Two findings worth more than the code.
+
+**Contraction is a 5–7× reduction on real ink.** Three real page bands
+(3300–3400 px wide, 600 rows): 3,947 / 6,380 / 3,633 RAG runs contract to
+566 / 1,136 / 687 arcs — 14.3%, 17.8%, 18.9%. The Reeb graph is a much
+smaller object to carry into U12/U13 than the RAG, as the design assumed.
+
+**Rotation invariance is refuted.** The plan expected `signature()` to be
+invariant under ±3°. Measured on 158 real glyph components lifted from
+rendered pages and rotated by nearest-neighbour resampling:
+
+| Rotation | Full signature kept | Cycle count kept |
+|---|---|---|
+| +0.5° | 50.0% | 89.2% |
+| +1.0° | 49.4% | 87.3% |
+| +3.0° | 46.8% | 83.5% |
+| −3.0° | 54.4% | 84.2% |
+| 0.0° (control) | **100.0%** | **100.0%** |
+
+The control is exact, so the loss is rotation and not a lossy resampler.
+Thin strokes gain and lose junctions under resampling and the
+birth/merge/split counts move with them.
+
+**Consequence for U13.** `cycles` is the durable component of the
+signature and the branch counts are the fragile one; a consumer comparing
+signatures across a skewed page must weight them accordingly, or deskew
+first. This sits beside the premise-check finding that hole count is
+98.7–100% stable across *natural* instances of a character — the same
+conclusion reached from two directions.
+
+**What would settle the open half.** These numbers come from
+nearest-neighbour resampling, which is the harsh case. Whether a genuine
+re-render at 3° — antialiased, then thresholded — is gentler is untested,
+and is the one measurement that would separate "the signature is
+rotation-fragile" from "nearest-neighbour resampling is". The scanned
+corpus cannot supply it: those pages are already deskewed (§3 above).
+
+---
+
 ## 4. Assumptions that remain unverified
 
 1. **Reeb signatures discriminate math symbols.** ~~Argued structurally,
@@ -469,10 +519,14 @@ above is the only sound one. Recorded because the failure is instructive.
    letters. It earns its place as one channel, exactly as U13 already
    specifies, not as the classifier.** U12's shape domain keeps the
    dimension; U13 must not lean on it alone.
-2. **Row↑ is derivable from the row RAG without rescanning.** Follows
-   from adjacency being symmetric, but the implementation is U4 and
-   untested. This is the claim that makes four orientations cost two
-   scans.
+2. ~~**Row↑ is derivable from the row RAG without rescanning.**~~
+   **VERIFIED 2026-08-07 (U4 G3).** Regularity is symmetric under
+   swapping `up`/`down`, so the contracted node set does not depend on
+   sweep direction — only the labels do, births becoming closes and
+   merges becoming splits. `orient()` derives ROW_UP and COL_UP by
+   relabelling, and the result is structurally equal to a genuine sweep
+   of the flipped mask on all six U3 fixtures, on 40 random masks, and on
+   three real page bands. Four orientations cost two scans, as designed.
 3. **Cycle rank equals hole count for conn-8 foreground.** The identity
    `cycles == E − V + C` is verified (it is arithmetic). That it counts
    *holes* was verified only on the fixtures — ring, figure-8, A, nested
