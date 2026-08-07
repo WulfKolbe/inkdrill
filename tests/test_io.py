@@ -57,6 +57,20 @@ class T0_2_HeaderValidation(unittest.TestCase):
         with self.assertRaises(CorruptPNG):
             _parse_ihdr(struct.pack(">IIBBBBB", 0, 5, 8, 2, 0, 0, 0))
 
+    def test_zero_height_rejected(self):
+        """test_zero_dimension_rejected only exercises w == 0; the guard is
+        `w == 0 or h == 0` and a mutant narrowing it to `w == 0` alone
+        would still pass every other test without this."""
+        with self.assertRaises(CorruptPNG):
+            _parse_ihdr(struct.pack(">IIBBBBB", 5, 0, 8, 2, 0, 0, 0))
+
+    def test_ihdr_wrong_length_rejected(self):
+        """Without this guard a short/long IHDR payload would escape as a
+        bare struct.error, not the module's declared CorruptPNG/ValueError
+        contract."""
+        with self.assertRaises(CorruptPNG):
+            _parse_ihdr(b"\x00" * 10)
+
     def test_unsupported_variants_rejected_by_name(self):
         cases = {
             "16-bit":     (16, 2, 0, 0, 0),
@@ -82,6 +96,13 @@ class T0_3_PhysDpi(unittest.TestCase):
 
     def test_unit_zero_gives_none(self):
         self.assertIsNone(_parse_phys(struct.pack(">IIB", 100, 100, 0)))
+
+    def test_phys_wrong_length_rejected(self):
+        """Without this guard a short/long pHYs payload would escape as a
+        bare struct.error, not the module's declared CorruptPNG/ValueError
+        contract."""
+        with self.assertRaises(CorruptPNG):
+            _parse_phys(b"\x00" * 5)
 
 
 def reference_decode(dec, w, h):
@@ -249,6 +270,30 @@ class T0_5_NeutralityProbe(unittest.TestCase):
                 dec = raw_scanlines(build_png(rows, filters=[ft] * 9))
                 self.assertFalse(_is_neutral(dec, 9, 9))
 
+    def test_blue_only_difference_breaks_neutrality(self):
+        """The existing off-channel fixture (7,8,7) differs in G, which
+        trips the FIRST slice comparison (R vs G) on its own. A pixel
+        where only BLUE differs from an equal R/G exercises the SECOND
+        comparison (G vs B) instead -- without this, `or` silently
+        mutating to `and`, or the second comparison being deleted
+        entirely, both still pass every other test."""
+        rows = [[(7, 7, 7)] * 9 for _ in range(9)]
+        rows[4][4] = (7, 7, 8)          # R == G, only blue differs
+        for ft in range(5):
+            with self.subTest(filter=ft):
+                dec = raw_scanlines(build_png(rows, filters=[ft] * 9))
+                self.assertFalse(_is_neutral(dec, 9, 9))
+
+    def test_red_only_difference_breaks_neutrality(self):
+        """Companion to test_blue_only_difference_breaks_neutrality: only
+        RED differs from an equal G/B."""
+        rows = [[(7, 7, 7)] * 9 for _ in range(9)]
+        rows[4][4] = (8, 7, 7)          # G == B, only red differs
+        for ft in range(5):
+            with self.subTest(filter=ft):
+                dec = raw_scanlines(build_png(rows, filters=[ft] * 9))
+                self.assertFalse(_is_neutral(dec, 9, 9))
+
     def test_undersized_buffer_does_not_raise(self):
         """_is_neutral does not itself validate dec's length -- bytes
         slicing silently truncates on a short buffer rather than raising.
@@ -307,6 +352,13 @@ class T0_6_NeutralFastPath(unittest.TestCase):
                 self.assertEqual(_decode_gray_neutral(dec, w, 6),
                                  reference_decode(dec, w, 6)[0::3])
 
+    def test_unknown_filter_type_rejected(self):
+        """A filter byte outside 0-4 must raise, not silently decode as
+        filter 0 (a silently wrong image)."""
+        dec = bytes([5, 0, 0, 0])          # filter byte 5, one 1x1 row
+        with self.assertRaises(CorruptPNG):
+            _decode_gray_neutral(dec, 1, 1)
+
 
 class T0_7_ColourPath(unittest.TestCase):
 
@@ -339,6 +391,13 @@ class T0_7_ColourPath(unittest.TestCase):
                 self.assertEqual(_decode_gray_colour(dec, 9, len(GRAD)),
                                  _decode_gray_neutral(dec, 9, len(GRAD)))
 
+    def test_unknown_filter_type_rejected(self):
+        """A filter byte outside 0-4 must raise, not silently decode as
+        filter 0 (a silently wrong image)."""
+        dec = bytes([5, 0, 0, 0, 0, 0, 0])   # filter byte 5, one 2px row
+        with self.assertRaises(CorruptPNG):
+            _decode_gray_colour(dec, 2, 1)
+
 
 class T0_8_ReadPng(unittest.TestCase):
 
@@ -350,6 +409,13 @@ class T0_8_ReadPng(unittest.TestCase):
     def test_neutral_flag_reports_the_path_taken(self):
         self.assertTrue(read_png(build_png(GRAD)).neutral)
         self.assertFalse(read_png(build_png(COLOUR)).neutral)
+
+    def test_decode_paths_are_distinct_functions(self):
+        """Nothing else asserts the fast path is actually TAKEN: mutating
+        read_png to dispatch _decode_gray_colour on both branches would
+        pass every other test, silently erasing the unit's headline
+        13.3x speedup with no regression guard."""
+        self.assertIsNot(_decode_gray_neutral, _decode_gray_colour)
 
     def test_gray_matches_oracle_luma_either_path(self):
         for rows, label in ((GRAD, "neutral"), (COLOUR, "colour")):
@@ -379,15 +445,28 @@ class T0_8_ReadPng(unittest.TestCase):
             read_png(raw)
 
     def test_missing_idat_rejected(self):
+        """Must fail via the explicit `no IDAT chunk` guard, not merely by
+        `zlib.decompress(b"")` raising further down -- both paths raise
+        CorruptPNG, so without checking the message this test cannot tell
+        the guard was ever reached."""
         raw = SIG + ihdr(4, 4) + _chunk(b"IEND", b"")
-        with self.assertRaises(CorruptPNG):
+        with self.assertRaises(CorruptPNG) as cm:
             read_png(raw)
+        self.assertIn("no IDAT", str(cm.exception))
 
     def test_duplicate_ihdr_rejected(self):
         """A second IHDR must not silently overwrite width/height -- that
         is how a byte-length collision (e.g. 1x4 vs 5x1, both 16 bytes)
-        could mis-decode the pixel data of one shape as another."""
-        raw = SIG + ihdr(1, 4) + ihdr(5, 1) + _chunk(b"IEND", b"")
+        could mis-decode the pixel data of one shape as another. The IDAT
+        below is valid filter-0 data sized for the SECOND shape (5x1);
+        with no IDAT at all the pre-existing `if not idat` guard would
+        raise first and the duplicate-IHDR guard would never be
+        exercised, so a real payload is required to make the guard's
+        removal genuinely mis-decode rather than merely raise elsewhere."""
+        pixels = bytes(range(15))                    # 5 RGB pixels
+        scanline = bytes([0]) + pixels                # filter 0
+        idat = _chunk(b"IDAT", zlib.compress(scanline))
+        raw = SIG + ihdr(1, 4) + ihdr(5, 1) + idat + _chunk(b"IEND", b"")
         with self.assertRaises(CorruptPNG):
             read_png(raw)
 

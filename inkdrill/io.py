@@ -188,11 +188,13 @@ def _decode_gray_neutral(dec: bytes, w: int, h: int) -> bytes:
             high = (A ^ B) & 0x8080..
             out  = low ^ high
 
-    Measured on real corpus pages (Up 74.5%, Paeth 18.5%, Sub 5.7%, None 1.2%):
-    median 24.3 Mpx/s against 1.82 Mpx/s for the naive per-byte path, a 13.3x
-    speedup. Throughput varies significantly with filter mix—a Paeth-heavy page
-    runs several times slower, because Paeth's predictor depends on bytes just
-    produced and cannot be vectorised.
+    Measured throughput and the corpus filter mix are recorded in
+    docs/units.md Section 3 ("U0 decode throughput") rather than duplicated
+    here, so a re-measurement is one edit instead of two. Headline: a
+    13.3x speedup over the naive per-byte path. Throughput varies
+    significantly with filter mix -- a Paeth-heavy page runs several times
+    slower, because Paeth's predictor depends on bytes just produced and
+    cannot be vectorised.
     """
     stride = w * 3 + 1
     lo_mask = int.from_bytes(b"\x7f" * w, "big")
@@ -238,12 +240,15 @@ def _decode_gray_neutral(dec: bytes, w: int, h: int) -> bytes:
 def _decode_gray_colour(dec: bytes, w: int, h: int) -> bytes:
     """Unfilter all three channels, then reduce to luma.
 
-    Runs when `_is_neutral` is False -- the majority path, 56.5% of sampled
-    corpus pages, which carry real colour figures. Taking one channel there
-    would render red ink near-white and blue ink near-black. Neutrality turns
-    out to be a per-document property (of 187 documents sampled, none mixed
-    neutral and non-neutral pages), suggesting it tracks the render setting
-    rather than page content.
+    Runs when `_is_neutral` is False -- the MAJORITY path, not an edge case.
+    See docs/units.md Section 3 ("U0 decode throughput") for the measured
+    share of colour pages, rather than duplicating that figure here where
+    it can drift out of sync again. Taking one channel there would render
+    red ink near-white and blue ink near-black. Neutrality is *almost
+    always* a per-document property, consistent with it tracking a render
+    setting rather than page content -- but not always: a small number of
+    sampled documents mix neutral and non-neutral pages, so a decoder must
+    not assume a document's first page predicts the rest.
 
     Rec.601, integer, round-half-up. On a neutral pixel this is exactly
     the identity, so the two paths agree wherever both are valid.

@@ -49,7 +49,7 @@ Tests: CRC and truncation rejection; every rejected IHDR variant; all five
 scanline filters against a naive reference decoder held as the oracle;
 multi-IDAT concatenation; `pHYs` present and absent; the neutrality
 equivalence G5 that the two-path decode rests on.
-**Status: 39 tests passed.**
+**Status: 47 tests passed.**
 
 **U1 `space.py` — affine algebra, transform graph, CTM decomposition.**
 *No dependencies.*
@@ -219,12 +219,12 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 142 tests — OK
+Ran 150 tests — OK
 ```
 
 | Unit | Tests | Result |
 |---|---|---|
-| U0 `io.py` | 39 | passed |
+| U0 `io.py` | 47 | passed |
 | U1 `space.py` | 36 | passed |
 | U2 `raster.py` | 31 | passed |
 | U3 `sweep.py` | 36 | passed |
@@ -235,7 +235,10 @@ depends on U2 (`binarize`) alone; the full suite stays green.
 Corpus smoke test (opt-in, `tests/test_io_corpus.py`, skipped in the count
 above unless `INKDRILL_CORPUS` is set): 4 tests passed on 2026-08-07 against
 real ghostscript output at `~/pdfdrill-library` — 18,494 pages across 3,272
-document directories.
+document directories. Page selection explicitly seeks one neutral and one
+non-neutral page (seeded), so the colour decode path -- the majority case
+per the throughput table below -- has real-data coverage rather than
+running only on whatever a plain sort happened to surface first.
 
 ### Hand-verified event streams
 
@@ -292,10 +295,19 @@ Python, no numpy.
 
 | Operation | Throughput |
 |---|---|
-| `read_png`, neutral fast path (`_decode_gray_neutral`, SWAR) | **median 24.3 Mpx/s** (range 20.8–25.4) |
+| `read_png`, neutral fast path (`_decode_gray_neutral`, SWAR) | **median 24.1 Mpx/s** (n=25 random neutral pages, range 8.97–40.93 -- wide, see below) |
 | `read_png`, colour path (`_decode_gray_colour`, 3-channel + luma) | **median 1.78 Mpx/s** |
 | naive per-byte reference decoder | median 1.82 Mpx/s |
 | speedup, fast path over naive | **13.3×** |
+
+**The neutral-path spread is wide, not a tight band.** An independent sample
+of 25 random neutral pages (best-of-3 timing of `_decode_gray_neutral` per
+page, excluding chunk parsing and inflate) measured median 24.1 Mpx/s with
+range 8.97–40.93 Mpx/s across the sample — page-to-page variance driven by
+per-row filter mix (a Paeth-heavy page runs several times slower than an
+Up-heavy one, matching the sequential-Paeth caveat in `io.py`) and by page
+size. Earlier revisions of this row understated the spread by roughly 5x at
+both ends; stated plainly here rather than hidden behind the median.
 
 Corpus scanline filter mix, 400 pages sampled across 361 documents drawn
 from the full 18,494-page library: Up 73.0%, Paeth 20.6%, Sub 6.2%,
