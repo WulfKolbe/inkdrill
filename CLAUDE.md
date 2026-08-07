@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite (103 tests)
+python3 -m unittest discover -s tests -t .   # full suite: 156, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_io_corpus
@@ -47,8 +47,11 @@ written as a docstring *before* the implementation. Every module states
 guarantees `G1`–`G7` at the top of that docstring; the tests exist to hold those
 specific numbered guarantees, so a test named for `G4` is not incidental.
 
-Built (U1–U3), all independent of each other except `sweep` → `raster`:
+Built (U0–U3), all independent of each other except `sweep` → `raster` and
+`io.load_mask` → `raster.binarize`:
 
+- **`inkdrill/io.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
+  `load_mask`. Reads only what that one device writes; anything else raises.
 - **`inkdrill/space.py`** — affine algebra. `Affine`, `Decomposition`,
   `SpaceGraph`, `angle_deg_ccw`, `angle_deg_screen`.
 - **`inkdrill/raster.py`** — `InkMask`, `Run`, `Rect`, `binarize`, `iter_runs`.
