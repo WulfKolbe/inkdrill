@@ -3,3 +3,6 @@ __pycache__/
 
 # CodeGraph index — machine-local
 .codegraph/
+
+# SDD scratch
+.superpowers/
