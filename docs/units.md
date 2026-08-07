@@ -401,6 +401,17 @@ figures above are the measured record; performance of the ingest path is a
 render-pipeline concern, not a U0 concern.
 
 ### U4 premise check — run 2026-08-07, before U4 was planned
+**Rotation fixtures — the scanned corpus cannot supply them.** U4's spec
+asks for signature invariance under ±3°. The 426 `(Z-Library)` scanned
+documents (2,286 rendered pages) were the natural candidate, being real
+scans rather than synthetic rotations. Measured 2026-08-07 by
+projection-profile over 10 random scanned pages: **8 of 10 sit at exactly
+0.00°, the largest is 0.50°.** They have already been deskewed upstream.
+They are therefore a good robustness check at sub-degree skew and cannot
+test the stated ±3° claim. U4 uses resampled real corpus glyphs for the
+±3° test, labelled as resampled, with the sub-degree scan check reported
+separately.
+
 
 Assumption 1 had stood since the plan was written with "argued
 structurally, no evidence". Measured before writing U4, on real ink rather
