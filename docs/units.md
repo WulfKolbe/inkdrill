@@ -256,14 +256,14 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 156 tests in 0.147s
+Ran 277 tests in 0.619s
 
 OK (skipped=4)
 ```
 
-The 4 skipped are `tests/test_io_corpus.py`, opt-in and gated on
+The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 156 − 4 = 152.
+count -- what actually runs on a bare checkout -- is 277 - 4 = 273.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -271,13 +271,17 @@ count -- what actually runs on a bare checkout -- is 156 − 4 = 152.
 | U1 `space.py` | 36 | passed |
 | U2 `raster.py` | 31 | passed |
 | U3 `sweep.py` | 36 | passed |
+| U4 `reeb.py` | 37 | passed |
+| U5 `aggregate.py` | 26 | passed |
+| U6 `nest.py` | 29 | passed |
+| U7 `band.py` | 29 | passed |
 
-49 + 36 + 31 + 36 = 152, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 = 273, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.
 
-Corpus smoke test (opt-in, `tests/test_io_corpus.py`, skipped in the count
+Corpus smoke test (opt-in, `tests/test_pngio_corpus.py`, skipped in the count
 above unless `INKDRILL_CORPUS` is set): 4 tests passed on 2026-08-07 against
 real ghostscript output at `~/pdfdrill-library` — 18,494 pages across 3,272
 document directories. Page selection explicitly seeks one neutral and one
@@ -573,6 +577,53 @@ re-render at 3° — antialiased, then thresholded — is gentler is untested,
 and is the one measurement that would separate "the signature is
 rotation-fragile" from "nearest-neighbour resampling is". The scanned
 corpus cannot supply it: those pages are already deskewed (§3 above).
+
+---
+
+### U5-U7 results — measured 2026-08-07
+
+Recorded here because §3 is where measured results live; the assumptions
+they close are struck through in §4.
+
+**U5, axis invariance (assumption 4).** Row and column sweeps produce
+IDENTICAL moments — 400 random masks whole-mask, 300 per component, and
+635 components of real page ink. The caution in the original wording was
+right that this does not follow from U2's pixel-set agreement; it follows
+from exactness. Every raw sum is a Python `int`, so a different grouping
+and a different summation order must still agree. In floating point the
+same code would drift.
+Re-run: `tools/premise/measure.py --corpus <dir> moments`
+
+**U6, holes by an independent route (assumption 3).** `nest` computes
+holes as background components of the inverted mask at `conn=4`, sharing
+no code with the sweep. It agrees with U3's cycle rank on the fixtures,
+on 120 random masks, and on **222 components of real page ink across two
+independent samples, 100%**.
+Re-run: `tools/premise/measure.py --corpus <dir> nesting`
+
+**U7, band stitching (assumption 5).** Two findings.
+
+*The node count is invariant under banding* — a split can never split a
+run, so V needs no repair at any K. Only E, C and the cycle counts do,
+and the premise check sized that: a real 600-row page band at K=64 needed
+1,068 seam edges, had 949 over-counted components and 119 missing cycles.
+
+*One page needed zero repair at K=2 and K=3* — the seams happened to fall
+in whitespace. A test that only tried small K would have passed while
+proving nothing, which is why the fixtures run to K=64 and the real-ink
+check to K=600, one band per row.
+
+Stitched output is indistinguishable from a single sweep at every K
+tested, on both connectivities.
+Re-run: `tools/premise/measure.py --corpus <dir> banding`
+
+**The re-sorting defence is mutation-tested.** Three defences were each
+mutated; two killed tests immediately (17 and 247 failures). The third —
+the per-node re-sort, which is the bug `units.md` names by name —
+SURVIVED, because sorting the band list already yields global order and
+made the re-sort unreachable through the public API. A test that shuffles
+nodes *within* a band makes it reachable and kills the mutant. That case
+is not hypothetical: U8 is specified to order results by completion.
 
 ---
 
