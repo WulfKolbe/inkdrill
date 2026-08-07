@@ -161,6 +161,19 @@ class _UF:
         return ra
 
 
+def _in_scan_order(nodes: list[RunNode]) -> bool:
+    """True if `nodes` is already sorted by (line, lo). O(V), no
+    allocation -- cheap enough to pay on every stitch to avoid an O(V log
+    V) sort and a second pass of RunNode construction."""
+    prev_line = -1
+    prev_lo = -1
+    for n in nodes:
+        if n.line < prev_line or (n.line == prev_line and n.lo < prev_lo):
+            return False
+        prev_line, prev_lo = n.line, n.lo
+    return True
+
+
 def stitch(bands: list[Band], *, conn: int = 8) -> SweepResult:
     """Merge independently swept bands into one result.
 
@@ -178,7 +191,6 @@ def stitch(bands: list[Band], *, conn: int = 8) -> SweepResult:
 
     # ---- concatenate, lifting every run into global coordinates -------
     nodes: list[RunNode] = []
-    owner: list[int] = []            # new node id -> band index
     local_to_global: list[dict[int, int]] = []
     for bi, band in enumerate(ordered):
         mapping: dict[int, int] = {}
@@ -186,16 +198,29 @@ def stitch(bands: list[Band], *, conn: int = 8) -> SweepResult:
             gid = len(nodes)
             mapping[n.id] = gid
             nodes.append(RunNode(gid, n.line + band.y0, n.lo, n.hi))
-            owner.append(bi)
         local_to_global.append(mapping)
 
     # G3: global scan order, whatever order the bands arrived in.
-    order = sorted(range(len(nodes)),
-                   key=lambda i: (nodes[i].line, nodes[i].lo))
-    renumber = {old: new for new, old in enumerate(order)}
-    nodes = [RunNode(renumber[nodes[i].id], nodes[i].line,
-                     nodes[i].lo, nodes[i].hi) for i in order]
-    owner = [owner[i] for i in order]
+    #
+    # On the production path the concatenation is ALREADY in scan order --
+    # band i covers lines strictly below band i+1, and U3 emits nodes in
+    # scan order within a band -- so an O(V) check skips the rebuild and
+    # halves RunNode construction. Measured: the rebuild was constructing
+    # every node a second time, 2x V allocations for no effect.
+    #
+    # The slow path is not dead code. A caller may hand over a band whose
+    # OWN nodes are unordered, which is exactly what U8 does when it
+    # appends results by completion rather than by band.
+    if _in_scan_order(nodes):
+        renumber: list[int] | range = range(len(nodes))
+    else:
+        order = sorted(range(len(nodes)),
+                       key=lambda i: (nodes[i].line, nodes[i].lo))
+        renumber = [0] * len(nodes)
+        for new, old in enumerate(order):
+            renumber[old] = new
+        nodes = [RunNode(new, nodes[old].line, nodes[old].lo, nodes[old].hi)
+                 for new, old in enumerate(order)]
 
     # ---- carry the within-band adjacency across, renumbered ----------
     for bi, band in enumerate(ordered):
@@ -258,8 +283,12 @@ def stitch(bands: list[Band], *, conn: int = 8) -> SweepResult:
                     slot_edges[root] += 1
 
     for n in nodes:
-        n.up.sort()
-        n.down.sort()
+        # nearly all of these are one-element lists; the guard removes
+        # ~V redundant sort calls per stitch
+        if len(n.up) > 1:
+            n.up.sort()
+        if len(n.down) > 1:
+            n.down.sort()
 
     # ---- rebuild components, keyed by lowest node id (U3's G5) -------
     members: dict[int, list[int]] = {}

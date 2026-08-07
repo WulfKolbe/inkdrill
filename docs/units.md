@@ -329,8 +329,13 @@ against the other code base.
 
 Extrapolated to 600 dpi A4 (4960×7016 = 34.8 Mpx): ≈1.8 s per page at
 `NONE`, ≈2.1 s at `GRAPH`, single core. A 25-page paper is ≈50 s on one
-core, so U7/U8 band parallelism is what makes the first-page latency
-target reachable, exactly as the design argued.
+core. ~~so U7/U8 band parallelism is what makes the first-page latency
+target reachable, exactly as the design argued.~~
+
+**That last clause was a design-time assertion, never measured, and the
+measurement does not support it — see "U7 stitch cost" below.** Band
+parallelism is capped at 2–3× by the serial stitch, however many cores
+are available. First-page latency has to come from somewhere else.
 
 The sweep is ~5.5× slower than run extraction. The gap is Python object
 overhead — one `RunNode` per run plus dict operations. If that becomes
@@ -627,6 +632,75 @@ is not hypothetical: U8 is specified to order results by completion.
 
 ---
 
+### U7 stitch cost — measured 2026-08-07, before U8 was planned
+
+Every other U7 measurement is a correctness measurement. This one is
+about cost, and it changes what U8 should be.
+
+**`stitch` is serial, so it is an Amdahl floor on band parallelism.**
+Measured on two real page bands (3400×800, V=5000; 3307×800, V=3761),
+best-of-3, after the optimisation described below:
+
+| K | stitch | stitch / sweep | ideal wall | speedup | ceiling |
+|---|---|---|---|---|---|
+| 1 | 6.1 ms | 0.34× | 23.1 ms | 0.77× | — |
+| 8 | 6.9 ms | 0.39× | 9.1 ms | 1.95× | 2.59× |
+| 64 | 8.4 ms | 0.47× | 8.7 ms | **2.05×** | 2.13× |
+| 256 | 11.3 ms | 0.63× | 11.4 ms | 1.57× | 1.58× |
+
+"Ideal wall" assumes perfect K-way parallelism of the sweep plus the
+serial stitch, so it is an upper bound no scheduler can beat.
+
+**The ceiling is density-dependent, and worse on denser pages.** Two
+further pages, sampled independently and heavier (V=12,635 and V=6,229
+against 5,000 and 3,761 above):
+
+| page | sweep | best ceiling | K=256 |
+|---|---|---|---|
+| V=12,635 | 43.1 ms | 2.32× | stitch **1.18× the sweep**, speedup 0.84× |
+| V=6,229 | 24.5 ms | 2.19× | speedup 1.15× |
+
+**Band parallelism is capped at roughly 1.7–3× across the pages measured,
+however many cores are available**, and it degrades with K: past K≈64 the
+stitch keeps growing while the parallel part has already vanished. On the
+densest page at K=256 banding is *slower* than not banding at all.
+Banding at K=1 is always strictly slower, which is the shape of the whole
+finding.
+
+No point estimate is quoted here on purpose. The spread across four pages
+is 1.7–3.0× and it tracks page density; the reproducible claim is the
+ordering — a serial stitch caps band parallelism in the low single
+digits — not any single number.
+
+**The optimisation that got it this far.** `stitch` was constructing
+every `RunNode` twice — once concatenating, once in a renumbering
+rebuild. But the concatenation is *already* in global scan order on the
+production path, because band *i* covers lines strictly below band *i+1*
+and U3 emits nodes in scan order within a band. An O(V) sortedness check
+now skips the rebuild, and one-element `up`/`down` lists skip their sort.
+Measured effect: stitch 9.4 → 6.1 ms, and the achievable speedup roughly
+doubled from ~1.4× to ~2.05×.
+
+The slow path is retained and still tested — a caller may hand over a
+band whose own nodes are unordered, which is precisely what U8 does when
+it appends results by completion rather than by band.
+
+**Tree-stitching is NOT implemented and is not currently warranted.**
+Seam merging is associative, so bands could be stitched pairwise in
+log₂K parallel rounds, removing the serial floor rather than lowering it.
+The criterion for attempting it was whether the floor stayed above the
+sweep after the optimisation above; it did not (0.33–0.47× of the sweep),
+so the remaining gain does not justify the complexity yet.
+
+**Consequence for U8.** The band tier is not where utilisation comes
+from. Page-parallel and blob-parallel work are unaffected by any of this
+— a closed component needs no stitch at all, and serialization is
+measured cheap (assumption 9). U8's first task should measure whether the
+band tier earns a place in its own plan, rather than assuming it as the
+plan currently does.
+
+---
+
 ## 4. Assumptions that remain unverified
 
 1. **Reeb signatures discriminate math symbols.** ~~Argued structurally,
@@ -691,8 +765,13 @@ is not hypothetical: U8 is specified to order results by completion.
    U9 fast path depends on it, and I have not sampled the corpus. This is
    the cheapest assumption to check and worth checking before U9 starts.
 9. **Pure Python at 19 Mpx/s is fast enough once parallelised.** The
-   arithmetic works out; whether serialization overhead in U8 eats the
-   gain is unmeasured.
+   arithmetic works out. **The serialization half is now measured and is
+   NOT the constraint** (2026-08-07): all 64 bands of a 3400×800 page
+   pickle to 0.31 MB against a 2.72 MB raw mask, and every component on
+   the page together comes to 0.08 MB, mean 0.66 KB, 0.08 ms to ship the
+   largest. What *is* the constraint is the serial stitch — see U7 stitch
+   cost in §3. The remaining unverified half is whether the scheduler
+   reaches full utilisation, which is assumption 6.
 10. **`inkdrill` is the right package name.** Cosmetic, but the cost of
     changing it rises with every unit.
 11. **The corpus is entirely ghostscript `png16m`.** 400 files sampled

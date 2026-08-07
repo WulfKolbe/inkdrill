@@ -41,7 +41,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from inkdrill.pngio import _is_neutral, read_png            # noqa: E402
 from inkdrill.raster import INK, InkMask, binarize          # noqa: E402
 from inkdrill.aggregate import component_moments, moments_of_mask  # noqa: E402
-from inkdrill.band import canonical, sweep_banded  # noqa: E402
+from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: E402
 from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
@@ -463,8 +463,49 @@ def m_banding(root, n, rng):
         print(line)
 
 
+def m_stitchcost(root, n, rng):
+    """units.md 3 "U7 stitch cost": stitch is serial, so it is an Amdahl
+    floor on band parallelism. Reports the ceiling no scheduler can beat."""
+    import pickle
+
+    def best(fn, reps=3):
+        t = float("inf")
+        r = None
+        for _ in range(reps):
+            s = time.perf_counter()
+            r = fn()
+            t = min(t, time.perf_counter() - s)
+        return t, r
+
+    for f in rng.sample(pages(root), n):
+        img = read_png(f)
+        mask = binarize(img.gray, img.width, img.height)
+        band = InkMask(mask.data[:mask.width * 800], mask.width, 800)
+        t_sweep, res = best(lambda: sweep(band, axis="row", conn=8,
+                                          capture=Capture.GRAPH))
+        print(f"  {f.parent.parent.parent.name[:34]:34} V={res.node_count:6} "
+              f"sweep {t_sweep*1000:6.1f} ms")
+        for k in (1, 8, 64, 256):
+            t_b, bands = best(lambda k=k: sweep_bands(band, k))
+            t_s, _ = best(lambda b=bands: stitch(b))
+            wall = t_b / k + t_s
+            print(f"     K={k:4} stitch {t_s*1000:6.1f} ms "
+                  f"({t_s/t_sweep:4.2f}x sweep)  ideal wall {wall*1000:6.1f} ms"
+                  f"  speedup {t_sweep/wall:4.2f}x  ceiling {t_sweep/t_s:4.2f}x")
+        # serialization, both parallel tiers (assumption 9)
+        bands = sweep_bands(band, 64)
+        allb = sum(len(pickle.dumps(b, protocol=5)) for b in bands)
+        node = {x.id: x for x in res.nodes}
+        allc = sum(len(pickle.dumps([node[i].as_run() for i in c.nodes],
+                                    protocol=5)) for c in res.components)
+        print(f"     serialization: 64 bands {allb/1e6:5.2f} MB, "
+              f"{res.component_count} components {allc/1e6:5.2f} MB, "
+              f"raw mask {len(band.data)/1e6:5.2f} MB")
+
+
 MEASUREMENTS = {
     "banding": (m_banding, 3),
+    "stitchcost": (m_stitchcost, 2),
     "moments": (m_moments, 3),
     "nesting": (m_nesting, 2),
     "neutrality": (m_neutrality, 400),
