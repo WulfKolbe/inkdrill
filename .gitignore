@@ -6,3 +6,7 @@ __pycache__/
 
 # SDD scratch
 .superpowers/
+
+# local session-resume helper -- runs with --dangerously-skip-permissions,
+# must never be published in a public repo
+resume.sh

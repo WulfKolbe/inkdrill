@@ -398,6 +398,48 @@ class T0_7_ColourPath(unittest.TestCase):
         with self.assertRaises(CorruptPNG):
             _decode_gray_colour(dec, 2, 1)
 
+    def test_luma_coefficients_are_pinned_by_hand_computed_values(self):
+        """`luma()` above is a SHARED definition with `_decode_gray_colour`,
+        not an independent oracle: swapping 299 and 114 in BOTH `io.py` and
+        `luma()` here leaves every other test in this file passing, because
+        the two sides still agree with each other. The values below are
+        computed by hand, outside both implementations, so a shared swap
+        has something to disagree with:
+
+            red   (255, 0, 0): (255*299 + 500) // 1000 = 76
+            green (0, 255, 0): (255*587 + 500) // 1000 = 150
+            blue  (0, 0, 255): (255*114 + 500) // 1000 = 29
+
+        Checked against the test helper `luma()` directly, and against
+        `_decode_gray_colour` through a built PNG -- so a coefficient swap
+        shared by both implementations is caught on both sides."""
+        cases = [((255, 0, 0), 76), ((0, 255, 0), 150), ((0, 0, 255), 29)]
+        for rgb, want in cases:
+            with self.subTest(rgb=rgb):
+                self.assertEqual(luma(bytes(rgb)), bytes([want]))
+                rows = [[rgb] * 9 for _ in range(9)]
+                dec = raw_scanlines(build_png(rows, filters=[0] * 9))
+                self.assertEqual(_decode_gray_colour(dec, 9, 9), bytes([want]) * 81)
+
+    def test_luma_round_half_up_term_is_pinned(self):
+        """test_luma_is_identity_on_neutral_pixels cannot pin the `+ 500`
+        round-half-up term: on a neutral pixel (v, v, v) the weighted sum
+        is always exactly v*1000, so its remainder mod 1000 is always 0 and
+        rounding never has anything to do. This pixel's weighted sum has
+        remainder exactly 500 mod 1000, computed by hand:
+
+            (0, 0, 250): 0*299 + 0*587 + 250*114 = 28500
+            28500 % 1000 == 500
+            (28500 + 500) // 1000 = 29     -- floor alone would give 28
+
+        so a decoder that truncated instead of rounding half up would
+        disagree with this value."""
+        rgb = (0, 0, 250)
+        self.assertEqual(luma(bytes(rgb)), bytes([29]))
+        rows = [[rgb] * 9 for _ in range(9)]
+        dec = raw_scanlines(build_png(rows, filters=[0] * 9))
+        self.assertEqual(_decode_gray_colour(dec, 9, 9), bytes([29]) * 81)
+
 
 class T0_8_ReadPng(unittest.TestCase):
 

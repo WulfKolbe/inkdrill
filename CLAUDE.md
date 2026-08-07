@@ -7,16 +7,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 python3 -m unittest discover -s tests -t .   # full suite (103 tests)
 python3 -m unittest tests.test_sweep          # one module
-python3 -m unittest tests.test_sweep.TestCycleRank.test_ring   # one test
+python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
+INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_io_corpus
 ```
+
+The last one is opt-in: the default suite is hermetic and the corpus tests skip
+unless `INKDRILL_CORPUS` names a directory of rendered pages.
 
 `-t .` is required: it sets the top-level directory to the repo root so the
 `inkdrill` package is importable from `tests/`.
 
-Python 3.14, standard library only. No numpy, no GPU, no third-party test
-runner, no build step, no installer. Do not add a dependency without saying so
-explicitly — stdlib-only is a constraint of the target compute environment, not
-a preference.
+Developed and tested on Python 3.14. The code itself requires nothing newer
+than 3.7 syntax — `from __future__ import annotations`, the newest feature in
+use, is itself a 3.7 import — so don't treat 3.14 as a hard floor if your
+environment has an older interpreter; it hasn't been an issue in practice
+because 3.14 is simply what this project runs on day to day. The constraint
+that actually binds is standard library only: no numpy, no GPU, no
+third-party test runner, no build step, no installer. Do not add a
+dependency without saying so explicitly — stdlib-only is a constraint of the
+target compute environment, not a preference.
 
 ## The plan document is the source of truth
 

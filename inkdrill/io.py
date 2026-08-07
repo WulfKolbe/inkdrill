@@ -140,12 +140,16 @@ def _is_neutral(dec: bytes, w: int, h: int) -> bool:
     R == G == B, then filtered rows satisfy R == G == B too, for every
     filter type, by induction on rows.
 
-    Converse (non-neutral raw ⟹ non-neutral filtered): PNG filtering is
-    losslessly invertible. At the first row where the raw image departs
-    from neutrality, the previous row remains channel-identical. Therefore
-    the per-row filter map φ(·, prev) is a bijection for that fixed prev—
-    distinct raw inputs (R-plane ≠ G-plane) must produce distinct filtered
-    outputs, so the probe detects that row.
+    Converse (non-neutral raw ⟹ non-neutral filtered): the INVERSE filter
+    also references bytes at `bpp` stride within its own channel:
+    recon[i] = filt[i] + pred(a, b, c) with a = recon[i-3], b = prev[i],
+    c = prev[i-3], for every filter type. So if prev is channel-identical
+    and filt is channel-identical, induction on i gives recon
+    channel-identical -- the same induction as the forward direction, run
+    on the inverse filter instead. Read contrapositively at the first row
+    where recon departs from neutrality (prev is still channel-identical
+    there, by minimality of that row): filt must depart from neutrality
+    too. That is the converse, directly.
 
     Safety-critical use: this converse direction prevents a colour image
     being silently decoded as a grey image (e.g., red channel alone).

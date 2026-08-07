@@ -219,15 +219,23 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 150 tests — OK
+Ran 156 tests in 0.147s
+
+OK (skipped=4)
 ```
+
+The 4 skipped are `tests/test_io_corpus.py`, opt-in and gated on
+`INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
+count -- what actually runs on a bare checkout -- is 156 − 4 = 152.
 
 | Unit | Tests | Result |
 |---|---|---|
-| U0 `io.py` | 47 | passed |
+| U0 `io.py` | 49 | passed |
 | U1 `space.py` | 36 | passed |
 | U2 `raster.py` | 31 | passed |
 | U3 `sweep.py` | 36 | passed |
+
+49 + 36 + 31 + 36 = 152, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.
@@ -295,19 +303,33 @@ Python, no numpy.
 
 | Operation | Throughput |
 |---|---|
-| `read_png`, neutral fast path (`_decode_gray_neutral`, SWAR) | **median 24.1 Mpx/s** (n=25 random neutral pages, range 8.97–40.93 -- wide, see below) |
+| `read_png`, neutral fast path (`_decode_gray_neutral`, SWAR) | **roughly 18–21 Mpx/s median, depending on sample** (see below) |
 | `read_png`, colour path (`_decode_gray_colour`, 3-channel + luma) | **median 1.78 Mpx/s** |
 | naive per-byte reference decoder | median 1.82 Mpx/s |
-| speedup, fast path over naive | **13.3×** |
+| speedup, fast path over naive | **roughly 10–11×**, depending on sample (was reported as 13.3× from a narrower measurement; see below) |
 
-**The neutral-path spread is wide, not a tight band.** An independent sample
-of 25 random neutral pages (best-of-3 timing of `_decode_gray_neutral` per
-page, excluding chunk parsing and inflate) measured median 24.1 Mpx/s with
-range 8.97–40.93 Mpx/s across the sample — page-to-page variance driven by
-per-row filter mix (a Paeth-heavy page runs several times slower than an
-Up-heavy one, matching the sequential-Paeth caveat in `io.py`) and by page
-size. Earlier revisions of this row understated the spread by roughly 5x at
-both ends; stated plainly here rather than hidden behind the median.
+**The neutral-path spread is wide, not a tight band, and the median itself
+moves with the sample.** Re-measured with three independent seeds of 40
+random neutral pages each (one timed run per page, excluding chunk parsing
+and inflate -- not best-of-3, so this includes cold-start variance the
+earlier n=25/best-of-3 measurement smoothed away):
+
+```
+seed 1: n=40  median 19.6   p10 11.0  p90 27.5   min 7.0  max 176.7
+seed 2: n=40  median 17.6   p10 11.2  p90 27.0   min 6.8  max 284.3
+seed 3: n=40  median 19.3   p10 12.3  p90 24.8   min 6.0  max 285.7
+full pages only (>5 Mpx), n=60: median 20.9, range 8.3-169.6
+```
+
+Median page size in the corpus is 15.0 Mpx. Call the honest headline
+**roughly 18–21 Mpx/s median, p10–p90 about 11–27 Mpx/s on full pages** —
+page-to-page variance driven by per-row filter mix (a Paeth-heavy page runs
+several times slower than an Up-heavy one, matching the sequential-Paeth
+caveat in `io.py`). The very high maxima are small pages where fixed costs
+(chunking, inflate, Python call overhead) dominate the per-pixel rate; the
+low end is Paeth-heavy pages. Recomputing the fast-path-over-naive speedup
+against this wider sample gives roughly 18/1.82 to 21/1.82 ≈ **10–11×**, not
+the 13.3× a narrower n=25/best-of-3 sample had reported.
 
 Corpus scanline filter mix, 400 pages sampled across 361 documents drawn
 from the full 18,494-page library: Up 73.0%, Paeth 20.6%, Sub 6.2%,
@@ -328,9 +350,26 @@ document's first page predicts the rest.
 is indistinguishable from the 1.82 Mpx/s naive reference decoder — the
 three-channel unfilter plus the unconditional luma reduction dominate, and
 neither is vectorised. Because this path runs on the majority of pages,
-**corpus-wide effective throughput is dominated by it, roughly 3 Mpx/s, not
-the 24.3 Mpx/s of the neutral fast path.** This is recorded as a known,
-measured limitation, not hidden behind the fast-path number.
+**corpus-wide effective throughput is dominated by it**, not by the neutral
+fast path's 18–21 Mpx/s. Effective throughput, assuming pages of comparable
+size so each path's *share of pixels* tracks its share of pages (54% colour
+at 1.78 Mpx/s, 46% neutral at, taking the middle of the 18–21 Mpx/s range,
+19.5 Mpx/s):
+
+```
+1 / (0.54/1.78 + 0.46/19.5) = 1 / (0.30337 + 0.02359) = 1 / 0.32696 ≈ 3.06 Mpx/s
+```
+
+This is barely different from the ≈3.0–3.1 Mpx/s you get at either end of
+the 18–21 Mpx/s range — the harmonic mean is dominated by the slow term
+regardless of exactly how fast the neutral path is, because 1/1.78 so far
+exceeds 1/19.5. **The headline speedup of the SWAR work, measured
+corpus-wide rather than on the neutral path alone, is therefore modest: a
+corpus-wide effective throughput of ≈3.06 Mpx/s against the 1.82 Mpx/s naive
+baseline is only ≈1.7× (3.06 / 1.82 ≈ 1.68), not the 10–11× measured on the
+neutral path in isolation and nowhere near the originally reported 13.3×.**
+This is recorded as a known, measured limitation, not hidden behind the
+fast-path number.
 
 **Deferred optimisation opportunity, not implemented.** The Up filter is
 byte-position-agnostic, so the SWAR trick used in the neutral path
@@ -339,7 +378,7 @@ generalises directly to the three-channel row using masks of width `w*3`
 rows that are Up-filtered. It is capped by the unconditional per-pixel luma
 reduction and by the remaining ~27% Sub/Average/Paeth rows, which stay
 sequential, so the expectation is a few-fold gain on the colour path, not
-parity with the neutral path's 24.3 Mpx/s. Out of scope for this task.
+parity with the neutral path's 18–21 Mpx/s. Out of scope for this task.
 
 ---
 
