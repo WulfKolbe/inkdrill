@@ -365,16 +365,11 @@ cases reach 95.7% of pixels strongly coloured, and are slide decks and video
 frames rather than papers — the corpus has broadened past arXiv PDFs. Taking
 the red channel on those pages would render red ink near-white and blue ink
 near-black across more than a third of the corpus. **The two-path decode is
-justified on measured evidence, and the greyscale re-render is not a
-substitute for it.**
+justified on measured evidence.**
 
-Re-rendering with `pnggray` remains attractive for a different and narrower
-reason: this unit reduces to luma anyway, so letting Ghostscript do that in C
-would delete the colour path, the probe and ~260 lines, at no information
-cost *for mask extraction specifically*. That is a corpus-management decision
-with a real cost (re-rendering 18,494 pages) and a real consequence (colour
-becomes unrecoverable without re-rendering again, which forecloses any later
-unit that wants it). It is recorded here as an open option, not a plan.
+U0's input contract is fixed: ghostscript `png16m`, IHDR `(8, 2, 0, 0, 0)`.
+Input format and render-device selection belong to the render pipeline, which
+is owned elsewhere; they are not U0 questions and are not reopened here.
 
 **The colour path is, measured, essentially unoptimised.** At 1.78 Mpx/s it
 is indistinguishable from the 1.82 Mpx/s naive reference decoder — the
@@ -401,14 +396,9 @@ neutral path in isolation and nowhere near the originally reported 13.3×.**
 This is recorded as a known, measured limitation, not hidden behind the
 fast-path number.
 
-**Deferred optimisation opportunity, not implemented.** The Up filter is
-byte-position-agnostic, so the SWAR trick used in the neutral path
-generalises directly to the three-channel row using masks of width `w*3`
-— no channel separation needed. That would accelerate the ~73.0% of colour
-rows that are Up-filtered. It is capped by the unconditional per-pixel luma
-reduction and by the remaining ~27% Sub/Average/Paeth rows, which stay
-sequential, so the expectation is a few-fold gain on the colour path, not
-parity with the neutral path's 18–21 Mpx/s. Out of scope for this task.
+**The colour path is complete and will not be optimised further.** The
+figures above are the measured record; performance of the ingest path is a
+render-pipeline concern, not a U0 concern.
 
 ---
 
