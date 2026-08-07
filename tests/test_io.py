@@ -249,6 +249,14 @@ class T0_5_NeutralityProbe(unittest.TestCase):
                 dec = raw_scanlines(build_png(rows, filters=[ft] * 9))
                 self.assertFalse(_is_neutral(dec, 9, 9))
 
+    def test_undersized_buffer_does_not_raise(self):
+        """_is_neutral does not itself validate dec's length -- bytes
+        slicing silently truncates on a short buffer rather than raising.
+        This is why read_png must check the inflated length first."""
+        dec = raw_scanlines(build_png(GRAD, filters=[2] * len(GRAD)))
+        short = dec[:5]          # far shorter than h * (w*3+1)
+        _is_neutral(short, 9, len(GRAD))          # must not raise
+
 
 class T0_6_NeutralFastPath(unittest.TestCase):
     """G4: byte-identical to the oracle."""
@@ -372,6 +380,14 @@ class T0_8_ReadPng(unittest.TestCase):
 
     def test_missing_idat_rejected(self):
         raw = SIG + ihdr(4, 4) + _chunk(b"IEND", b"")
+        with self.assertRaises(CorruptPNG):
+            read_png(raw)
+
+    def test_duplicate_ihdr_rejected(self):
+        """A second IHDR must not silently overwrite width/height -- that
+        is how a byte-length collision (e.g. 1x4 vs 5x1, both 16 bytes)
+        could mis-decode the pixel data of one shape as another."""
+        raw = SIG + ihdr(1, 4) + ihdr(5, 1) + _chunk(b"IEND", b"")
         with self.assertRaises(CorruptPNG):
             read_png(raw)
 

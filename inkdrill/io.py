@@ -156,6 +156,12 @@ def _is_neutral(dec: bytes, w: int, h: int) -> bool:
     is needed.
 
     Two C-speed slice comparisons per row; measured at 1.3% of decode cost.
+
+    Precondition -- not itself validated: `dec` must be exactly
+    `h * (w*3+1)` bytes. Python bytes slicing never raises on an
+    out-of-range bound, it silently truncates, so a short buffer would
+    return a meaningless answer instead of an error. The caller (`read_png`)
+    validates the length before this runs.
     """
     stride = w * 3 + 1
     for base in range(1, h * stride + 1, stride):
@@ -309,6 +315,8 @@ def read_png(src: bytes | bytearray | str | os.PathLike) -> PngImage:
     idat: list[bytes] = []
     for typ, data in _chunks(raw):
         if typ == b"IHDR":
+            if width is not None:
+                raise CorruptPNG("multiple IHDR chunks")
             width, height = _parse_ihdr(data)
         elif typ == b"pHYs":
             dpi = _parse_phys(data)
