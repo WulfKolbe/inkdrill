@@ -154,9 +154,22 @@ disjoint label spaces; stitch by applying the U3 adjacency predicate
 across each seam and merging components. Moment aggregates add; **runs
 and RAG nodes must be re-sorted after concatenation** — this is the
 specific latent bug the old code base carries.
+Contract addition, from the premise check: **the node count is invariant
+under banding.** U2's G2 says a run never spans a line boundary, and a
+band boundary *is* a line boundary, so a split can never split a run — V
+needs no repair at all, only E, C and the cycle counts do. Measured
+bit-identical from K=1 to K=64 on real page ink.
 Tests: output identical to K=1 for K ∈ {1,2,3,7,64} on a fixture with a
-blob crossing every seam; run order sorted after stitching; cycle-rank
-identity survives stitching.
+blob crossing every seam, plus 60 random masks, both connectivities, and
+real page ink at K ∈ {1,2,3,7,64,600} — K=600 being one band per row, so
+every line is a seam; run order sorted after stitching; cycle-rank
+identity survives stitching, per component and in total; moments add
+across bands.
+**Scope limit:** scan events are *not* stitched. A band boundary
+manufactures spurious births and closes, and repairing that needs the
+bounded-memory closure stream. `stitch()` returns an empty event list and
+says so, rather than returning events that look right and are not.
+**Status: 29 tests passed.**
 
 **U8 `sched.py` — the task graph and priority queue.**
 *Depends: U7.*
@@ -601,9 +614,20 @@ corpus cannot supply it: those pages are already deskewed (§3 above).
    point the same code would drift and this would hold only
    approximately — which is why integer accumulation is stated in the
    contract rather than left as an implementation choice.
-5. **Band stitching preserves everything but `closed_at`.** The moment
-   algebra adds by construction; run and node re-sorting is the open
-   part and is U7's main risk.
+5. ~~**Band stitching preserves everything but `closed_at`.**~~
+   **VERIFIED 2026-08-07 (U7 G2/G3).** Stitched output is
+   indistinguishable from a single sweep — same partition, same V, E, C
+   and cycle counts — on the crossing-blob fixture at K ∈ {1,2,3,7,64},
+   on 60 random masks at both connectivities, and on real page ink up to
+   K=600 (one band per row). The re-sorting risk was real and is now
+   **mutation-tested**: three separate defences were each mutated and
+   each kills tests. One of them initially survived — sorting the band
+   *list* already yields global order, so the per-node re-sort was
+   unreachable through the public API. A test that shuffles nodes
+   *within* a band makes it reachable, which matters because U8 may
+   append a band's own nodes in completion order.
+   Scan events remain unstitched by design, which is the `closed_at`
+   caveat the original wording was reaching for.
 6. **The priority-queue scheduler reaches full utilisation.** The idle
    tail — last page, few tasks, many free cores — is unaddressed and may
    need finer bands at the end as well as the start.

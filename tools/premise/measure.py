@@ -41,6 +41,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from inkdrill.pngio import _is_neutral, read_png            # noqa: E402
 from inkdrill.raster import INK, InkMask, binarize          # noqa: E402
 from inkdrill.aggregate import component_moments, moments_of_mask  # noqa: E402
+from inkdrill.band import canonical, sweep_banded  # noqa: E402
 from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
@@ -446,7 +447,24 @@ def m_nesting(root, n, rng):
         print(f"    cycle_count={cyc} nest={got}  ({w}x{h})")
 
 
+def m_banding(root, n, rng):
+    """units.md U7 G2: a stitched banded sweep must be indistinguishable
+    from a single sweep, at every K, on real page ink."""
+    for f in rng.sample(pages(root), n):
+        img = read_png(f)
+        mask = binarize(img.gray, img.width, img.height)
+        band = InkMask(mask.data[:mask.width * 600], mask.width, 600)
+        whole = sweep(band, axis="row", conn=8, capture=Capture.GRAPH)
+        want = canonical(whole)
+        line = f"  {f.parent.parent.parent.name[:28]:28} V={whole.node_count:6} "
+        for k in (1, 2, 3, 7, 64, 600):
+            got = canonical(sweep_banded(band, k))
+            line += f" K={k}:{'OK' if got == want else 'DIFF'}"
+        print(line)
+
+
 MEASUREMENTS = {
+    "banding": (m_banding, 3),
     "moments": (m_moments, 3),
     "nesting": (m_nesting, 2),
     "neutrality": (m_neutrality, 400),
