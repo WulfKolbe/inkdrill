@@ -5,8 +5,8 @@ import struct
 import unittest
 import zlib
 
-from inkdrill.io import CorruptPNG, UnsupportedPNG, _chunks, _parse_ihdr, _parse_phys, _is_neutral, _decode_gray_neutral, _decode_gray_colour
-from inkdrill.io import PngImage, read_png, load_mask
+from inkdrill.pngio import CorruptPNG, UnsupportedPNG, _chunks, _parse_ihdr, _parse_phys, _is_neutral, _decode_gray_neutral, _decode_gray_colour
+from inkdrill.pngio import PngImage, read_png, load_mask
 from inkdrill.raster import INK, BG
 
 SIG = b"\x89PNG\r\n\x1a\n"
@@ -400,7 +400,7 @@ class T0_7_ColourPath(unittest.TestCase):
 
     def test_luma_coefficients_are_pinned_by_hand_computed_values(self):
         """`luma()` above is a SHARED definition with `_decode_gray_colour`,
-        not an independent oracle: swapping 299 and 114 in BOTH `io.py` and
+        not an independent oracle: swapping 299 and 114 in BOTH `pngio.py` and
         `luma()` here leaves every other test in this file passing, because
         the two sides still agree with each other. The values below are
         computed by hand, outside both implementations, so a shared swap

@@ -1,4 +1,4 @@
-"""io.py — Ghostscript png16m ingest.
+"""pngio.py — Ghostscript png16m ingest.
 
 CONTRACT (written before implementation; see docs/units.md U0)
 =============================================================

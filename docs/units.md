@@ -39,7 +39,7 @@ dependencies' tests pass.
 
 ### Foundation
 
-**U0 `io.py` — ghostscript png16m ingest.**
+**U0 `pngio.py` — ghostscript png16m ingest.**
 *No dependencies.*
 Contract: `read_png` returning `PngImage(width, height, gray, dpi, neutral)`;
 `load_mask` composing it with U2's `binarize`. G1–G7.
@@ -49,7 +49,7 @@ Tests: CRC and truncation rejection; every rejected IHDR variant; all five
 scanline filters against a naive reference decoder held as the oracle;
 multi-IDAT concatenation; `pHYs` present and absent; the neutrality
 equivalence G5 that the two-path decode rests on.
-**Status: 47 tests passed.**
+**Status: 49 tests passed.**
 
 **U1 `space.py` — affine algebra, transform graph, CTM decomposition.**
 *No dependencies.*
@@ -230,7 +230,7 @@ count -- what actually runs on a bare checkout -- is 156 − 4 = 152.
 
 | Unit | Tests | Result |
 |---|---|---|
-| U0 `io.py` | 49 | passed |
+| U0 `pngio.py` | 49 | passed |
 | U1 `space.py` | 36 | passed |
 | U2 `raster.py` | 31 | passed |
 | U3 `sweep.py` | 36 | passed |
@@ -325,7 +325,7 @@ Median page size in the corpus is 15.0 Mpx. Call the honest headline
 **roughly 18–21 Mpx/s median, p10–p90 about 11–27 Mpx/s on full pages** —
 page-to-page variance driven by per-row filter mix (a Paeth-heavy page runs
 several times slower than an Up-heavy one, matching the sequential-Paeth
-caveat in `io.py`). The very high maxima are small pages where fixed costs
+caveat in `pngio.py`). The very high maxima are small pages where fixed costs
 (chunking, inflate, Python call overhead) dominate the per-pixel rate; the
 low end is Paeth-heavy pages. Recomputing the fast-path-over-naive speedup
 against this wider sample gives roughly 18/1.82 to 21/1.82 ≈ **10–11×**, not

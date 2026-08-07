@@ -19,7 +19,7 @@ import pathlib
 import random
 import unittest
 
-from inkdrill.io import read_png
+from inkdrill.pngio import read_png
 from inkdrill.raster import binarize
 from inkdrill.sweep import Capture, sweep
 

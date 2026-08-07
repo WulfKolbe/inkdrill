@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 python3 -m unittest discover -s tests -t .   # full suite: 156, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
-INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_io_corpus
+INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
 ```
 
 The last one is opt-in: the default suite is hermetic and the corpus tests skip
@@ -48,9 +48,9 @@ guarantees `G1`–`G7` at the top of that docstring; the tests exist to hold tho
 specific numbered guarantees, so a test named for `G4` is not incidental.
 
 Built (U0–U3), all independent of each other except `sweep` → `raster` and
-`io.load_mask` → `raster.binarize`:
+`pngio.load_mask` → `raster.binarize`:
 
-- **`inkdrill/io.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
+- **`inkdrill/pngio.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
   `load_mask`. Reads only what that one device writes; anything else raises.
 - **`inkdrill/space.py`** — affine algebra. `Affine`, `Decomposition`,
   `SpaceGraph`, `angle_deg_ccw`, `angle_deg_screen`.
