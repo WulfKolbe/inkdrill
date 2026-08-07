@@ -127,11 +127,30 @@ def _parse_phys(data: bytes) -> tuple[float, float] | None:
 def _is_neutral(dec: bytes, w: int, h: int) -> bool:
     """True iff the decoded image would satisfy R == G == B everywhere.
 
-    Decided on the FILTERED bytes, with no unfiltering (G5). Every PNG
-    filter references bytes at `bpp` stride within its own channel, so if
-    the source rows are neutral the filtered rows are neutral too, for
-    every filter type, by induction on rows. Two C-speed slice
-    comparisons per row; measured at 1.3% of decode cost.
+    Decided on the FILTERED bytes, with no unfiltering (G5). The iff holds
+    by two symmetric arguments:
+
+    Forward (neutral raw ⟹ neutral filtered): Every PNG filter references
+    bytes at `bpp` stride within its own channel. If source rows satisfy
+    R == G == B, then filtered rows satisfy R == G == B too, for every
+    filter type, by induction on rows.
+
+    Converse (non-neutral raw ⟹ non-neutral filtered): PNG filtering is
+    losslessly invertible. At the first row where the raw image departs
+    from neutrality, the previous row remains channel-identical. Therefore
+    the per-row filter map φ(·, prev) is a bijection for that fixed prev—
+    distinct raw inputs (R-plane ≠ G-plane) must produce distinct filtered
+    outputs, so the probe detects that row.
+
+    Safety-critical use: this converse direction prevents a colour image
+    being silently decoded as a grey image (e.g., red channel alone).
+
+    The two-comparison form (s[0::3] != s[1::3] or s[1::3] != s[2::3])
+    is complete by transitivity: if R, G, B are not all equal at some
+    pixel, then either R≠G or G≠B must hold there; no third comparison
+    is needed.
+
+    Two C-speed slice comparisons per row; measured at 1.3% of decode cost.
     """
     stride = w * 3 + 1
     for base in range(1, h * stride + 1, stride):
