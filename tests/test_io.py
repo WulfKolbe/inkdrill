@@ -79,3 +79,128 @@ class T0_3_PhysDpi(unittest.TestCase):
 
     def test_unit_zero_gives_none(self):
         self.assertIsNone(_parse_phys(struct.pack(">IIB", 100, 100, 0)))
+
+
+def reference_decode(dec, w, h):
+    """Deliberately naive per-byte unfilter. Slow, obvious, and the ORACLE
+    for every fast path in the unit. Returns RGB bytes."""
+    stride = w * 3 + 1
+    prev = bytearray(w * 3)
+    rows = []
+    for r in range(h):
+        ft = dec[r * stride]
+        line = bytearray(dec[r * stride + 1:(r + 1) * stride])
+        for i in range(len(line)):
+            a = line[i - 3] if i >= 3 else 0
+            b = prev[i]
+            c = prev[i - 3] if i >= 3 else 0
+            if ft == 0:
+                pass
+            elif ft == 1:
+                line[i] = (line[i] + a) & 0xFF
+            elif ft == 2:
+                line[i] = (line[i] + b) & 0xFF
+            elif ft == 3:
+                line[i] = (line[i] + ((a + b) >> 1)) & 0xFF
+            elif ft == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pred = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                line[i] = (line[i] + pred) & 0xFF
+            else:
+                raise ValueError(f"filter type {ft}")
+        prev = line
+        rows.append(bytes(line))
+    return b"".join(rows)
+
+
+def luma(rgb):
+    """Rec.601, integer, round-half-up. The ONE definition; the unit must
+    agree with it byte for byte."""
+    return bytes((rgb[i] * 299 + rgb[i + 1] * 587 + rgb[i + 2] * 114 + 500)
+                 // 1000 for i in range(0, len(rgb), 3))
+
+
+def _encode_filter(ft, line, prev, bpp=3):
+    out = bytearray(len(line))
+    for i in range(len(line)):
+        a = line[i - bpp] if i >= bpp else 0
+        b = prev[i]
+        c = prev[i - bpp] if i >= bpp else 0
+        if ft == 0:
+            out[i] = line[i]
+        elif ft == 1:
+            out[i] = (line[i] - a) & 0xFF
+        elif ft == 2:
+            out[i] = (line[i] - b) & 0xFF
+        elif ft == 3:
+            out[i] = (line[i] - ((a + b) >> 1)) & 0xFF
+        elif ft == 4:
+            p = a + b - c
+            pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+            pred = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+            out[i] = (line[i] - pred) & 0xFF
+        else:
+            raise ValueError(f"filter type {ft}")
+    return out
+
+
+def build_png(rows, *, filters=None, phys=None, idat_split=1):
+    """Assemble a png16m-shaped PNG. `rows` is a list of rows, each a list
+    of (r, g, b) triples. `filters` is one filter type per row."""
+    h = len(rows)
+    w = len(rows[0])
+    if filters is None:
+        filters = [0] * h
+    raw = bytearray()
+    prev = bytearray(w * 3)
+    for r in range(h):
+        line = bytearray()
+        for px in rows[r]:
+            line.extend(px)
+        raw.append(filters[r])
+        raw.extend(_encode_filter(filters[r], line, prev))
+        prev = line
+    comp = zlib.compress(bytes(raw))
+    parts = [SIG, ihdr(w, h)]
+    if phys is not None:
+        ppux, ppuy, unit = phys
+        parts.append(_chunk(b"pHYs", struct.pack(">IIB", ppux, ppuy, unit)))
+    step = max(1, len(comp) // idat_split)
+    for i in range(0, len(comp), step):
+        parts.append(_chunk(b"IDAT", comp[i:i + step]))
+    parts.append(_chunk(b"IEND", b""))
+    return b"".join(parts)
+
+
+def raw_scanlines(png):
+    """Inflate a PNG's IDAT stream back to filtered scanlines."""
+    idat = b"".join(d for t, d in _chunks(png) if t == b"IDAT")
+    return zlib.decompress(idat)
+
+
+GRAD = [[(v, v, v) for v in range(x, x + 9)] for x in range(0, 60, 7)]
+COLOUR = [[(x * 9 % 256, y * 31 % 256, (x + y) * 17 % 256) for x in range(9)]
+          for y in range(9)]
+
+
+class T0_4_TestInfrastructure(unittest.TestCase):
+
+    def test_builder_round_trips_through_reference_all_filters(self):
+        for ft in range(5):
+            with self.subTest(filter=ft):
+                png = build_png(GRAD, filters=[ft] * len(GRAD))
+                got = reference_decode(raw_scanlines(png), 9, len(GRAD))
+                want = bytes(v for row in GRAD for px in row for v in px)
+                self.assertEqual(got, want)
+
+    def test_builder_round_trips_mixed_filters_and_colour(self):
+        fts = [i % 5 for i in range(len(COLOUR))]
+        png = build_png(COLOUR, filters=fts)
+        got = reference_decode(raw_scanlines(png), 9, len(COLOUR))
+        want = bytes(v for row in COLOUR for px in row for v in px)
+        self.assertEqual(got, want)
+
+    def test_luma_is_identity_on_neutral_pixels(self):
+        rgb = bytes(v for v in range(256) for _ in range(3))
+        self.assertEqual(luma(rgb), bytes(range(256)))
