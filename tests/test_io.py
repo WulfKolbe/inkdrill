@@ -1,10 +1,11 @@
 """Unit 0 tests. Every test name is quoted verbatim in the status report."""
 
+import random
 import struct
 import unittest
 import zlib
 
-from inkdrill.io import CorruptPNG, UnsupportedPNG, _chunks, _parse_ihdr, _parse_phys, _is_neutral
+from inkdrill.io import CorruptPNG, UnsupportedPNG, _chunks, _parse_ihdr, _parse_phys, _is_neutral, _decode_gray_neutral
 
 SIG = b"\x89PNG\r\n\x1a\n"
 
@@ -245,3 +246,53 @@ class T0_5_NeutralityProbe(unittest.TestCase):
             with self.subTest(filter=ft):
                 dec = raw_scanlines(build_png(rows, filters=[ft] * 9))
                 self.assertFalse(_is_neutral(dec, 9, 9))
+
+
+class T0_6_NeutralFastPath(unittest.TestCase):
+    """G4: byte-identical to the oracle."""
+
+    def test_matches_oracle_for_every_filter(self):
+        for ft in range(5):
+            with self.subTest(filter=ft):
+                dec = raw_scanlines(build_png(GRAD, filters=[ft] * len(GRAD)))
+                got = _decode_gray_neutral(dec, 9, len(GRAD))
+                self.assertEqual(got, reference_decode(dec, 9, len(GRAD))[0::3])
+
+    def test_matches_oracle_on_random_masks_mixed_filters(self):
+        rng = random.Random(20260807)
+        for trial in range(20):
+            w = rng.randint(1, 17)
+            h = rng.randint(1, 17)
+            rows = [[(v, v, v) for v in
+                     (rng.randrange(256) for _ in range(w))] for _ in range(h)]
+            fts = [rng.randrange(5) for _ in range(h)]
+            dec = raw_scanlines(build_png(rows, filters=fts))
+            with self.subTest(trial=trial, w=w, h=h):
+                self.assertEqual(_decode_gray_neutral(dec, w, h),
+                                 reference_decode(dec, w, h)[0::3])
+
+    def test_output_length_is_exactly_w_times_h(self):
+        dec = raw_scanlines(build_png(GRAD, filters=[2] * len(GRAD)))
+        self.assertEqual(len(_decode_gray_neutral(dec, 9, len(GRAD))),
+                         9 * len(GRAD))
+
+    def test_single_pixel_and_single_row_and_single_column(self):
+        cases = {"1x1": ([[(9, 9, 9)]], 1, 1),
+                 "1 wide": ([[(v, v, v)] for v in (3, 40, 200, 7)], 1, 4),
+                 "1 tall": ([[(v, v, v) for v in (3, 40, 200, 7)]], 4, 1)}
+        for label, (rows, w, h) in cases.items():
+            for ft in range(5):
+                dec = raw_scanlines(build_png(rows, filters=[ft] * h))
+                with self.subTest(label, filter=ft):
+                    self.assertEqual(_decode_gray_neutral(dec, w, h),
+                                     reference_decode(dec, w, h)[0::3])
+
+    def test_even_and_odd_widths(self):
+        """The SWAR masks are built from `width`; a parity error there
+        would corrupt exactly one edge column."""
+        for w in (2, 3, 8, 9, 16, 17):
+            rows = [[(x * 13 % 256,) * 3 for x in range(w)] for _ in range(6)]
+            dec = raw_scanlines(build_png(rows, filters=[2, 1, 4, 3, 0, 2]))
+            with self.subTest(width=w):
+                self.assertEqual(_decode_gray_neutral(dec, w, 6),
+                                 reference_decode(dec, w, 6)[0::3])
