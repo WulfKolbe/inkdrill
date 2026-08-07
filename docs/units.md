@@ -234,7 +234,8 @@ depends on U2 (`binarize`) alone; the full suite stays green.
 
 Corpus smoke test (opt-in, `tests/test_io_corpus.py`, skipped in the count
 above unless `INKDRILL_CORPUS` is set): 4 tests passed on 2026-08-07 against
-real ghostscript output at `~/pdfdrill-library`.
+real ghostscript output at `~/pdfdrill-library` — 18,494 pages across 3,272
+document directories.
 
 ### Hand-verified event streams
 
@@ -296,13 +297,20 @@ Python, no numpy.
 | naive per-byte reference decoder | median 1.82 Mpx/s |
 | speedup, fast path over naive | **13.3×** |
 
-Corpus scanline filter mix: Up 74.5%, Paeth 18.5%, Sub 5.7%, None 1.2%.
+Corpus scanline filter mix, 400 pages sampled across 361 documents drawn
+from the full 18,494-page library: Up 73.0%, Paeth 20.6%, Sub 6.2%,
+None 0.2%, Average 0.1%. All five filter types now appear in real corpus
+data — Average included, at 0.1% — which retroactively justifies
+implementing all five rather than only the three an earlier, smaller
+sample showed.
 
-**The colour path is the majority case, not an edge case.** 56.5% of 200
-sampled pages are non-neutral and take the colour path — real colour
-figures, not a rarity. Neutrality is a per-document property: of 187
-documents sampled, none mixed neutral and non-neutral pages, which
-suggests it tracks a render setting rather than page content.
+**The colour path is the majority case, not an edge case.** 54.0% of the
+400 sampled pages (216 of 400) are non-neutral and take the colour path —
+real colour figures, not a rarity. Neutrality is *almost always* a
+per-document property — of 361 documents sampled, only 2 mix neutral and
+non-neutral pages — consistent with it tracking a render setting rather
+than page content. It is not absolute, though: a decoder must not assume a
+document's first page predicts the rest.
 
 **The colour path is, measured, essentially unoptimised.** At 1.78 Mpx/s it
 is indistinguishable from the 1.82 Mpx/s naive reference decoder — the
@@ -315,9 +323,9 @@ measured limitation, not hidden behind the fast-path number.
 **Deferred optimisation opportunity, not implemented.** The Up filter is
 byte-position-agnostic, so the SWAR trick used in the neutral path
 generalises directly to the three-channel row using masks of width `w*3`
-— no channel separation needed. That would accelerate the ~74.5% of colour
+— no channel separation needed. That would accelerate the ~73.0% of colour
 rows that are Up-filtered. It is capped by the unconditional per-pixel luma
-reduction and by the remaining ~26% Sub/Average/Paeth rows, which stay
+reduction and by the remaining ~27% Sub/Average/Paeth rows, which stay
 sequential, so the expectation is a few-fold gain on the colour path, not
 parity with the neutral path's 24.3 Mpx/s. Out of scope for this task.
 
@@ -359,7 +367,7 @@ parity with the neutral path's 24.3 Mpx/s. Out of scope for this task.
    gain is unmeasured.
 10. **`inkdrill` is the right package name.** Cosmetic, but the cost of
     changing it rises with every unit.
-11. **The corpus is entirely ghostscript `png16m`.** Every sampled page
-    matches the stated IHDR, no variation. The unit fails loudly rather
-    than mis-decoding if that is wrong, so the risk is a refused file
-    rather than a wrong answer.
+11. **The corpus is entirely ghostscript `png16m`.** 400 files sampled
+    from the full 18,494-page library, IHDR `(8, 2, 0, 0, 0)` × 400 — zero
+    variation. The unit fails loudly rather than mis-decoding if that is
+    wrong, so the risk is a refused file rather than a wrong answer.
