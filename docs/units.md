@@ -374,6 +374,42 @@ plus aspect ratio and absolute extents carried separately (without them
 `- − – —` and `. ·` are unrecoverable). Escalate beyond nearest neighbour
 only after seeing the confusion matrix.
 
+**The confusion matrix was the premise check, and it says do not
+escalate.** 17,008 real glyph components, 59 classes, half train half
+test, majority-class baseline 13.0%:
+
+| channel | accuracy |
+|---|---|
+| signature only | 30.7% |
+| extents only | 97.1% |
+| **bitmap only** | **99.1%** |
+| bitmap + signature | 99.2% |
+| bitmap + extents | 99.3% |
+| all three | 99.3% |
+
+Plain 1-NN on a 12×12 bitmap reaches 99.1% and every further channel buys
+tenths of a point. **Extents alone reach 97.1%** — far more than "carried
+separately" implies, and consistent with U12 finding extents the
+highest-information dimension. **The signature is weak alone and adds
++0.1pp**, so it is exposed as a *verifier* (`agrees`, `margin`) rather
+than mixed into one distance — U12 measured it narrow-but-efficient and
+98.7–100% stable within a class, which is the profile for rejecting a
+wrong answer rather than generating one.
+
+**Every residual error is structural**, not a modelling failure:
+`, ; : .` are multi-component glyphs a per-component classifier sees half
+of (U4 and U10 hit the same thing; the fix is grouping, in U14), and
+`W/w S/s H/h I/l` are case pairs separated only by absolute size — which
+is exactly why extents is a channel and not a normalisation.
+
+Tests: scale invariance; each distance a metric; runner-up and finite
+margin; deterministic tie-breaking; channels independently disable-able;
+the signature as verifier; confusion reporting pairs not just accuracy.
+Branch sweep: 24 probed, 3 real gaps closed, 5 equivalent mutants.
+**Scope limit:** templates come from labelled page ink via U10, not from
+font-rendered references — that needs U9's rasterizer half.
+**Status: 31 tests passed.**
+
 **U14 `mathstruct.py` — expression structure.** *Depends: U6, U12, U13.*
 Reference-line estimation per row; sub/superscript from geometry alone
 against pdfminer's `role` as label; big operators and their ranges; fence
@@ -400,7 +436,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 453 - 4 = 449.
+count -- what actually runs on a bare checkout -- is 484 - 4 = 480.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -417,8 +453,9 @@ count -- what actually runs on a bare checkout -- is 453 - 4 = 449.
 | U10 `gold.py` | 38 | passed |
 | U11 `coverage.py` | 24 | passed |
 | U12 `domains.py` | 40 | passed |
+| U13 `classify.py` | 31 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 40 = 449, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 40 + 31 = 480, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.

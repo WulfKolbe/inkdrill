@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 453, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 484, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -47,7 +47,7 @@ written as a docstring *before* the implementation. Every module states
 guarantees `G1`–`G7` at the top of that docstring; the tests exist to hold those
 specific numbered guarantees, so a test named for `G4` is not incidental.
 
-Built (U0–U12), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
+Built (U0–U13), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
 `pngio.load_mask` → `raster.binarize`:
 
 - **`inkdrill/pngio.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
@@ -86,9 +86,13 @@ Built (U0–U12), all independent of each other except `reeb`/`aggregate`/`nest`
   of `gold.py`'s centres, because a blob crossing a region edge is the
   finding. Read the per-page spread, never the aggregate.
 - **`inkdrill/domains.py`** — conceptual-space dimensions. `describe`,
-  `convexity`, `mutual_information`. Ships the Gärdenfors design test, so
-  a dimension is added by measuring it. Every topological dimension
-  scores below every geometric one.
+  `convexity`, `mutual_information`, `joint_mutual_information`. Ships the
+  Gärdenfors design test, so a dimension is added by measuring it. Compare
+  `efficiency`, not raw `nmi` — the latter is capped by cardinality.
+- **`inkdrill/classify.py`** — 1-NN over separable channels. `normalise`,
+  `Classifier`, `confusion`. The bitmap channel alone reaches 99.1%; the
+  confusion matrix says do not escalate. The signature is a verifier
+  (`agrees`), not a discriminator.
 
 Planned U4–U14 (`reeb`, `aggregate`, `nest`, `band`, `sched`, `font`, `gold`,
 `coverage`, `domains`, `classify`, `mathstruct`) are specified in `units.md`
@@ -179,6 +183,13 @@ Over `font.py` the sweep reported eight survivors: six real, two
 misfiring — one of which fails 18 tests when mutated correctly. Over
 `domains.py` it reported three, and all three were equivalent mutants.
 Expect roughly half of any batch to be noise.
+
+**Run the sweep with `PYTHONDONTWRITEBYTECODE=1`, or clear `__pycache__`
+after it.** The sweep rewrites a module many times per second, and Python
+invalidates cached bytecode on `(mtime, size)` — a mutation that happens to
+preserve the file size can leave a stale `.pyc` behind. That produced a
+test failing with `'box' != 'box'`, which costs real time to diagnose and
+looks like a logic bug in whatever you touched last.
 
 **Reconcile scope if two sweeps disagree on the count.** A regex over
 `if …:` lines misses ternaries, `while`, and comprehension conditions; two
