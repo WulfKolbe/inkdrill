@@ -46,6 +46,8 @@ from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # noqa: E402
                            is_math_family)
 from inkdrill.coverage import Box, CoverageClass, Region, check  # noqa: E402
+from inkdrill.domains import (DIMENSIONS, convexity, describe,  # noqa: E402
+                              mutual_information)
 from inkdrill.gold import (Component as GComp, Glyph as GGlyph,  # noqa: E402
                            MatchKind, match, page_transform)
 from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
@@ -753,8 +755,98 @@ def m_missed(root, n, rng):
               f"median {vals[len(vals)//2]:6.2%}  max {vals[-1]:6.2%}")
 
 
+def m_convexity(root, n, rng):
+    """units.md 3 "U12 premise check": the Gardenfors design test.
+
+    Uses the SHIPPED convexity() and mutual_information(), so the numbers
+    recorded in domains.DIMENSIONS are reproducible from the module
+    rather than from a scratch script."""
+    from collections import defaultdict
+    from inkdrill.aggregate import moments_of_mask
+    from inkdrill.nest import nest as nest_of
+    from inkdrill.reeb import graph_of, signature
+
+    docs = [(cj.parent, cj) for cj in sorted(root.glob("*/*.chars.json"))
+            if (cj.parent / "inspect" / "pages").is_dir()]
+    rows = []          # (char, feature dict)
+    pages = 0
+    for doc, cj in rng.sample(docs, len(docs)):
+        if pages >= n:
+            break
+        try:
+            data = json.load(cj.open())
+        except Exception:
+            continue
+        for page in data["pages"]:
+            pdir = doc / "inspect" / "pages"
+            png = next((pdir / p for p in
+                        (f"p{page['page_number']}.png",
+                         f"page-{page['page_number']:04d}.png")
+                        if (pdir / p).exists()), None)
+            if png is None:
+                continue
+            img = read_png(png)
+            sx = img.width / page["width"]
+            if abs(sx - img.height / page["height"]) / sx > 0.01:
+                continue
+            mask = binarize(img.gray, img.width, img.height)
+            glyphs = [(c["text"], c["x0"] * sx,
+                       (page["height"] - c["y1"]) * sx, c["x1"] * sx,
+                       (page["height"] - c["y0"]) * sx)
+                      for c in page["chars"]
+                      if c.get("text") and len(c["text"]) == 1
+                      and c["text"].strip()]
+            for (x0, y0, x1, y1), sub in components(mask, min_area=1,
+                                                    min_side=5):
+                cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+                hit = [g for g in glyphs
+                       if g[1] <= cx <= g[3] and g[2] <= cy <= g[4]]
+                if len(hit) != 1:
+                    continue
+                mo = moments_of_mask(sub)
+                s = signature(graph_of(sub))
+                rows.append((hit[0][0], {
+                    "width": sub.width, "height": sub.height,
+                    "area": mo.area, "elongation": mo.elongation,
+                    "cycles": s.cycles, "births": s.births,
+                    "merges": s.merges, "splits": s.splits,
+                    "depth": max((r.depth for r in
+                                  nest_of(sub).regions.values()), default=0),
+                }))
+            pages += 1
+            print(f"  {doc.name[:26]:26} p{page['page_number']:<3} "
+                  f"{len(rows)} glyphs so far")
+            break
+
+    counts = Counter(c for c, _f in rows)
+    common = {c for c, k in counts.items() if k >= 40}
+    use = [(c, f) for c, f in rows if c in common]
+    if not use:
+        print("  not enough glyphs per class")
+        return
+    print(f"\n  {len(use)} glyph instances, {len(common)} classes with 40+"
+          f"   baseline {1/len(common):.3f}\n")
+    print(f"  {'dimension':12} {'domain':12} {'convex':>8} {'lift':>7} {'nmi':>7}")
+    out = []
+    for dim in DIMENSIONS:
+        vals, labs = [], []
+        for c, f in use:
+            v = describe(f).get(dim.name)
+            if v is not None:
+                vals.append(v)
+                labs.append(c)
+        if len(vals) < 50:
+            continue
+        cv = convexity(vals, labs)
+        out.append((dim, cv, mutual_information(vals, labs)))
+    for dim, cv, nmi in sorted(out, key=lambda r: -r[2]):
+        print(f"  {dim.name:12} {dim.domain.value:12} {cv.score:8.3f} "
+              f"{cv.lift:6.1f}x {nmi:7.3f}")
+
+
 MEASUREMENTS = {
     "banding": (m_banding, 3),
+    "convexity": (m_convexity, 2),
     "missed": (m_missed, 8),
     "residuals": (m_residuals, 12),
     "fonts": (m_fonts, 25),

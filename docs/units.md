@@ -293,12 +293,54 @@ regions transformed by composing an affine. Branch sweep: 8 conditions,
 
 **U12 `domains.py` — conceptual-space feature domains.**
 *Depends: U4, U5, U6, U9.*
-Separable domains: shape (Reeb signature, cycle count), size, position
-(+ Morton code), **transform** (CTM decomposition — its own domain, so
-rotation and shear stop contaminating shape), topology (depth, parity),
-typographic (offsets from each named reference line ÷ em). Design test per
-Gärdenfors: a dimension earns its place when the concepts of interest
-become **convex** in it.
+Separable domains: shape, size, position, **transform** (its own domain,
+so rotation and shear stop contaminating shape), topology, typographic.
+Design test per Gärdenfors: a dimension earns its place when the concepts
+of interest become **convex** in it.
+
+**The design test is shipped, not described.** `convexity()` and
+`mutual_information()` are part of the unit, so a future dimension is
+added by measuring it. Every dimension carries its measured score, and an
+unmeasured one is visibly unmeasured.
+
+Measured on 5,436 real glyph instances over 23 character classes with 40+
+examples each; random baseline 0.043:
+
+| dimension | domain | convexity | lift | norm. MI |
+|---|---|---|---|---|
+| aspect | size | 0.489 | **11.2×** | **0.634** |
+| elongation | shape | 0.437 | 10.1× | 0.627 |
+| width | size | 0.273 | 6.3× | 0.584 |
+| fill | shape | 0.374 | 8.6× | 0.561 |
+| area | size | 0.287 | 6.6× | 0.544 |
+| height | size | 0.248 | 5.7× | 0.418 |
+| splits | topology | 0.163 | 3.7× | 0.373 |
+| merges | topology | 0.120 | 2.8× | 0.320 |
+| births | topology | 0.101 | 2.3× | 0.255 |
+| cycles | topology | 0.127 | 2.9× | 0.246 |
+| depth | topology | 0.086 | 2.0× | 0.220 |
+
+**Every topological dimension ranks below every geometric one**, which
+reorders U13's emphasis: its text reads as though the bitmap and the Reeb
+signature are the two channels with extents "carried separately", and the
+measurement says extents and aspect are the *strongest* dimensions
+available.
+
+**Stability and discriminative power are different properties.** `cycles`
+was U4's most STABLE feature — 98.7–100% consistent within a class — and
+is near the bottom here for DISCRIMINATION, because `e a o b d p q` all
+have one hole. Both are true and neither implies the other.
+
+**Scope limits, stated:** TYPOGRAPHIC is declared and **empty** — it needs
+U9's reference lines, which are not built. TRANSFORM is declared and
+empty — it needs a per-character CTM from U10. Both are named rather than
+populated with guesses. No Morton code: it encodes two dimensions already
+present and belongs to a consumer wanting spatial locality.
+Tests: domain partitioning; `describe()` total over missing inputs; the
+design test scoring 1.0 on a separating dimension and near baseline on a
+random one; outlier robustness; every recorded score beating baseline.
+Branch sweep: 0 survivors.
+**Status: 32 tests passed.**
 
 **U13 `classify.py` — nearest neighbour, two channels.**
 *Depends: U9, U12.*
@@ -333,7 +375,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 413 - 4 = 409.
+count -- what actually runs on a bare checkout -- is 445 - 4 = 441.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -349,8 +391,9 @@ count -- what actually runs on a bare checkout -- is 413 - 4 = 409.
 | U9 `font.py` | 52 | passed |
 | U10 `gold.py` | 38 | passed |
 | U11 `coverage.py` | 24 | passed |
+| U12 `domains.py` | 32 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 = 409, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 32 = 441, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.

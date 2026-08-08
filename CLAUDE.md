@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 413, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 445, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -47,7 +47,7 @@ written as a docstring *before* the implementation. Every module states
 guarantees `G1`–`G7` at the top of that docstring; the tests exist to hold those
 specific numbered guarantees, so a test named for `G4` is not incidental.
 
-Built (U0–U11), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
+Built (U0–U12), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
 `pngio.load_mask` → `raster.binarize`:
 
 - **`inkdrill/pngio.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
@@ -85,6 +85,10 @@ Built (U0–U11), all independent of each other except `reeb`/`aggregate`/`nest`
   real ink. `check()` → `CoverageReport`. Uses CONTAINMENT, the opposite
   of `gold.py`'s centres, because a blob crossing a region edge is the
   finding. Read the per-page spread, never the aggregate.
+- **`inkdrill/domains.py`** — conceptual-space dimensions. `describe`,
+  `convexity`, `mutual_information`. Ships the Gärdenfors design test, so
+  a dimension is added by measuring it. Every topological dimension
+  scores below every geometric one.
 
 Planned U4–U14 (`reeb`, `aggregate`, `nest`, `band`, `sched`, `font`, `gold`,
 `coverage`, `domains`, `classify`, `mathstruct`) are specified in `units.md`
