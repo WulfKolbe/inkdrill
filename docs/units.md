@@ -304,32 +304,57 @@ added by measuring it. Every dimension carries its measured score, and an
 unmeasured one is visibly unmeasured.
 
 Measured on 5,436 real glyph instances over 23 character classes with 40+
-examples each; random baseline 0.043:
+examples each; random baseline 0.043, H(class) = 4.524 bits:
 
-| dimension | domain | convexity | lift | norm. MI |
-|---|---|---|---|---|
-| aspect | size | 0.489 | **11.2×** | **0.634** |
-| elongation | shape | 0.437 | 10.1× | 0.627 |
-| width | size | 0.273 | 6.3× | 0.584 |
-| fill | shape | 0.374 | 8.6× | 0.561 |
-| area | size | 0.287 | 6.6× | 0.544 |
-| height | size | 0.248 | 5.7× | 0.418 |
-| splits | topology | 0.163 | 3.7× | 0.373 |
-| merges | topology | 0.120 | 2.8× | 0.320 |
-| births | topology | 0.101 | 2.3× | 0.255 |
-| cycles | topology | 0.127 | 2.9× | 0.246 |
-| depth | topology | 0.086 | 2.0× | 0.220 |
+| dimension | domain | nmi | distinct | ceiling | **efficiency** |
+|---|---|---|---|---|---|
+| aspect | size | 0.634 | 166 | 0.968 | 0.65 |
+| elongation | shape | 0.627 | 440 | 0.968 | 0.65 |
+| width | size | 0.584 | 53 | 0.956 | 0.61 |
+| fill | shape | 0.561 | 359 | 0.969 | 0.58 |
+| area | size | 0.544 | 272 | 0.975 | 0.56 |
+| height | size | 0.418 | 42 | 0.759 | 0.55 |
+| splits | topology | 0.375 | 6 | 0.423 | **0.89** |
+| merges | topology | 0.322 | 5 | 0.402 | **0.80** |
+| births | topology | 0.255 | 5 | 0.332 | **0.77** |
+| cycles | topology | 0.246 | 3 | 0.257 | **0.96** |
+| depth | topology | 0.220 | 2 | 0.229 | **0.96** |
 
-**Every topological dimension ranks below every geometric one**, which
-reorders U13's emphasis: its text reads as though the bitmap and the Reeb
-signature are the two channels with extents "carried separately", and the
-measurement says extents and aspect are the *strongest* dimensions
-available.
+**CORRECTED 2026-08-08.** An earlier revision concluded from the `nmi`
+column that "every topological dimension ranks below every geometric one"
+and read that as a reason to demote the topological channel in U13. That
+conclusion was wrong.
 
-**Stability and discriminative power are different properties.** `cycles`
-was U4's most STABLE feature — 98.7–100% consistent within a class — and
-is near the bottom here for DISCRIMINATION, because `e a o b d p q` all
-have one hole. Both are true and neither implies the other.
+Normalised MI is bounded by `H(X)/H(class)`, so against 23 classes a
+3-valued dimension cannot exceed **0.350** however perfectly it separates,
+and a 2-valued one 0.221. The raw ranking cannot distinguish *carries
+little information* from *has few values* — and `cycles` has three values,
+`depth` two. **Corrected for that ceiling the ordering inverts:** topology
+is the most efficient per available bit (0.77–0.96), geometry the least
+(0.55–0.65). Topology is narrow, not weak.
+
+**Marginals also cannot see joint information**, and Gärdenfors' criterion
+is about a region in a *domain*, not its projection onto one axis:
+
+| domain | dims | joint nmi | best marginal |
+|---|---|---|---|
+| size | 4 | 0.960 | 0.634 |
+| shape | 2 | 0.913 | 0.627 |
+| **topology** | 5 | **0.713** | 0.375 |
+| all | 11 | 0.996 | — |
+
+TOPOLOGY jointly reaches nearly double its best marginal — fragmented
+across five narrow dimensions, not uninformative. **U13 should weight the
+topological channel on the joint figure, not the marginal ranking.**
+
+What survives: extents and aspect carry the most marginal bits and U13
+should still weight them heavily. What does not survive: any reading of
+the marginal ranking as grounds for demoting topology.
+
+**Stability is a third property.** `cycles` is 98.7–100% consistent within
+a class (U4), 0.96 efficient, and 0.246 in absolute terms. Reliable,
+narrow, low-information — the profile of a **verifier, not a
+discriminator**.
 
 **Scope limits, stated:** TYPOGRAPHIC is declared and **empty** — it needs
 U9's reference lines, which are not built. TRANSFORM is declared and
@@ -339,8 +364,8 @@ present and belongs to a consumer wanting spatial locality.
 Tests: domain partitioning; `describe()` total over missing inputs; the
 design test scoring 1.0 on a separating dimension and near baseline on a
 random one; outlier robustness; every recorded score beating baseline.
-Branch sweep: 0 survivors.
-**Status: 32 tests passed.**
+Branch sweep: 3 survivors, all confirmed equivalent mutants.
+**Status: 40 tests passed.**
 
 **U13 `classify.py` — nearest neighbour, two channels.**
 *Depends: U9, U12.*
@@ -375,7 +400,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 445 - 4 = 441.
+count -- what actually runs on a bare checkout -- is 453 - 4 = 449.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -391,9 +416,9 @@ count -- what actually runs on a bare checkout -- is 445 - 4 = 441.
 | U9 `font.py` | 52 | passed |
 | U10 `gold.py` | 38 | passed |
 | U11 `coverage.py` | 24 | passed |
-| U12 `domains.py` | 32 | passed |
+| U12 `domains.py` | 40 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 32 = 441, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 40 = 449, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.

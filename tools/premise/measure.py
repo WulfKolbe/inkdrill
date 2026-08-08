@@ -46,7 +46,9 @@ from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # noqa: E402
                            is_math_family)
 from inkdrill.coverage import Box, CoverageClass, Region, check  # noqa: E402
-from inkdrill.domains import (DIMENSIONS, convexity, describe,  # noqa: E402
+from inkdrill.domains import (DIMENSIONS, Domain, convexity, describe,  # noqa: E402
+                              dimensions_of, efficiency,
+                              joint_mutual_information, mi_ceiling,
                               mutual_information)
 from inkdrill.gold import (Component as GComp, Glyph as GGlyph,  # noqa: E402
                            MatchKind, match, page_transform)
@@ -826,8 +828,11 @@ def m_convexity(root, n, rng):
         return
     print(f"\n  {len(use)} glyph instances, {len(common)} classes with 40+"
           f"   baseline {1/len(common):.3f}\n")
-    print(f"  {'dimension':12} {'domain':12} {'convex':>8} {'lift':>7} {'nmi':>7}")
+    print(f"  {'dimension':12} {'domain':10} {'convex':>7} {'lift':>6} "
+          f"{'nmi':>6} {'distinct':>9} {'ceiling':>8} {'eff':>6}")
     out = []
+    cols = {}
+    labels_all = [c for c, _f in use]
     for dim in DIMENSIONS:
         vals, labs = [], []
         for c, f in use:
@@ -838,10 +843,30 @@ def m_convexity(root, n, rng):
         if len(vals) < 50:
             continue
         cv = convexity(vals, labs)
-        out.append((dim, cv, mutual_information(vals, labs)))
-    for dim, cv, nmi in sorted(out, key=lambda r: -r[2]):
-        print(f"  {dim.name:12} {dim.domain.value:12} {cv.score:8.3f} "
-              f"{cv.lift:6.1f}x {nmi:7.3f}")
+        nmi = mutual_information(vals, labs)
+        ceil = mi_ceiling(vals, labs)
+        out.append((dim, cv, nmi, len(set(vals)), ceil,
+                    efficiency(vals, labs)))
+        if len(vals) == len(labels_all):
+            cols[dim.name] = vals
+    for dim, cv, nmi, dis, ceil, eff in sorted(out, key=lambda r: -r[2]):
+        print(f"  {dim.name:12} {dim.domain.value:10} {cv.score:7.3f} "
+              f"{cv.lift:5.1f}x {nmi:6.3f} {dis:9} {ceil:8.3f} {eff:6.2f}")
+
+    print(f"\n  {'domain':12} {'dims':>5} {'joint nmi':>10}   "
+          f"(marginals cannot see joint information)")
+    for dom in Domain:
+        names = [d.name for d in dimensions_of(dom) if d.name in cols]
+        if not names:
+            print(f"  {dom.value:12} {0:5}        --   declared, no data")
+            continue
+        j = joint_mutual_information({k: cols[k] for k in names},
+                                     labels_all)
+        best = max(mutual_information(cols[k], labels_all) for k in names)
+        print(f"  {dom.value:12} {len(names):5} {j:10.3f}   "
+              f"best marginal {best:.3f}")
+    everything = joint_mutual_information(cols, labels_all)
+    print(f"  {'ALL':12} {len(cols):5} {everything:10.3f}")
 
 
 MEASUREMENTS = {

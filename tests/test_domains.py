@@ -5,7 +5,9 @@ import unittest
 
 from inkdrill.domains import (DIMENSIONS, ConvexityResult, Dimension, Domain,
                               Point, UnknownDimension, convexity, describe,
-                              dimensions_of, mutual_information)
+                              dimensions_of, efficiency,
+                              joint_mutual_information, mi_ceiling,
+                              mutual_information)
 
 FEATURES = {"width": 20, "height": 40, "area": 300,
             "elongation": 3.5, "cycles": 1, "births": 2, "merges": 1,
@@ -212,13 +214,35 @@ class T12_5_MeasuredScoresAreRecorded(unittest.TestCase):
                 self.assertIsNone(d.nmi)
                 self.assertIn("unmeasured", d.note)
 
-    def test_every_topology_dimension_scores_below_every_size_one(self):
-        """The finding that reorders U13's emphasis. If a future change
-        makes this false, U13's channel weighting must be revisited."""
+    def test_raw_nmi_ranks_topology_below_size_and_that_is_an_artefact(self):
+        """True of the raw column, and NOT a reason to demote topology.
+
+        Normalised MI is bounded by H(X)/H(class): against 23 classes a
+        3-valued dimension cannot exceed 0.350 however perfectly it
+        separates. The raw ranking cannot tell "weak" from "narrow"."""
         size = [d.nmi for d in dimensions_of(Domain.SIZE) if d.measured]
         topo = [d.nmi for d in dimensions_of(Domain.TOPOLOGY) if d.measured]
-        self.assertTrue(size and topo)
         self.assertGreater(min(size), max(topo))
+        # ... and no topological dimension could have reached the TOP of
+        # that ranking whatever it measured: its ceiling is below the
+        # best size dimension. (Not below the WORST -- splits has ceiling
+        # 0.423 against height's actual 0.418, so it could in principle
+        # have outscored height. The cap binds at the top, not
+        # everywhere, and overstating it would be the same error again.)
+        for d in dimensions_of(Domain.TOPOLOGY):
+            if d.measured:
+                with self.subTest(d.name):
+                    self.assertLess(d.ceiling, max(size))
+
+    def test_corrected_for_cardinality_the_ordering_inverts(self):
+        """The finding that actually reaches U13. Topology is the MOST
+        efficient per available bit, geometry the least -- so the raw
+        ranking must not be read as a reason to demote it."""
+        size = [d.efficiency for d in dimensions_of(Domain.SIZE)
+                if d.measured]
+        topo = [d.efficiency for d in dimensions_of(Domain.TOPOLOGY)
+                if d.measured]
+        self.assertGreater(min(topo), max(size))
 
     def test_cycles_is_stable_but_weakly_discriminative(self):
         """U4 measured the hole count as the most STABLE feature,
@@ -244,3 +268,67 @@ class T12_5_MeasuredScoresAreRecorded(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class T12_6_CardinalityAndJointInformation(unittest.TestCase):
+    """G4 and G8. Both correct a conclusion that outran its instrument:
+    a marginal ranking cannot see cardinality or joint information."""
+
+    def test_a_low_cardinality_dimension_is_capped_however_perfect(self):
+        """A 3-valued dimension that partitions 23 classes PERFECTLY --
+        there is no better 3-valued dimension -- still cannot beat a
+        mediocre continuous one on raw NMI."""
+        labels = [chr(97 + i % 23) for i in range(2300)]
+        perfect3 = [ord(c) % 3 for c in labels]
+        ceil = mi_ceiling(perfect3, labels)
+        self.assertLess(ceil, 0.36)
+        self.assertAlmostEqual(mutual_information(perfect3, labels), ceil,
+                               places=6)
+        self.assertAlmostEqual(efficiency(perfect3, labels), 1.0, places=6)
+
+    def test_efficiency_separates_narrow_from_weak(self):
+        labels = [chr(97 + i % 8) for i in range(800)]
+        narrow_good = [ord(c) % 2 for c in labels]          # 2 values, tidy
+        rng = random.Random(3)
+        wide_noise = [rng.random() for _ in labels]          # many, useless
+        self.assertGreater(efficiency(narrow_good, labels),
+                           efficiency(wide_noise, labels))
+
+    def test_marginals_cannot_see_joint_information(self):
+        """Three 3-valued dimensions that TOGETHER determine the class
+        exactly. Each looks weak alone."""
+        labels, a, b, c = [], [], [], []
+        for i in range(27):
+            for _ in range(40):
+                labels.append(i)
+                a.append(i // 9)
+                b.append((i // 3) % 3)
+                c.append(i % 3)
+        for col in (a, b, c):
+            self.assertLess(mutual_information(col, labels), 0.4)
+        self.assertGreater(
+            joint_mutual_information({"a": a, "b": b, "c": c}, labels), 0.95)
+
+    def test_a_joint_score_is_never_below_its_best_marginal(self):
+        rng = random.Random(9)
+        labels = [rng.choice("abcdef") for _ in range(600)]
+        cols = {"p": [rng.random() for _ in labels],
+                "q": [ord(l) % 3 for l in labels]}
+        best = max(mutual_information(v, labels) for v in cols.values())
+        self.assertGreaterEqual(
+            joint_mutual_information(cols, labels) + 1e-9, best)
+
+    def test_joint_information_needs_matching_lengths(self):
+        with self.assertRaises(ValueError):
+            joint_mutual_information({"a": [1, 2]}, ["x"])
+
+    def test_an_empty_domain_scores_zero_rather_than_raising(self):
+        self.assertEqual(joint_mutual_information({}, ["a", "b"]), 0.0)
+
+    def test_every_measured_dimension_records_its_ceiling(self):
+        for d in DIMENSIONS:
+            if d.measured:
+                with self.subTest(d.name):
+                    self.assertIsNotNone(d.distinct)
+                    self.assertIsNotNone(d.ceiling)
+                    self.assertLessEqual(d.nmi, d.ceiling + 1e-9)
