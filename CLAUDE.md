@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 297, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 299, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus

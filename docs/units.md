@@ -193,7 +193,7 @@ finishes *last* still appears first if its key says so; duplicate keys
 refused; a raising job surfaces rather than yielding a short result list;
 utilisation and Amdahl ceiling reported. Both re-sorting and
 failure-surfacing are mutation-tested.
-**Status: 20 tests passed.**
+**Status: 22 tests passed.**
 
 ### Fonts and gold standard
 
@@ -275,7 +275,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 297 - 4 = 293.
+count -- what actually runs on a bare checkout -- is 299 - 4 = 295.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -287,9 +287,9 @@ count -- what actually runs on a bare checkout -- is 297 - 4 = 293.
 | U5 `aggregate.py` | 26 | passed |
 | U6 `nest.py` | 29 | passed |
 | U7 `band.py` | 29 | passed |
-| U8 `sched.py` | 20 | passed |
+| U8 `sched.py` | 22 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 20 = 293, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 = 295, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.
@@ -742,6 +742,15 @@ are colour (§3 above), decode dominates the mix.
 targets 5–15% of the work and was already capped at 1.7–3× *of that
 slice* by the U7 stitch measurement. Two independent measurements, taken
 a day apart for different reasons, agree.
+
+**This decision is CONDITIONAL, and the condition is written down here so
+a future session does not read it as closed.** The 1.17× ceiling is a
+function of decode being 85–95% of per-page work. The same arithmetic run
+against an ingest path where decode is cheap inverts it — at a ~5% decode
+share the sweep becomes ~95% of the work and the ceiling for parallelising
+it rises to roughly 18×. **If decode ever stops dominating, this decision
+must be re-taken.** It is correct for the pipeline as it stands and only
+for that.
 
 **Page-parallel scaling, 16 real pages over 16 cores.**
 

@@ -25,6 +25,17 @@ def sweep_job(rows):
     return (res.node_count, res.component_count, res.cycle_count)
 
 
+# Records the order the job is CALLED in, which is dispatch order -- not
+# the order results come back. Only meaningful on the serial path, which
+# runs in this process; see T8_2's docstring.
+_DISPATCH: list = []
+
+
+def spy(x):
+    _DISPATCH.append(x)
+    return x
+
+
 def boom(x):
     if x == 3:
         raise ValueError("job 3 refuses")
@@ -117,6 +128,31 @@ class T8_2_OrderIsByKeyNeverByCompletion(unittest.TestCase):
                 self.assertEqual([r.key for r in res],
                                  [(i,) for i in range(8)])
                 self.assertEqual(res[0].value, sum(range(200000)))
+
+    def test_tasks_are_dispatched_in_ascending_key_order(self):
+        """G3, and it is a different claim from G2. The final re-sort
+        delivers ordered OUTPUT whatever order tasks ran in; this asserts
+        the order they START in, which is what first-page latency
+        actually depends on.
+
+        Without this, deleting the dispatch sort passes the whole suite --
+        verified by mutation, which is why the test exists."""
+        tasks = [Task((i,), i) for i in range(20)]
+        random.Random(0).shuffle(tasks)
+        _DISPATCH.clear()
+        run(tasks, spy, workers=1)
+        self.assertEqual(_DISPATCH, list(range(20)))
+
+    def test_dispatch_order_holds_for_compound_keys(self):
+        """The real key is (page, axis), so ordering must be by the tuple
+        and not by insertion."""
+        pages = ["p2", "p0", "p1"]
+        tasks = [Task((i,), name) for i, name in
+                 ((2, "p2"), (0, "p0"), (1, "p1"))]
+        _DISPATCH.clear()
+        run(tasks, spy, workers=1)
+        self.assertEqual(_DISPATCH, ["p0", "p1", "p2"])
+        del pages
 
     def test_page_tasks_key_is_page_then_axis(self):
         tasks = page_tasks(["a", "b"], axes=("row", "col"))

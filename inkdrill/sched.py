@@ -59,7 +59,11 @@ G1  the result is IDENTICAL for every worker count, including 1, and 1
     uses no processes at all
 G2  results are ordered by task key, never by completion order
 G3  tasks are dispatched in ascending key order, so the lowest-priority
-    number starts first and first-page latency is not left to chance
+    number starts first and first-page latency is not left to chance.
+    Verified on the SERIAL path, where dispatch order is observable
+    without a timing race; it holds in the pool because `chunksize=1`
+    feeds tasks in iterable order, and that argument is why the
+    chunksize is pinned rather than defaulted
 G4  every task runs exactly once: none dropped, none duplicated
 G5  a job that raises surfaces the exception rather than silently
     yielding a short result list
@@ -218,13 +222,23 @@ def run(tasks: Iterable[Task], job: Callable[[Any], Any], *,
         raw = [_call(it) for it in items]
     else:
         with mp.Pool(workers, initializer=_init, initargs=(job,)) as pool:
-            raw = list(pool.imap_unordered(_call, items))
+            # chunksize=1 is LOAD-BEARING for G3, not a default worth
+            # tuning away: any larger chunk batches tasks and weakens
+            # dispatch ordering, and no test would catch it because G2's
+            # re-sort still delivers ordered output.
+            raw = list(pool.imap_unordered(_call, items, chunksize=1))
     report.wall_seconds = time.perf_counter() - t0
 
     for key, _value, _secs, exc in raw:
         if exc is not None:
             raise TaskFailed(key, exc)                # G5
 
+    # Defence in depth, not a live check: `imap_unordered` yields exactly
+    # one result per item or raises, and the serial path is a
+    # comprehension over the same list. G4 is held by
+    # `test_every_task_runs_exactly_once`; this branch cannot currently
+    # fire and exists so that a future dispatch change cannot lose work
+    # silently.
     if len(raw) != len(items):                        # G4
         raise RuntimeError(
             f"scheduler lost work: {len(raw)} results for "
