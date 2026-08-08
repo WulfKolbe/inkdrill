@@ -236,11 +236,19 @@ plus MediaBox, `/Rotate`, dpi and any crop — **composition, not a
 formula**; match ink components to glyphs; report the four residual
 classes (1↔1, 1↔N, N↔1, unmatched) rather than discarding them; export
 `GoldGlyph` in COCO/PAGE form.
-Tests: synthetic PDF with glyphs at known absolute positions, at several
-dpi, with and without crop; the N↔1 rate as a function of dpi is
-*measured and recorded* — it is the answer to "what render resolution does
-this need"; composite glyphs (`é`) and ligatures (`ffi`) land in the
-predicted class rather than the residual.
+Contract note from the premise check: **the matcher does not split
+blobs.** One ink blob straddling two glyphs is 0.02% of assignments at
+400 dpi, so it is reported and left to the caller. A component matches a
+glyph when its CENTRE lies in the glyph box — pdfminer's box is the
+ADVANCE box, so overlap against it is systematically wrong.
+Tests: corner-to-corner page mapping, the y flip, crop and `/Rotate`,
+invertibility and further composition; every component and every glyph in
+exactly one class over 100 random layouts; centres beating overlap on a
+straddling component and on a narrow glyph in a wide advance box; COCO
+export carrying the match class and component ids.
+**Scope limit:** no rasterization, so this compares ink to the *advance*
+box, not ink to ink. That comparison needs U9's rasterizer half.
+**Status: 35 tests passed.**
 
 ### Application
 
@@ -292,7 +300,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 351 - 4 = 347.
+count -- what actually runs on a bare checkout -- is 386 - 4 = 382.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -306,8 +314,9 @@ count -- what actually runs on a bare checkout -- is 351 - 4 = 347.
 | U7 `band.py` | 29 | passed |
 | U8 `sched.py` | 22 | passed |
 | U9 `font.py` | 52 | passed |
+| U10 `gold.py` | 35 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 = 347, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 35 = 382, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.

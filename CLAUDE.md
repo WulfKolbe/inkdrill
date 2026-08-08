@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 351, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 386, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -47,7 +47,7 @@ written as a docstring *before* the implementation. Every module states
 guarantees `G1`–`G7` at the top of that docstring; the tests exist to hold those
 specific numbered guarantees, so a test named for `G4` is not incidental.
 
-Built (U0–U9), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
+Built (U0–U10), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
 `pngio.load_mask` → `raster.binarize`:
 
 - **`inkdrill/pngio.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
@@ -77,6 +77,10 @@ Built (U0–U9), all independent of each other except `reeb`/`aggregate`/`nest`/
   `inventory`, `resolve`, `usability`, `coverage`. **Inventory half of U9
   only** — rasterization is not built. Coverage is glyph-weighted on
   purpose; per-document it reads ~17% and per-glyph ~95%.
+- **`inkdrill/gold.py`** — pdfminer alignment. `page_transform`, `match`,
+  `to_coco`. The four residual classes are the product, not the
+  leftovers: only 66.9% of real assignments are 1:1. Matches on component
+  centres, because pdfminer gives the advance box.
 
 Planned U4–U14 (`reeb`, `aggregate`, `nest`, `band`, `sched`, `font`, `gold`,
 `coverage`, `domains`, `classify`, `mathstruct`) are specified in `units.md`
