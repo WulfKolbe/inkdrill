@@ -881,6 +881,65 @@ Re-run: `tools/premise/measure.py --corpus <dir> fonts`
 
 ---
 
+### U10 premise check — measured 2026-08-08, before U10 was planned
+
+Assumption 7 has already bitten twice, both times in the U4 premise
+check: cropping pdfminer's ADVANCE box instead of the ink box gave a
+useless result, and it is why component isolation is the only sound
+method. This measures it directly.
+
+**Method.** Three real pages with `chars.json` ground truth, at their
+native 400 dpi and decimated by 2 and 4 to simulate lower render
+resolution. Each ink component is assigned to the glyph boxes its centre
+falls in, and the four residual classes read off. 18,519 assignments at
+native resolution.
+
+| Class | 400 dpi | 200 dpi | 100 dpi |
+|---|---|---|---|
+| 1 : 1 | **66.93%** | 69.87% | 32.30% |
+| ink with no glyph | 19.61% | 13.05% | 6.51% |
+| N ink : 1 glyph | 12.34% | 7.78% | 2.20% |
+| glyph with no ink | 1.11% | 9.20% | **58.78%** |
+| 1 ink : N glyphs | **0.02%** | 0.09% | 0.20% |
+
+**"Closely enough" is too optimistic, but the residual is structure, not
+error.** *Ink with no glyph* is overwhelmingly figures and rules — on a
+figure-heavy page it reaches 3,572 components while two text pages sit at
+4 and 35. That is the correct answer, not a failure: a diagram has no
+glyph. *N ink : 1 glyph* is `i`, `j`, `:`, accents and broken strokes —
+the multi-component glyphs U4 already had to accommodate.
+
+**The feared case barely exists.** One blob straddling two glyphs is
+**0.02%** at 400 dpi. Touching glyphs and ligatures are far rarer than
+the design assumed, so the matcher does not need to split blobs — it
+needs to *report* the rare case.
+
+**This answers "what render resolution does this need."** `units.md` said
+the N↔1 rate as a function of dpi would be that answer; the *glyph with
+no ink* rate turns out to be the sharper signal:
+
+| dpi | glyphs with no ink at all |
+|---|---|
+| 400 | 1.11% |
+| 200 | 9.20% |
+| 100 | **58.78%** |
+
+**100 dpi is unusable — most glyphs leave no recoverable ink. 200 dpi
+loses about one glyph in eleven. 400 dpi is where the loss becomes
+negligible.** Note the N↔1 rate *falls* at low dpi, which looks like
+improvement and is not: components merge because strokes thicken into
+each other while whole glyphs vanish. Reading that rate alone would have
+recommended the worst resolution.
+
+**Per-page variance is large** and tracks content: two text pages give
+82.9% and 83.7% at 1:1, a figure-heavy page 36.8%. A single aggregate
+agreement rate would be nearly meaningless — the same lesson the U9
+premise check produced about populations.
+
+Re-run: `tools/premise/measure.py --corpus <dir> residuals`
+
+---
+
 ## 4. Assumptions that remain unverified
 
 1. **Reeb signatures discriminate math symbols.** ~~Argued structurally,
@@ -943,11 +1002,15 @@ Re-run: `tools/premise/measure.py --corpus <dir> fonts`
    end would not fix it, because banding only touches the sweep. The
    honest fix is finer-grained tasks *within* the expensive stage, and
    that stage is decode.
-7. **pdfminer glyph boxes and rendered ink agree closely enough.**
-   Hinting, grid fitting, dropout control and side bearings all push
-   against it. U10's residual rates are the measurement; U9's font
-   access is what makes the comparison ink-to-ink rather than
-   ink-to-advance-box.
+7. ~~**pdfminer glyph boxes and rendered ink agree closely enough.**~~
+   **MEASURED 2026-08-08 — see §3 "U10 premise check". They agree far
+   less closely than "closely enough" implies: only 66.9% of assignments
+   are 1:1 at 400 dpi.** But the residual is mostly *structural and
+   expected* rather than error — figures with no glyph, and multi-part
+   glyphs like `i`, `j`, `:` and accents. The feared case, one ink blob
+   straddling two glyphs, is **0.02%**. The assumption survives in the
+   form U10 needs, which is why the four residual classes are reported
+   rather than a single agreement rate.
 8. ~~**arXiv PDFs are predominantly embedded, non-Type-3 fonts.**~~
    **MEASURED 2026-08-08, and the metric choice inverts the answer — see
    §3 "U9 premise check". Glyph-weighted, which is how U9 uses it:
