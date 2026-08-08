@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 277, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 297, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -47,7 +47,7 @@ written as a docstring *before* the implementation. Every module states
 guarantees `G1`–`G7` at the top of that docstring; the tests exist to hold those
 specific numbered guarantees, so a test named for `G4` is not incidental.
 
-Built (U0–U7), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
+Built (U0–U8), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
 `pngio.load_mask` → `raster.binarize`:
 
 - **`inkdrill/pngio.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
@@ -69,6 +69,10 @@ Built (U0–U7), all independent of each other except `reeb`/`aggregate`/`nest`/
 - **`inkdrill/band.py`** — band splitting and seam stitching. `split`,
   `sweep_bands`, `stitch`, `sweep_banded`. Output is indistinguishable
   from one sweep at any K. Band arrival order must never matter.
+- **`inkdrill/sched.py`** — deterministic priority scheduler. `Task`,
+  `run`, `RunReport`. Same answer at any worker count; `workers=1` uses
+  no pool. Task key is `(page, axis)` — there is no band tier, and that
+  is a measured decision, not an omission.
 
 Planned U4–U14 (`reeb`, `aggregate`, `nest`, `band`, `sched`, `font`, `gold`,
 `coverage`, `domains`, `classify`, `mathstruct`) are specified in `units.md`

@@ -173,14 +173,27 @@ says so, rather than returning events that look right and are not.
 
 **U8 `sched.py` — the task graph and priority queue.**
 *Depends: U7.*
-Contract: tasks `(page, axis, band)` with priority `(page_index,
-band_index)`; workers pull lowest first, so page 1 saturates all cores
-and workers drift forward with no mode switch; band count per page large
-for page 1, small thereafter; `multiprocessing.shared_memory` for the
-mask; results ordered by `(page, first_line, node)` not by completion.
-Tests: identical output for pool size ∈ {1, 8, 128}; first-page latency
-and total utilisation measured against a page-parallel baseline; the
-idle-tail case (last page, few tasks) measured, not assumed.
+~~Contract: tasks `(page, axis, band)` with priority `(page_index,
+band_index)`; … band count per page large for page 1 …
+`multiprocessing.shared_memory` for the mask.~~ **Three parts of that
+specification were measured before this unit was written and did not
+survive — see §3 "U8 premise check".**
+
+Contract as built: tasks `(page, axis)`; workers pull lowest key first;
+results ordered by key, never by completion. `RunReport` reports measured
+wall time, busy time, utilisation and the Amdahl ceiling.
+**No band tier** — band parallelism only touches the sweep, which is
+5–15% of per-page work, so its ceiling is 1.17× on the target workload.
+**No shared memory** — serialization was measured at 0.08–0.21 MB per
+page against a 2.7–3.7 MB mask, so it is not the constraint.
+**`workers=1` uses no pool at all**, which is what makes it the oracle
+the parallel paths are checked against.
+Tests: identical output at every worker count including 1; the task that
+finishes *last* still appears first if its key says so; duplicate keys
+refused; a raising job surfaces rather than yielding a short result list;
+utilisation and Amdahl ceiling reported. Both re-sorting and
+failure-surfacing are mutation-tested.
+**Status: 20 tests passed.**
 
 ### Fonts and gold standard
 
@@ -256,14 +269,13 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 277 tests in 0.619s
-
+Ran 297 tests in 2.216s
 OK (skipped=4)
 ```
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 277 - 4 = 273.
+count -- what actually runs on a bare checkout -- is 297 - 4 = 293.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -275,8 +287,9 @@ count -- what actually runs on a bare checkout -- is 277 - 4 = 273.
 | U5 `aggregate.py` | 26 | passed |
 | U6 `nest.py` | 29 | passed |
 | U7 `band.py` | 29 | passed |
+| U8 `sched.py` | 20 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 = 273, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 20 = 293, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.
@@ -701,6 +714,70 @@ plan currently does.
 
 ---
 
+### U8 premise check — measured 2026-08-08, before U8 was planned
+
+Machine: 16 cores (AMD Ryzen 7 5700U), Python 3.14. `units.md` reasons
+about 128 cores elsewhere; these ratios should be re-taken at that scale
+before they are relied on for a 128-core deployment.
+
+**Where per-page time actually goes.** This is the finding everything
+else follows from.
+
+| Stage | 16 mixed corpus pages | arXiv pages only |
+|---|---|---|
+| decode | **94.5%** | 85.2% |
+| sweep | 5.3% | 14.8% |
+| binarize | 0.2% | — |
+
+Split by decode path, on arXiv pages: **neutral pages 54% decode / 46%
+sweep; colour pages 90% decode / 10% sweep.** Since 54% of corpus pages
+are colour (§3 above), decode dominates the mix.
+
+| Parallelise… | Amdahl ceiling on arXiv pages |
+|---|---|
+| the sweep only (what banding does) | **1.17×** |
+| decode | **6.77×** |
+
+**So the band tier is not built.** Not deferred, not marginal — it
+targets 5–15% of the work and was already capped at 1.7–3× *of that
+slice* by the U7 stitch measurement. Two independent measurements, taken
+a day apart for different reasons, agree.
+
+**Page-parallel scaling, 16 real pages over 16 cores.**
+
+| workers | wall | speedup | efficiency |
+|---|---|---|---|
+| 1 (serial) | 142.5 s | — | — |
+| 2 | 101.7 s | 1.40× | 70.1% |
+| 4 | 56.8 s | 2.51× | 62.7% |
+| 8 | 51.3 s | 2.78× | 34.7% |
+| 16 | 43.7 s | **3.26×** | 20.4% |
+
+**The per-page cost spread is 185×** — 0.18 s to 34.17 s. One 67.7 Mpx
+colour page takes 38 s, of which 99.5% is decode. Total work 142.5 s
+over a 34.2 s longest task gives an Amdahl ceiling of ≈4.2× for any
+page-parallel scheme, and the measured 3.26× is already 78% of it. Adding
+cores past 16 buys almost nothing.
+
+**The idle tail, measured rather than assumed.** Utilisation 33–62%
+across N ∈ {16,17,25,31} and k ∈ {8,16}, always well below the
+partition-arithmetic ideal — because the spread, not the tail, is what
+idles the workers. Pool startup is 37–54 ms and is not a factor.
+
+**Serialization is not the constraint** (assumption 9's remaining half):
+64 bands of a page pickle to 0.31–0.80 MB and every component together to
+0.08–0.21 MB, against a 2.7–3.7 MB raw mask.
+
+**What this leaves.** The ingest path is the bottleneck by an order of
+magnitude, and `units.md` currently records a decision to stop optimising
+it — taken when decode was believed to be a minor cost. That decision was
+made on different evidence and is flagged here rather than silently
+reversed.
+
+Re-run: `tools/premise/measure.py --corpus <dir> schedcost`
+
+---
+
 ## 4. Assumptions that remain unverified
 
 1. **Reeb signatures discriminate math symbols.** ~~Argued structurally,
@@ -753,9 +830,16 @@ plan currently does.
    append a band's own nodes in completion order.
    Scan events remain unstitched by design, which is the `closed_at`
    caveat the original wording was reaching for.
-6. **The priority-queue scheduler reaches full utilisation.** The idle
-   tail — last page, few tasks, many free cores — is unaddressed and may
-   need finer bands at the end as well as the start.
+6. ~~**The priority-queue scheduler reaches full utilisation.**~~
+   **REFUTED 2026-08-08 (U8 premise check).** It does not, and the idle
+   tail is not the main reason. Measured on 16 real pages over 16 cores:
+   **3.26× speedup, 20.4% efficiency, 33–62% utilisation.** The cause is
+   a **185× spread in per-page cost** (0.18 s to 34.17 s), so the single
+   slowest page sets a floor no core count can beat — the ceiling for
+   *any* page-parallel scheme on that sample is ≈4.2×. Finer bands at the
+   end would not fix it, because banding only touches the sweep. The
+   honest fix is finer-grained tasks *within* the expensive stage, and
+   that stage is decode.
 7. **pdfminer glyph boxes and rendered ink agree closely enough.**
    Hinting, grid fitting, dropout control and side bearings all push
    against it. U10's residual rates are the measurement; U9's font

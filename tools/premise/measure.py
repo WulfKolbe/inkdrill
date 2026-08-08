@@ -43,6 +43,7 @@ from inkdrill.raster import INK, InkMask, binarize          # noqa: E402
 from inkdrill.aggregate import component_moments, moments_of_mask  # noqa: E402
 from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: E402
 from inkdrill.nest import Kind, nest  # noqa: E402
+from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
 
@@ -503,8 +504,59 @@ def m_stitchcost(root, n, rng):
               f"raw mask {len(band.data)/1e6:5.2f} MB")
 
 
+def _page_job(path_str):
+    """Module-level so a process pool can pickle it."""
+    img = read_png(pathlib.Path(path_str))
+    mask = binarize(img.gray, img.width, img.height)
+    res = sweep(mask, axis="row", conn=8, capture=Capture.GRAPH)
+    return (img.width * img.height, res.component_count)
+
+
+def m_schedcost(root, n, rng):
+    """units.md 3 "U8 premise check": where per-page time goes, and what
+    page-parallel scaling actually delivers. WARNING: slow -- it decodes
+    every sampled page several times over."""
+    import multiprocessing as mp
+
+    sample = [str(p) for p in rng.sample(pages(root), n)]
+    print(f"  cores {mp.cpu_count()}   pages {len(sample)}")
+
+    # stage breakdown
+    dec = swp = 0.0
+    per = []
+    for s in sample:
+        p = pathlib.Path(s)
+        t0 = time.perf_counter(); img = read_png(p); d = time.perf_counter() - t0
+        mask = binarize(img.gray, img.width, img.height)
+        t0 = time.perf_counter()
+        sweep(mask, axis="row", conn=8, capture=Capture.GRAPH)
+        sw = time.perf_counter() - t0
+        dec += d; swp += sw
+        per.append(d + sw)
+    tot = dec + swp
+    print(f"  decode {dec:6.1f}s ({dec/tot:5.1%})   sweep {swp:6.1f}s "
+          f"({swp/tot:5.1%})")
+    print(f"  Amdahl ceiling, parallelise sweep only : {tot/(tot-swp):5.2f}x")
+    print(f"  Amdahl ceiling, parallelise decode     : {tot/(tot-dec):5.2f}x")
+    per.sort()
+    print(f"  per-page cost spread: {per[-1]/max(per[0], 1e-9):6.1f}x "
+          f"(min {per[0]:.2f}s  max {per[-1]:.2f}s)")
+
+    tasks = page_tasks(sample)
+    base = sched_run(tasks, _page_job, workers=1)
+    print(f"  serial {base.wall_seconds:6.2f} s   "
+          f"Amdahl ceiling from longest task {base.amdahl_ceiling:5.2f}x")
+    for k in (2, 4, 8, mp.cpu_count()):
+        rep = sched_run(tasks, _page_job, workers=k)
+        assert rep.values() == base.values(), "worker count changed the answer"
+        print(f"    workers {k:3}: wall {rep.wall_seconds:6.2f} s  "
+              f"speedup {base.wall_seconds/rep.wall_seconds:5.2f}x  "
+              f"utilisation {rep.utilisation:5.1%}")
+
+
 MEASUREMENTS = {
     "banding": (m_banding, 3),
+    "schedcost": (m_schedcost, 8),
     "stitchcost": (m_stitchcost, 2),
     "moments": (m_moments, 3),
     "nesting": (m_nesting, 2),
