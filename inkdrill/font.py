@@ -36,6 +36,15 @@ meaningless.
 reports raw counts beside the fraction so a small denominator is visible
 rather than hidden behind a percentage.
 
+But the right KIND of measurement on the wrong POPULATION is the same
+mistake one level down. Body text dominates glyph instances; maths
+symbols are a small minority of any paper. A 95.9% aggregate is therefore
+compatible with maths coverage anywhere between 0% and 100%, and maths is
+the first application -- `CMMI`/`CMSY` custom encodings are where a
+bitmap classifier is weakest and why the font route was attractive at
+all. So coverage is stratified by family and `math_fraction` is reported
+beside the aggregate (G8).
+
 Name resolution is a real failure mode, not tidiness
 ----------------------------------------------------
 pdfminer reports `CKXQCW+LMRoman10-Regular` where `pdffonts` reports
@@ -62,13 +71,18 @@ G2  column boundaries come from the dashed rule line, so names and types
 G3  `normalise` strips a 6-letter subset tag and a known encoding suffix,
     and preserves style suffixes -- `,Bold` is not noise
 G4  `resolve` matches on the normalised name, so the corpus's
-    `-Identity-H` mismatch joins
+    `-Identity-H` mismatch joins; when several records share a base
+    name the embedded one wins, so the answer never depends on the
+    order `pdffonts` printed its rows
 G5  usability is decided by the stated scope limit -- embedded,
     non-Type-3 -- and an unresolvable name is NEVER silently treated as
     usable; it gets its own class
 G6  `coverage` is glyph-weighted and reports counts beside fractions
 G7  every rejection names its reason, so a coverage report can be acted
     on rather than only totalled
+G8  coverage is STRATIFIED by font family, and maths families are
+    reported separately -- an aggregate is dominated by body text, and
+    the first application of the fast path is maths
 
 Non-guarantees (out of scope for this module)
 ---------------------------------------------
@@ -84,13 +98,14 @@ from __future__ import annotations
 
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Iterable, Mapping
 
 __all__ = ["FontKind", "FontRecord", "Usability", "Coverage",
            "parse_pdffonts", "inventory", "normalise", "resolve",
-           "usability", "coverage", "PdfFontsUnavailable"]
+           "usability", "coverage", "family_of", "is_math_family",
+           "MATH_FAMILIES", "PdfFontsUnavailable"]
 
 
 class PdfFontsUnavailable(RuntimeError):
@@ -184,6 +199,50 @@ def normalise(name: str) -> str:
     return n
 
 
+# Families whose glyphs the MATH track depends on. TeX math is split
+# across several: CMMI/CMSY/CMEX carry letters, symbols and extensibles
+# respectively, and AMS adds MSAM/MSBM. The OpenType successors are here
+# too. These are the families where a bitmap classifier is WEAKEST --
+# custom, non-Unicode encodings -- which is exactly why the font route
+# was attractive, so their coverage must be reported separately rather
+# than averaged into body text.
+MATH_FAMILIES = frozenset({
+    "CMMI", "CMSY", "CMEX", "CMBSY", "CMMIB",
+    "MSAM", "MSBM", "EUFM", "EUFB", "EUSM", "EUSB", "EURM", "EURB",
+    "RSFS", "WASY", "STMARY", "TXSY", "TXMI", "TXEX", "PXSY", "PXMI",
+    "STIXGENERAL", "STIXSIZEONE", "STIXSIZETWO", "STIXSIZETHREE",
+    "STIXSIZEFOUR", "STIXVARIANTS", "STIXNONUNICODE",
+    "XITSMATH", "LATINMODERNMATH", "LMMATH", "ASANAMATH",
+    "CAMBRIAMATH", "TEXGYRE", "NEOEULER", "MATHJAX",
+})
+
+_FAMILY_SPLIT = re.compile(r"[-,_.0-9]")
+
+
+def family_of(name: str) -> str:
+    """The font family a name belongs to, upper-cased.
+
+    `NZRZGH+CMSY10` -> `CMSY`; `ABCDEE+Calibri,Bold` -> `CALIBRI`;
+    `XITSMath-Regular` -> `XITSMATH`. Digits are stripped because TeX
+    encodes the design SIZE in the name -- CMSY7, CMSY10 and CMSY8 are
+    one family at three sizes, and counting them separately would
+    fragment exactly the population this exists to measure.
+    """
+    base = normalise(name)
+    head = _FAMILY_SPLIT.split(base, 1)[0]
+    return head.upper()
+
+
+def is_math_family(name: str) -> bool:
+    """Whether this font name belongs to a maths family (see
+    MATH_FAMILIES)."""
+    fam = family_of(name)
+    if fam in MATH_FAMILIES:
+        return True
+    # OpenType math fonts commonly end in 'Math'
+    return fam.endswith("MATH")
+
+
 def parse_pdffonts(text: str) -> list[FontRecord]:
     """Parse `pdffonts` output. No subprocess (G1).
 
@@ -254,16 +313,27 @@ def resolve(name: str,
 
     Exact match first, then normalised. The normalised pass is what joins
     pdfminer's `…-Regular` to pdffonts' `…-Regular-Identity-H`.
+
+    When SEVERAL records normalise to the same base name -- a document
+    that references a standard font and also embeds a subset of it -- the
+    EMBEDDED one wins. That tie-break is deliberate and load-bearing: on
+    list order alone the same glyph resolved to "not embedded" or
+    "embedded outline" depending on the order `pdffonts` happened to
+    print its rows. Preferring the embedded record is the choice that
+    matches what a rasterizer could actually do with the glyph.
     """
     recs = list(records)
     for r in recs:
         if r.name == name:
             return r
     target = normalise(name)
-    for r in recs:
-        if r.base_name == target:
+    candidates = [r for r in recs if r.base_name == target]
+    if not candidates:
+        return None
+    for r in candidates:
+        if r.embedded and r.kind is not FontKind.TYPE3:
             return r
-    return None
+    return candidates[0]
 
 
 def usability(name: str, records: Iterable[FontRecord]) -> Usability:
@@ -279,8 +349,17 @@ def usability(name: str, records: Iterable[FontRecord]) -> Usability:
 
 @dataclass(slots=True)
 class Coverage:
-    """Glyph-weighted coverage (G6). Counts, not just fractions."""
+    """Glyph-weighted coverage (G6). Counts, not just fractions.
+
+    `by_family` is populated so coverage can be STRATIFIED. An aggregate
+    is dominated by body text, and the first application of the font
+    fast path is maths -- a small minority of any paper's glyph count. A
+    95.9% aggregate is compatible with maths coverage anywhere from 0% to
+    100%, so the aggregate alone cannot answer the question U9 exists to
+    answer (G8).
+    """
     counts: dict[Usability, int]
+    by_family: dict[str, dict[Usability, int]] = field(default_factory=dict)
 
     @property
     def total(self) -> int:
@@ -300,6 +379,37 @@ class Coverage:
         return {k: v for k, v in self.counts.items()
                 if not k.usable and v}
 
+    def family_fraction(self, family: str) -> float:
+        c = self.by_family.get(family.upper())
+        if not c:
+            return 0.0
+        tot = sum(c.values())
+        return c.get(Usability.FAST_PATH, 0) / tot if tot else 0.0
+
+    def math_counts(self) -> dict[Usability, int]:
+        """Counts restricted to maths families (G8)."""
+        out: dict[Usability, int] = {}
+        for fam, c in self.by_family.items():
+            if fam in MATH_FAMILIES or fam.endswith("MATH"):
+                for k, v in c.items():
+                    out[k] = out.get(k, 0) + v
+        return out
+
+    @property
+    def math_total(self) -> int:
+        return sum(self.math_counts().values())
+
+    @property
+    def math_fraction(self) -> float:
+        """Fast-path share among MATHS glyphs specifically.
+
+        This is the number that sets the rasterizer half's value, and it
+        is not the aggregate.
+        """
+        c = self.math_counts()
+        tot = sum(c.values())
+        return c.get(Usability.FAST_PATH, 0) / tot if tot else 0.0
+
     def report(self) -> str:
         if not self.total:
             return "no glyphs"
@@ -308,6 +418,12 @@ class Coverage:
         for k, v in sorted(self.rejected().items(),
                            key=lambda kv: -kv[1]):
             lines.append(f"  {v:8} ({v/self.total:6.2%})  {k.value}")
+        mt = self.math_total
+        if mt:
+            lines.append(f"  maths glyphs: {self.math_fraction:.2%} of "
+                         f"{mt} on the fast path")
+        else:
+            lines.append("  maths glyphs: none seen")
         return "\n".join(lines)
 
 
@@ -319,12 +435,16 @@ def coverage(font_names: Iterable[str],
     the whole finding recorded in docs/units.md §3 "U9 premise check".
     """
     recs = list(records)
-    cache: dict[str, Usability] = {}
+    cache: dict[str, tuple[Usability, str]] = {}
     counts: dict[Usability, int] = {}
+    fams: dict[str, dict[Usability, int]] = {}
     for n in font_names:
-        u = cache.get(n)
-        if u is None:
-            u = usability(n, recs)
-            cache[n] = u
+        hit = cache.get(n)
+        if hit is None:
+            hit = (usability(n, recs), family_of(n))
+            cache[n] = hit
+        u, fam = hit
         counts[u] = counts.get(u, 0) + 1
-    return Coverage(counts)
+        slot = fams.setdefault(fam, {})
+        slot[u] = slot.get(u, 0) + 1
+    return Coverage(counts, fams)

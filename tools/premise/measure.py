@@ -43,7 +43,8 @@ from inkdrill.raster import INK, InkMask, binarize          # noqa: E402
 from inkdrill.aggregate import component_moments, moments_of_mask  # noqa: E402
 from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: E402
 from inkdrill.nest import Kind, nest  # noqa: E402
-from inkdrill.font import Usability, coverage as font_coverage, inventory  # noqa: E402
+from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # noqa: E402
+                           is_math_family)
 from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
@@ -566,6 +567,8 @@ def m_fonts(root, n, rng):
         print("  no documents with both chars.json and a pdf")
         return
     tot = Counter()
+    mth = Counter()
+    fams = Counter()
     ndoc = allok = 0
     for d, cj, pdf in rng.sample(cands, min(n, len(cands))):
         try:
@@ -583,6 +586,11 @@ def m_fonts(root, n, rng):
         allok += cov.fraction == 1.0
         for k, v in cov.counts.items():
             tot[k] += v
+        for k, v in cov.math_counts().items():
+            mth[k] += v
+        for fam, c in cov.by_family.items():
+            if is_math_family(fam):
+                fams[fam] += sum(c.values())
     total = sum(tot.values())
     if not total:
         print("  no glyphs")
@@ -592,6 +600,17 @@ def m_fonts(root, n, rng):
         print(f"    {v:8} ({v/total:6.2%})  {k.value}")
     print(f"  fast-path share {tot[Usability.FAST_PATH]/total:.2%};  "
           f"documents fully on it {allok}/{ndoc}")
+    m = sum(mth.values())
+    if m:
+        print(f"  MATHS glyphs {m} ({m/total:.2%} of all): "
+              f"{mth[Usability.FAST_PATH]/m:.2%} on the fast path")
+        for k, v in mth.most_common():
+            if k is not Usability.FAST_PATH:
+                print(f"    {v:7} ({v/m:6.2%})  {k.value}")
+        print("  maths families by volume: " +
+              ", ".join(f"{f} {c}" for f, c in fams.most_common(6)))
+    else:
+        print("  MATHS glyphs: none seen in this sample")
 
 
 MEASUREMENTS = {

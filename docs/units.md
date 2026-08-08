@@ -227,7 +227,7 @@ far and it needs its own contract and its own premise check. It is named
 here rather than half-built, and the split is not arbitrary: everything
 in the inventory half is exactly and hermetically testable against
 fixture text, while a rasterizer needs its own oracle.
-**Status: 28 tests passed (inventory half).**
+**Status: 43 tests passed (inventory half).**
 
 **U10 `gold.py` — pdfminer alignment and the many-to-many matcher.**
 *Depends: U1, U9.*
@@ -292,7 +292,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 327 - 4 = 323.
+count -- what actually runs on a bare checkout -- is 342 - 4 = 338.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -305,9 +305,9 @@ count -- what actually runs on a bare checkout -- is 327 - 4 = 323.
 | U6 `nest.py` | 29 | passed |
 | U7 `band.py` | 29 | passed |
 | U8 `sched.py` | 22 | passed |
-| U9 `font.py` | 28 | passed |
+| U9 `font.py` | 43 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 28 = 323, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 43 = 338, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.
@@ -853,6 +853,29 @@ embedded.
 outline fonts only" — is the right one and costs 0.53% of glyphs, not the
 5% or 83% the other two metrics imply. U11 remains the fallback for the
 remainder.
+
+**Stratified by family, 2026-08-08 — the aggregate cannot speak for
+maths.** The right *kind* of measurement on the wrong *population* is the
+same mistake one level down. Body text dominates glyph instances, so a
+95.9% aggregate is compatible with maths coverage anywhere between 0% and
+100% — and maths is the fast path's first application, because
+`CMMI`/`CMSY` custom encodings are exactly where a bitmap classifier is
+weakest. Measured over 30 documents and 1,471,926 glyph instances:
+
+| Population | Fast path | Share of all glyphs |
+|---|---|---|
+| aggregate | 94.64% | — |
+| **maths families only** | **100.00%** | 2.00% |
+
+**Maths glyphs are better covered than body text, with zero rejections
+across 29,496 of them.** TeX maths fonts are always embedded subsets in
+arXiv PDFs; the non-embedded fonts are standard text faces like Times.
+Families by volume: CMMI 20,278, CMSY 7,069, CMEX 1,023, EUFM 405,
+MSBM 291, CMMIB 269, WASY 88, MSAM 56.
+
+This *raises* the rasterizer half's value for its primary application
+rather than lowering it, and it is a number the aggregate could not have
+produced in either direction.
 
 Re-run: `tools/premise/measure.py --corpus <dir> fonts`
 

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 327, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 342, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -128,6 +128,26 @@ planned unit.
 Axis invariance (row sweep == col sweep) is the foundation of later claims and
 is asserted at every level. Any change that breaks it is a real bug, not a test
 that needs relaxing.
+
+### Mutate before you claim a guarantee is held
+
+Five times now a guarantee has been stated in a docstring, argued for in
+prose, and asserted by nothing — U4's rotation invariance, U7's per-node
+re-sort, U8's dispatch order, and U9's parser fallback branch. Each was
+found by an audit, not by the suite, and each looked covered because a
+*neighbouring* test appeared to exercise it.
+
+They are all findable the same way, in minutes:
+
+- **Delete the line the guarantee rests on.** If the suite still passes,
+  the guarantee is prose.
+- **Force every non-trivial branch to a constant.** `if True` / `if False`
+  on each side. A branch that no test reaches will first execute on real
+  data, unverified, and its failure mode is usually a silently wrong
+  value rather than an exception.
+
+Do this per unit, before recording a status line — not at the final review,
+which is where these have been surfacing.
 
 ## CodeGraph
 

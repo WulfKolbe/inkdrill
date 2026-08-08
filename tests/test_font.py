@@ -2,9 +2,9 @@
 
 import unittest
 
-from inkdrill.font import (Coverage, FontKind, FontRecord, Usability,
-                           coverage, normalise, parse_pdffonts, resolve,
-                           usability)
+from inkdrill.font import (MATH_FAMILIES, Coverage, FontKind, FontRecord,
+                           Usability, coverage, family_of, is_math_family,
+                           normalise, parse_pdffonts, resolve, usability)
 
 # Real pdffonts output, copied verbatim from the corpus. The column
 # widths are the ones pdffonts actually emits.
@@ -28,6 +28,16 @@ CKXQCW+LMRoman10-Regular-Identity-H  CID TrueType      Identity-H       yes yes 
 ABCDEE+Calibri,Bold                  TrueType          WinAnsi          yes yes no      52  0
 T1                                   Type 3            Custom           yes no  no      61  0
 Mincho Pr6N R-4520-Identity-H        CID Type 0C       Identity-H       yes yes no      70  0
+"""
+
+# A name longer than the rule line's 36-character name column, which
+# pushes every later column right and defeats fixed-width slicing. This
+# is the case the whitespace fallback exists for -- and until this
+# fixture it had never executed in a test.
+OVERFLOW = """\
+name                                 type              encoding         emb sub uni object ID
+------------------------------------ ----------------- ---------------- --- --- --- ---------
+WXYZAB+AVeryLongEmbeddedFontNameThatOverflowsTheColumn Type 1C           Custom           yes yes no      88  0
 """
 
 EMPTY = """\
@@ -75,6 +85,30 @@ class T9_1_ParsingIsFixedWidth(unittest.TestCase):
         different kind."""
         self.assertEqual(FontKind.parse("CID Type 0C"), FontKind.CID_TYPE0C)
         self.assertEqual(FontKind.parse("CID Type 0"), FontKind.CID_TYPE0)
+
+    def test_a_name_overflowing_its_column_takes_the_fallback(self):
+        """The fallback exists because "widths are minimums: a long name
+        can push later columns right". Until this fixture it had never
+        executed in a test, so it would first have run on real corpus
+        data, unverified, and mis-parsed silently rather than raising."""
+        recs = parse_pdffonts(OVERFLOW)
+        self.assertEqual(len(recs), 1)
+        r = recs[0]
+        self.assertEqual(
+            r.name, "WXYZAB+AVeryLongEmbeddedFontNameThatOverflowsTheColumn")
+        self.assertEqual(r.kind, FontKind.TYPE1C)
+        self.assertEqual(r.encoding, "Custom")
+        self.assertTrue(r.embedded)
+        self.assertTrue(r.subset)
+        self.assertFalse(r.unicode_ok)
+
+    def test_the_overflowing_name_is_usable_like_any_other(self):
+        """A mis-parse here would silently misclassify a perfectly good
+        embedded font."""
+        recs = parse_pdffonts(OVERFLOW)
+        self.assertEqual(
+            usability("WXYZAB+AVeryLongEmbeddedFontNameThatOverflowsTheColumn",
+                      recs), Usability.FAST_PATH)
 
     def test_a_table_with_no_rows_parses_to_nothing(self):
         self.assertEqual(parse_pdffonts(EMPTY), [])
@@ -129,6 +163,41 @@ class T9_2_NameNormalisation(unittest.TestCase):
     def test_an_exact_match_wins_over_a_normalised_one(self):
         recs = parse_pdffonts(REAL)
         self.assertEqual(resolve("Times-Roman", recs).name, "Times-Roman")
+
+    def test_a_base_name_collision_prefers_the_embedded_record(self):
+        """A document may reference a standard font AND embed a subset of
+        it. On list order alone the same glyph answered "not embedded" or
+        "embedded outline" depending on which row pdffonts printed
+        first."""
+        not_emb = FontRecord("ABCDEF+Times-Roman", FontKind.TYPE1,
+                             "WinAnsi", False, True, False)
+        emb = FontRecord("GHIJKL+Times-Roman", FontKind.TYPE1,
+                         "WinAnsi", True, True, False)
+        for order in ([not_emb, emb], [emb, not_emb]):
+            with self.subTest(first=order[0].name):
+                got = resolve("MNOPQR+Times-Roman", order)
+                self.assertTrue(got.embedded)
+                self.assertEqual(usability("MNOPQR+Times-Roman", order),
+                                 Usability.FAST_PATH)
+
+    def test_a_base_name_collision_never_prefers_type_three(self):
+        t3 = FontRecord("ABCDEF+Foo", FontKind.TYPE3, "Custom",
+                        True, True, False)
+        outline = FontRecord("GHIJKL+Foo", FontKind.TYPE1C, "Custom",
+                             True, True, False)
+        for order in ([t3, outline], [outline, t3]):
+            with self.subTest(first=order[0].name):
+                self.assertEqual(resolve("MNOPQR+Foo", order).kind,
+                                 FontKind.TYPE1C)
+
+    def test_a_collision_of_two_unusable_records_still_resolves(self):
+        """It must still report WHY, not fall through to unresolvable."""
+        a = FontRecord("ABCDEF+Bar", FontKind.TYPE1, "WinAnsi",
+                       False, True, False)
+        b = FontRecord("GHIJKL+Bar", FontKind.TYPE1, "WinAnsi",
+                       False, True, False)
+        self.assertEqual(usability("MNOPQR+Bar", [a, b]),
+                         Usability.NOT_EMBEDDED)
 
     def test_an_unknown_name_resolves_to_nothing(self):
         self.assertIsNone(resolve("unknown", parse_pdffonts(REAL)))
@@ -233,3 +302,91 @@ class T9_4_CoverageIsGlyphWeighted(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+MATHY = """\
+name                                 type              encoding         emb sub uni object ID
+------------------------------------ ----------------- ---------------- --- --- --- ---------
+NZRZGH+CMR10                         Type 1C           Custom           yes yes no      10  0
+OFAQXU+CMMI10                        Type 1C           Custom           yes yes no      14  0
+QUQGES+CMSY10                        Type 3            Custom           yes yes no      12  0
+ZUMHSS+CMEX10                        Type 1C           Custom           no  no  no      21  0
+"""
+
+
+class T9_5_CoverageIsStratifiedByFamily(unittest.TestCase):
+    """G8. An aggregate is dominated by body text, and the first
+    application of the fast path is maths -- a small minority of any
+    paper's glyph count. A 95.9% aggregate is compatible with maths
+    coverage anywhere from 0% to 100%, so the aggregate alone cannot
+    answer the question U9 exists to answer."""
+
+    def test_family_strips_the_design_size(self):
+        """CMSY7, CMSY10 and CMSY8 are one family at three sizes.
+        Counting them separately would fragment exactly the population
+        this exists to measure."""
+        for n in ("NZRZGH+CMSY10", "AAAAAA+CMSY7", "CMSY8"):
+            with self.subTest(n):
+                self.assertEqual(family_of(n), "CMSY")
+
+    def test_family_handles_style_and_encoding_suffixes(self):
+        self.assertEqual(family_of("ABCDEE+Calibri,Bold"), "CALIBRI")
+        self.assertEqual(family_of("CKXQCW+LMRoman10-Regular-Identity-H"),
+                         "LMROMAN")
+
+    def test_math_families_are_recognised(self):
+        for n in ("CMMI10", "ABCDEF+CMSY7", "CMEX10", "MSAM10", "MSBM10"):
+            with self.subTest(n):
+                self.assertTrue(is_math_family(n))
+
+    def test_opentype_math_fonts_are_recognised_by_suffix(self):
+        for n in ("XITSMath-Regular", "LatinModernMath", "AsanaMath"):
+            with self.subTest(n):
+                self.assertTrue(is_math_family(n))
+
+    def test_body_text_families_are_not_maths(self):
+        for n in ("CMR10", "ABCDEE+Calibri,Bold", "Times-Roman",
+                  "JHHKUO+TimesNewRomanPSMT"):
+            with self.subTest(n):
+                self.assertFalse(is_math_family(n))
+
+    def test_a_healthy_aggregate_can_hide_broken_maths(self):
+        """The finding, encoded. Body text is fine, maths is entirely
+        off the fast path, and the aggregate still reads 98%."""
+        recs = parse_pdffonts(MATHY)
+        names = (["NZRZGH+CMR10"] * 4900          # body text, fine
+                 + ["QUQGES+CMSY10"] * 50         # maths, Type 3
+                 + ["ZUMHSS+CMEX10"] * 50)        # maths, not embedded
+        cov = coverage(names, recs)
+        self.assertGreater(cov.fraction, 0.97)    # aggregate looks fine
+        self.assertEqual(cov.math_total, 100)
+        self.assertEqual(cov.math_fraction, 0.0)  # maths is broken
+        self.assertIn("maths glyphs: 0.00%", cov.report())
+
+    def test_maths_coverage_is_counted_when_it_is_good(self):
+        recs = parse_pdffonts(MATHY)
+        names = ["OFAQXU+CMMI10"] * 30 + ["NZRZGH+CMR10"] * 70
+        cov = coverage(names, recs)
+        self.assertEqual(cov.math_total, 30)
+        self.assertEqual(cov.math_fraction, 1.0)
+
+    def test_by_family_carries_every_family_seen(self):
+        recs = parse_pdffonts(MATHY)
+        cov = coverage(["NZRZGH+CMR10"] * 3 + ["OFAQXU+CMMI10"] * 2, recs)
+        self.assertEqual(sorted(cov.by_family), ["CMMI", "CMR"])
+        self.assertEqual(cov.family_fraction("CMR"), 1.0)
+        self.assertEqual(cov.family_fraction("cmmi"), 1.0)
+
+    def test_a_document_with_no_maths_says_so_rather_than_zero(self):
+        """0% and 'none seen' are different facts and must not read the
+        same in a report."""
+        cov = coverage(["NZRZGH+CMR10"] * 10, parse_pdffonts(MATHY))
+        self.assertEqual(cov.math_total, 0)
+        self.assertIn("maths glyphs: none seen", cov.report())
+
+    def test_unresolved_maths_glyphs_count_against_maths(self):
+        recs = parse_pdffonts(MATHY)
+        cov = coverage(["ZZZZZZ+CMSY7"] * 10, recs)
+        self.assertEqual(cov.math_total, 10)
+        self.assertEqual(cov.math_fraction, 0.0)
+        self.assertEqual(cov.counts[Usability.UNRESOLVED], 10)
