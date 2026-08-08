@@ -45,6 +45,7 @@ from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: 
 from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # noqa: E402
                            is_math_family)
+from inkdrill.coverage import Box, CoverageClass, Region, check  # noqa: E402
 from inkdrill.gold import (Component as GComp, Glyph as GGlyph,  # noqa: E402
                            MatchKind, match, page_transform)
 from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
@@ -681,8 +682,80 @@ def m_residuals(root, n, rng):
           f"median {noink[len(noink)//2]:6.2%}  max {noink[-1]:6.2%}")
 
 
+def m_missed(root, n, rng):
+    """units.md 3 "U11 premise check": what another tool missed.
+
+    Scanned pages with line-level OCR. Reports the PER-PAGE spread --
+    the aggregate is dominated by whichever page the tool did worst on,
+    and that page is the deliverable, not an outlier."""
+    docs = [d for d in root.glob("*Z-Library*")
+            if (d / "inspect" / "pages").is_dir()
+            and list(d.glob("*.lines.json"))]
+    if not docs:
+        print("  no scanned documents with OCR under this corpus root")
+        return
+    agg = Counter()
+    per_page = []
+    for d in rng.sample(docs, min(len(docs), n * 5)):
+        if len(per_page) >= n:
+            break
+        try:
+            data = json.load(list(d.glob("*.lines.json"))[0].open())
+        except Exception:
+            continue
+        for pg in data["pages"]:
+            if not pg.get("lines"):
+                continue
+            num = pg["page"]
+            pdir = d / "inspect" / "pages"
+            png = next((pdir / p for p in (f"p{num}.png",
+                                           f"page-{num:04d}.png")
+                        if (pdir / p).exists()), None)
+            if png is None:
+                continue
+            img = read_png(png)
+            sx = img.width / pg["page_width"]
+            if abs(sx - img.height / pg["page_height"]) / sx > 0.01:
+                continue
+            mask = binarize(img.gray, img.width, img.height)
+            boxes = [Box(i, x0, y0, x1, y1)
+                     for i, ((x0, y0, x1, y1), _s)
+                     in enumerate(components(mask, min_area=1, min_side=1))]
+            regs = []
+            for j, L in enumerate(pg["lines"]):
+                g = L["region"]
+                regs.append(Region(j, g["top_left_x"] * sx,
+                                   g["top_left_y"] * sx,
+                                   (g["top_left_x"] + g["width"]) * sx,
+                                   (g["top_left_y"] + g["height"]) * sx,
+                                   L.get("type", "")))
+            rep = check(boxes, regs, min_pixels=9)
+            for k in CoverageClass:
+                agg[k] += rep.count(k)
+            per_page.append(rep)
+            print(f"  {d.name[:26]:26} p{num:<4} {len(regs):4} regions "
+                  f"{rep.box_count:6} ink   "
+                  f"missed {rep.missed_fraction:6.2%}   straddle "
+                  f"{rep.fraction(CoverageClass.STRADDLE):6.2%}")
+            break
+    if not per_page:
+        print("  no usable pages")
+        return
+    tot = sum(v for k, v in agg.items() if k is not CoverageClass.EMPTY_REGION)
+    print(f"\n  AGGREGATE over {len(per_page)} pages, {tot} ink assignments")
+    for k in CoverageClass:
+        if agg[k]:
+            print(f"    {agg[k]:7} ({agg[k]/tot:6.2%})  {k.value}")
+    for label, kind in (("missed", CoverageClass.MISSED),
+                        ("straddle", CoverageClass.STRADDLE)):
+        vals = sorted(r.fraction(kind) for r in per_page)
+        print(f"  per-page {label:9} min {vals[0]:6.2%}  "
+              f"median {vals[len(vals)//2]:6.2%}  max {vals[-1]:6.2%}")
+
+
 MEASUREMENTS = {
     "banding": (m_banding, 3),
+    "missed": (m_missed, 8),
     "residuals": (m_residuals, 12),
     "fonts": (m_fonts, 25),
     "schedcost": (m_schedcost, 8),

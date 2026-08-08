@@ -258,6 +258,39 @@ The four residual classes: ink with no region, region with no ink,
 limits), ink under overlapping regions. Independent of U4–U10 — can be
 built in parallel with the topology track for an early result.
 
+**Containment, not centres — the opposite of U10's rule, and the
+inversion is the point.** U10 matches on centres because pdfminer gives
+an *advance* box. Here a region is a real boundary another tool drew, so
+a blob crossing it IS the finding; centres would call a clipped `∫`
+comfortably inside and report nothing.
+
+Measured on real scanned pages with line-level OCR, two samples (6 pages,
+then 8 independent):
+
+| Class | agg. | per-page median | per-page max |
+|---|---|---|---|
+| ink inside one region | 89.2% | — | — |
+| **ink with no region** | 8–10% | **0.53%** | **100.00%** |
+| **ink straddling a region edge** | 0.8–2.3% | 2.05% | 33.63% |
+| ink under overlapping regions | 0.0–0.3% | — | — |
+| region with no ink | 0.00–0.03% | — | — |
+
+**The aggregates are stable and nearly useless; the spread is the
+finding.** One page reports 100% missed — 3 regions against 950 ink
+components, an OCR failure the aggregate would bury — and another 33.63%
+straddle on a diagram where regions cut through content. Those pages are
+the deliverable. Fourth time a small-sample aggregate has misled here,
+after U0's colour fraction, U7's density dependence and U10's residual
+rates.
+
+Tests: containment vs centres, with a fixture whose centre is inside and
+whose body overflows; every component and every region in exactly one
+class over 120 random layouts; overlapping regions as their own class;
+degenerate and sub-threshold boxes dropped with the count showing it;
+regions transformed by composing an affine. Branch sweep: 8 conditions,
+0 survivors.
+**Status: 24 tests passed.**
+
 **U12 `domains.py` — conceptual-space feature domains.**
 *Depends: U4, U5, U6, U9.*
 Separable domains: shape (Reeb signature, cycle count), size, position
@@ -300,7 +333,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 386 - 4 = 382.
+count -- what actually runs on a bare checkout -- is 413 - 4 = 409.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -314,9 +347,10 @@ count -- what actually runs on a bare checkout -- is 386 - 4 = 382.
 | U7 `band.py` | 29 | passed |
 | U8 `sched.py` | 22 | passed |
 | U9 `font.py` | 52 | passed |
-| U10 `gold.py` | 35 | passed |
+| U10 `gold.py` | 38 | passed |
+| U11 `coverage.py` | 24 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 35 = 382, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 = 409, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.
