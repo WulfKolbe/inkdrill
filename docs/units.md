@@ -210,7 +210,24 @@ Tests: a rasterized glyph's hole count matches its contour count minus 1;
 `unitsPerEm` and `FontMatrix` round-trip through U1; the math axis of a
 math font is recovered and equals the fraction-bar height.
 **Scope limit stated up front:** embedded, non-Type-3, outline fonts only.
-Type 3, width-only, and scanned pages fall back to U11.
+Type 3, width-only, and scanned pages fall back to U11. Measured cost of
+that limit: **0.5–2% of glyph instances**, not the 5% the per-font view
+suggests or the 83% the per-document view suggests — see §3.
+
+**BUILT SO FAR: the inventory half only.** `font.py` covers identifying
+fonts via `pdffonts`, resolving a glyph's font name to a record, and
+glyph-weighted coverage with every rejection naming its reason. Measured
+against 25 real documents and 1,276,504 glyph instances: 93.93% on the
+fast path, against 95.90% from the premise check's independent 40-document
+sample.
+**NOT BUILT: rasterization.** No CFF or TrueType outline parsing, no scan
+conversion, no reference blob, no `BASE`/`MATH` table access. In pure
+standard library that is a substantially larger piece than any unit so
+far and it needs its own contract and its own premise check. It is named
+here rather than half-built, and the split is not arbitrary: everything
+in the inventory half is exactly and hermetically testable against
+fixture text, while a rasterizer needs its own oracle.
+**Status: 28 tests passed (inventory half).**
 
 **U10 `gold.py` — pdfminer alignment and the many-to-many matcher.**
 *Depends: U1, U9.*
@@ -275,7 +292,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 299 - 4 = 295.
+count -- what actually runs on a bare checkout -- is 327 - 4 = 323.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -288,8 +305,9 @@ count -- what actually runs on a bare checkout -- is 299 - 4 = 295.
 | U6 `nest.py` | 29 | passed |
 | U7 `band.py` | 29 | passed |
 | U8 `sched.py` | 22 | passed |
+| U9 `font.py` | 28 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 = 295, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 28 = 323, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.
@@ -787,6 +805,59 @@ Re-run: `tools/premise/measure.py --corpus <dir> schedcost`
 
 ---
 
+### U9 premise check — measured 2026-08-08, before U9 was planned
+
+`units.md` called assumption 8 "the cheapest assumption to check and
+worth checking before U9 starts". It was, and it produced a lesson about
+metrics rather than about fonts.
+
+**The same corpus gives three different answers depending on what you
+count.** `pdffonts` over 119 arXiv PDFs, joined to per-glyph `fontname`
+from `chars.json` over 40 documents and 1,979,232 glyph instances:
+
+| Counting… | Result | Reading |
+|---|---|---|
+| font entries | 94.3% embedded, 5.1% Type 3 | fine |
+| **documents** | **16.8%** fully embedded with no Type 3 | catastrophic |
+| **glyph instances** | **95.90%** on the fast path | fine |
+
+**Glyph-weighted is the correct metric**, because U9's fast path applies
+per glyph, not per document. A paper with twenty fonts of which one is an
+unused non-embedded Helvetica is not a paper U9 fails on. 80.7% of
+documents contain *some* non-embedded font; that number is true and
+almost meaningless.
+
+Glyph-weighted breakdown:
+
+| Class | Share |
+|---|---|
+| embedded outline — U9 fast path | **95.90%** |
+| font name unresolvable | 3.58% |
+| not embedded | 0.45% |
+| Type 3 | 0.08% |
+
+**Genuinely unusable is 0.53%**, an order of magnitude below the 5.1%
+the per-font view suggests. 55% of documents have *every* glyph on the
+fast path.
+
+**The 3.58% unresolvable has four causes, and one is a bug U9 must
+avoid.** `chars.json` reports `CKXQCW+LMRoman10-Regular` where `pdffonts`
+reports `CKXQCW+LMRoman10-Regular-Identity-H` — the same embedded font,
+failing to join on an encoding suffix. **U9 must normalise font names
+before matching.** The rest are real: `'unknown'` where pdfminer cannot
+name the font (51,952 glyphs, concentrated in a single old document), and
+unprefixed standard names like `'Times New Roman'` that genuinely are not
+embedded.
+
+**Scope consequence.** U9's stated scope limit — "embedded, non-Type-3,
+outline fonts only" — is the right one and costs 0.53% of glyphs, not the
+5% or 83% the other two metrics imply. U11 remains the fallback for the
+remainder.
+
+Re-run: `tools/premise/measure.py --corpus <dir> fonts`
+
+---
+
 ## 4. Assumptions that remain unverified
 
 1. **Reeb signatures discriminate math symbols.** ~~Argued structurally,
@@ -854,9 +925,13 @@ Re-run: `tools/premise/measure.py --corpus <dir> schedcost`
    against it. U10's residual rates are the measurement; U9's font
    access is what makes the comparison ink-to-ink rather than
    ink-to-advance-box.
-8. **arXiv PDFs are predominantly embedded, non-Type-3 fonts.** The whole
-   U9 fast path depends on it, and I have not sampled the corpus. This is
-   the cheapest assumption to check and worth checking before U9 starts.
+8. ~~**arXiv PDFs are predominantly embedded, non-Type-3 fonts.**~~
+   **MEASURED 2026-08-08, and the metric choice inverts the answer — see
+   §3 "U9 premise check". Glyph-weighted, which is how U9 uses it:
+   95.90% of glyph instances are on the fast path.** Per *document* only
+   16.8% are fully clean, which looks catastrophic and is the wrong
+   question. The assumption holds as stated for the work U9 actually
+   does.
 9. **Pure Python at 19 Mpx/s is fast enough once parallelised.** The
    arithmetic works out. **The serialization half is now measured and is
    NOT the constraint** (2026-08-07): all 64 bands of a 3400×800 page

@@ -43,6 +43,7 @@ from inkdrill.raster import INK, InkMask, binarize          # noqa: E402
 from inkdrill.aggregate import component_moments, moments_of_mask  # noqa: E402
 from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: E402
 from inkdrill.nest import Kind, nest  # noqa: E402
+from inkdrill.font import Usability, coverage as font_coverage, inventory  # noqa: E402
 from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
@@ -554,8 +555,48 @@ def m_schedcost(root, n, rng):
               f"utilisation {rep.utilisation:5.1%}")
 
 
+def m_fonts(root, n, rng):
+    """units.md 3 "U9 premise check": glyph-weighted font coverage. The
+    metric matters -- per-document this reads ~17%, per-glyph ~95%."""
+    from collections import Counter
+    cands = [(cj.parent, cj, list(cj.parent.glob("*.pdf"))[0])
+             for cj in sorted(root.glob("*/*.chars.json"))
+             if list(cj.parent.glob("*.pdf"))]
+    if not cands:
+        print("  no documents with both chars.json and a pdf")
+        return
+    tot = Counter()
+    ndoc = allok = 0
+    for d, cj, pdf in rng.sample(cands, min(n, len(cands))):
+        try:
+            recs = inventory(pdf)
+            data = json.load(cj.open())
+        except Exception as exc:
+            print(f"  skip {d.name[:26]}: {exc!r}"[:90])
+            continue
+        names = [ch["fontname"] for pg in data["pages"] for ch in pg["chars"]
+                 if ch.get("text", "").strip()]
+        if not names:
+            continue
+        cov = font_coverage(names, recs)
+        ndoc += 1
+        allok += cov.fraction == 1.0
+        for k, v in cov.counts.items():
+            tot[k] += v
+    total = sum(tot.values())
+    if not total:
+        print("  no glyphs")
+        return
+    print(f"  {ndoc} documents, {total} glyph instances")
+    for k, v in tot.most_common():
+        print(f"    {v:8} ({v/total:6.2%})  {k.value}")
+    print(f"  fast-path share {tot[Usability.FAST_PATH]/total:.2%};  "
+          f"documents fully on it {allok}/{ndoc}")
+
+
 MEASUREMENTS = {
     "banding": (m_banding, 3),
+    "fonts": (m_fonts, 25),
     "schedcost": (m_schedcost, 8),
     "stitchcost": (m_stitchcost, 2),
     "moments": (m_moments, 3),
