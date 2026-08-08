@@ -374,38 +374,57 @@ plus aspect ratio and absolute extents carried separately (without them
 `- − – —` and `. ·` are unrecoverable). Escalate beyond nearest neighbour
 only after seeing the confusion matrix.
 
-**The confusion matrix was the premise check, and it says do not
-escalate.** 17,008 real glyph components, 59 classes, half train half
-test, majority-class baseline 13.0%:
+**The confusion matrix was the premise check — and the SPLIT RULE turned
+out to be the experiment.** An earlier revision reported "half train half
+test" without saying half by *what*. The answer was: by component, over
+pages appearing on both sides, so nearly every test glyph had a
+near-identical twin — same document, page, font and size — in training.
+Measured both ways on the same 8 pages, changing only the split rule:
 
-| channel | accuracy |
-|---|---|
-| signature only | 30.7% |
-| extents only | 97.1% |
-| **bitmap only** | **99.1%** |
-| bitmap + signature | 99.2% |
-| bitmap + extents | 99.3% |
-| all three | 99.3% |
+| channel | by component (leaky) | **by document** |
+|---|---|---|
+| signature only | 11.8% | 11.2% |
+| **extents only** | 93.7% | **43.8%** |
+| **bitmap only** | 95.7% | **94.0%** |
+| bitmap + extents | 95.8% | 95.8% |
+| all three | 96.0% | 95.7% |
 
-Plain 1-NN on a 12×12 bitmap reaches 99.1% and every further channel buys
-tenths of a point. **Extents alone reach 97.1%** — far more than "carried
-separately" implies, and consistent with U12 finding extents the
-highest-information dimension. **The signature is weak alone and adds
-+0.1pp**, so it is exposed as a *verifier* (`agrees`, `margin`) rather
-than mixed into one distance — U12 measured it narrow-but-efficient and
-98.7–100% stable within a class, which is the profile for rejecting a
-wrong answer rather than generating one.
+**The extents channel was almost entirely leakage — 93.7% → 43.8%.** Its
+absolute height and width identify the document's body size, not the
+character, so with one document on both sides it is close to a lookup
+table. The previously reported 97.1% was an artefact of the protocol.
+
+**The bitmap channel survives — 95.7% → 94.0%.** Normalised shape is
+genuinely document-independent, which is what makes 1-NN on it a result
+rather than memorisation.
+
+**So the decision stands on an honest protocol: do not escalate** —
+bitmap-only reaches 94% across documents and every other channel adds
+under two points. But it stands *for this population*, and the condition
+is now recorded with it.
+
+**Where it does not hold.** An external check (auditor's probe, PIL
+renders — not reproducible by the stdlib-only harness) split by size and
+by font: **bitmap-only falls to 62.1% cross-size and 72.2% cross-font.**
+That is the condition for the ~5% of glyphs U9 found with no usable
+embedded font, and for the entire scanned corpus, which has no font to
+template from. For those populations 62–72% *would* justify escalating,
+and this measurement does not speak to them.
 
 **Every residual error is structural**, not a modelling failure:
-`, ; : .` are multi-component glyphs a per-component classifier sees half
-of (U4 and U10 hit the same thing; the fix is grouping, in U14), and
-`W/w S/s H/h I/l` are case pairs separated only by absolute size — which
-is exactly why extents is a channel and not a normalisation.
+`i . : 1 l` are the multi-component and thin-stroke cluster a
+per-component classifier sees half of (U4 and U10 hit the same thing; the
+fix is grouping, in U14), and `s/S X/x k/h` are case pairs separated only
+by absolute size — which is why extents still earns +1.8pp on top of the
+bitmap even though it does not generalise alone.
 
 Tests: scale invariance; each distance a metric; runner-up and finite
 margin; deterministic tie-breaking; channels independently disable-able;
 the signature as verifier; confusion reporting pairs not just accuracy.
 Branch sweep: 24 probed, 3 real gaps closed, 5 equivalent mutants.
+Re-run: `measure.py classify --split document|component|page` — the
+split rule is an explicit argument because it changes the answer by 50
+points.
 **Scope limit:** templates come from labelled page ink via U10, not from
 font-rendered references — that needs U9's rasterizer half.
 **Status: 31 tests passed.**

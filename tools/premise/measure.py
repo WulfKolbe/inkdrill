@@ -45,6 +45,8 @@ from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: 
 from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # noqa: E402
                            is_math_family)
+from inkdrill.classify import (Channels, Classifier, Template,  # noqa: E402
+                               confusion as classify_confusion, normalise)
 from inkdrill.coverage import Box, CoverageClass, Region, check  # noqa: E402
 from inkdrill.domains import (DIMENSIONS, Domain, convexity, describe,  # noqa: E402
                               dimensions_of, efficiency,
@@ -869,8 +871,120 @@ def m_convexity(root, n, rng):
     print(f"  {'ALL':12} {len(cols):5} {everything:10.3f}")
 
 
+def m_classify(root, n, rng, split="document"):
+    """units.md 3 "U13 premise check": channel accuracy and the confusion
+    matrix.
+
+    THE SPLIT RULE IS THE EXPERIMENT. A component-level random split over
+    pages that appear on both sides leaks: nearly every test glyph has a
+    near-identical twin -- same document, page, font and size -- in the
+    training half. Splitting by DOCUMENT is the honest default here;
+    `--split component` reproduces the leaky protocol for comparison.
+    """
+    from inkdrill.aggregate import moments_of_mask
+    from inkdrill.reeb import graph_of, signature
+
+    docs = [(cj.parent, cj) for cj in sorted(root.glob("*/*.chars.json"))
+            if (cj.parent / "inspect" / "pages").is_dir()]
+    rows = []          # (doc, page, Template)
+    pages = 0
+    for doc, cj in rng.sample(docs, len(docs)):
+        if pages >= n:
+            break
+        try:
+            data = json.load(cj.open())
+        except Exception:
+            continue
+        for page in data["pages"]:
+            pdir = doc / "inspect" / "pages"
+            png = next((pdir / p for p in
+                        (f"p{page['page_number']}.png",
+                         f"page-{page['page_number']:04d}.png")
+                        if (pdir / p).exists()), None)
+            if png is None:
+                continue
+            img = read_png(png)
+            sx = img.width / page["width"]
+            if abs(sx - img.height / page["height"]) / sx > 0.01:
+                continue
+            mask = binarize(img.gray, img.width, img.height)
+            glyphs = [(c["text"], c["x0"] * sx,
+                       (page["height"] - c["y1"]) * sx, c["x1"] * sx,
+                       (page["height"] - c["y0"]) * sx)
+                      for c in page["chars"]
+                      if c.get("text") and len(c["text"]) == 1
+                      and c["text"].strip()]
+            for (x0, y0, x1, y1), sub in components(mask, min_area=1,
+                                                    min_side=5):
+                cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+                hit = [g for g in glyphs
+                       if g[1] <= cx <= g[3] and g[2] <= cy <= g[4]]
+                if len(hit) != 1:
+                    continue
+                s = signature(graph_of(sub))
+                mo = moments_of_mask(sub)
+                w, h = sub.width, sub.height
+                rows.append((doc.name, page["page_number"],
+                             Template(hit[0][0], normalise(sub),
+                                      (s.cycles, s.births, s.merges,
+                                       s.splits),
+                                      (w / h, float(h), float(w),
+                                       mo.elongation))))
+            pages += 1
+            print(f"  {doc.name[:26]:26} p{page['page_number']:<3} "
+                  f"{len(rows)} glyphs")
+            break
+
+    counts = Counter(t.label for _d, _p, t in rows)
+    common = {c for c, k in counts.items() if k >= 12}
+    rows = [r for r in rows if r[2].label in common]
+    if len(rows) < 100:
+        print("  not enough labelled glyphs")
+        return
+
+    if split == "component":
+        shuffled = rows[:]
+        rng.shuffle(shuffled)
+        cut = len(shuffled) // 2
+        train = [t for _d, _p, t in shuffled[:cut]]
+        test = [(t.label, t) for _d, _p, t in shuffled[cut:]]
+        note = "component-level random split -- LEAKY, pages on both sides"
+    else:
+        key = 0 if split == "document" else 1
+        groups = sorted({r[key] for r in rows})
+        rng.shuffle(groups)
+        held = set(groups[:max(1, len(groups) // 2)])
+        train = [t for r in rows for t in (r[2],) if r[key] not in held]
+        test = [(r[2].label, r[2]) for r in rows if r[key] in held]
+        note = f"split by {split}: no {split} appears on both sides"
+
+    test = test[:600]
+    if not train or not test:
+        print("  split left one side empty")
+        return
+    shared = {lab for lab, _t in test} & {t.label for t in train}
+    test = [(lab, t) for lab, t in test if lab in shared]
+    base = Counter(lab for lab, _t in test).most_common(1)[0][1] / len(test)
+    print(f"\n  SPLIT RULE: {note}")
+    print(f"  train {len(train)}, test {len(test)}, "
+          f"{len(shared)} classes;  majority baseline {base:.1%}")
+    for name, ch in (("signature only", Channels(0, 1, 0)),
+                     ("extents only", Channels(0, 0, 1)),
+                     ("bitmap only", Channels(1, 0, 0)),
+                     ("bitmap + extents", Channels(1, 0, 6)),
+                     ("all three", Channels(1, 3, 6))):
+        acc, pairs = classify_confusion(Classifier(train, ch), test)
+        print(f"    {name:20} {acc:7.1%}")
+        if name == "all three":
+            worst = pairs.most_common(8)
+    print("  worst confusions (all three):")
+    for (truth, pred), k in worst:
+        print(f"    {truth!r} read as {pred!r}   x{k}")
+
+
 MEASUREMENTS = {
     "banding": (m_banding, 3),
+    "classify": (m_classify, 6),
     "convexity": (m_convexity, 2),
     "missed": (m_missed, 8),
     "residuals": (m_residuals, 12),
@@ -897,6 +1011,11 @@ def main():
     ap.add_argument("--n", type=int, default=None,
                     help="sample size; each measurement has its own default")
     ap.add_argument("--seed", type=int, default=20260807)
+    ap.add_argument("--split", default="document",
+                    choices=("component", "page", "document"),
+                    help="classify only: how train and test are divided. "
+                         "The split rule IS the experiment -- see the "
+                         "U13 premise check in docs/units.md.")
     args = ap.parse_args()
 
     root = args.corpus.expanduser()
@@ -906,7 +1025,11 @@ def main():
     for name in todo:
         fn, default_n = MEASUREMENTS[name]
         print(f"\n=== {name} " + "=" * (62 - len(name)))
-        fn(root, args.n or default_n, random.Random(args.seed))
+        if name == "classify":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               split=args.split)
+        else:
+            fn(root, args.n or default_n, random.Random(args.seed))
 
 
 if __name__ == "__main__":

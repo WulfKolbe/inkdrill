@@ -3,53 +3,86 @@
 CONTRACT (written before implementation; see docs/units.md U13)
 ==============================================================
 
-The escalation question, answered before the unit was written
-------------------------------------------------------------
+The escalation question, and the split rule that decides it
+-----------------------------------------------------------
 docs/units.md sets one instruction: *"escalate beyond nearest neighbour
 only after seeing the confusion matrix."* So the confusion matrix was the
-premise check. 17,008 real glyph components over 59 classes, half train
-half test, majority-class baseline 13.0%:
+premise check.
 
-        signature only              30.7%
-        extents only                97.1%
-        bitmap only                 99.1%
-        bitmap + signature          99.2%
-        bitmap + extents            99.3%
-        all three                   99.3%
+**THE SPLIT RULE IS THE EXPERIMENT.** An earlier revision of this
+docstring reported "half train half test" without saying half by what,
+and the answer was: by COMPONENT, over pages that appeared on both sides.
+Nearly every test glyph had a near-identical twin -- same document, page,
+font and size -- in the training half. Measured both ways on the same
+8 pages, changing only the split rule:
 
-**Do not escalate.** Plain 1-NN on a 12x12 normalised bitmap reaches
-99.1%, and every channel added afterwards buys tenths of a point. There
-is no confusion-matrix evidence for anything more elaborate, and this
-module therefore implements nearest neighbour and nothing else.
+        channel              by component   by DOCUMENT
+        signature only            11.8%        11.2%
+        extents only              93.7%        43.8%
+        bitmap only               95.7%        94.0%
+        bitmap + extents          95.8%        95.8%
+        all three                 96.0%        95.7%
+
+**The extents channel was almost entirely leakage: 93.7% -> 43.8%.** Its
+absolute height and width identify the *document's body size*, not the
+character, so with the same document on both sides it is close to a
+lookup table. An earlier revision reported 97.1% for extents alone and
+drew conclusions from it; that number was an artefact of the protocol.
+
+**The bitmap channel survives: 95.7% -> 94.0%, a 1.7-point drop.** Shape
+normalised to a grid is genuinely document-independent, which is what
+makes 1-NN on it a real result rather than a memorisation.
+
+So the decision stands, on an honest protocol: **do not escalate.**
+Bitmap-only reaches 94% across documents and adding every other channel
+buys under two points. But it stands FOR THIS POPULATION, and the
+condition is now recorded with it.
+
+Where this does NOT hold, and it is not a small caveat
+------------------------------------------------------
+An external check (auditor's probe, PIL renders of Latin Modern and
+DejaVu Serif -- not reproducible by `tools/premise/measure.py`, which is
+standard library only) varied the split further:
+
+        split by size, same font, 22/24px -> 40/44px      bitmap 62.1%
+        split by font, same size, LM -> DejaVu Serif      bitmap 72.2%
+
+Cross-font and cross-size, 1-NN falls to 62-72%. That matters because it
+is the condition for two real populations:
+
+  * the ~5% of glyphs U9 measured as having no usable embedded font, and
+  * the scanned corpus, which has no font to template from at all.
+
+For those, 62-72% would justify escalating, and this unit's measurement
+does not speak to them. What it does establish is the within-document
+case, which is the one U9's rasterizer templates are meant to serve.
 
 What the channels are actually worth
 ------------------------------------
 docs/units.md proposes the bitmap and the Reeb signature as two channels,
-with "aspect ratio and absolute extents carried separately (without them
-`- - -- ---` and `. *` are unrecoverable)". The measurement adjusts that:
+with extents "carried separately". Corrected for the split rule:
 
-  * **the bitmap channel dominates** -- 99.1% alone;
-  * **extents alone reach 97.1%**, which is far more than "carried
-    separately" suggests, and matches U12's finding that extents carry
-    the most marginal information of any dimension;
-  * **the signature is weak alone (30.7%) and adds +0.1pp on top of the
-    bitmap.** On clean renders of body text it is close to redundant.
+  * **the bitmap channel is the unit** -- 94% alone, across documents;
+  * **extents are a within-document aid, not a channel that generalises**
+    -- 43.8% alone across documents, though still worth +1.8pp on top of
+    the bitmap, which is where the case pairs live;
+  * **the signature is weak alone at 11.2%** and adds nothing measurable
+    on top of the bitmap.
 
-That is not a reason to discard it. U12 measured the topological
-dimensions as the most EFFICIENT per available bit and jointly worth
-0.713 against a best marginal of 0.375 -- narrow, not weak -- and
-`cycles` as 98.7-100% stable within a class. The profile is a VERIFIER:
-good for rejecting a wrong answer, poor for generating one. `margin` and
-`agrees` exist for that use, rather than the signature being mixed into
-one distance and its stability wasted.
+The signature is therefore exposed as a VERIFIER (`agrees`, `margin`)
+rather than mixed into one distance. U12 measured the topological
+dimensions as narrow but the most efficient per available bit, and
+`cycles` as 98.7-100% stable within a class: good for rejecting a wrong
+answer, poor for generating one. Blending that into a single distance
+would waste the stability and gain nothing.
 
 Every residual error is structural
 ----------------------------------
 The confusion matrix at 99.3% contains no surprises, only two families:
 
-        ',' -> ';'  x10     ';' -> 'i'  x8      ':' -> '.'  x6
-        'i' -> 'l'  x3      'W' -> 'w'  x3      'S' -> 's'  x2
-        '1' -> 'i'  x2      'I' -> 'l'  x2      'H' -> 'h'  x1
+        'i' -> '1'  x8      'i' -> '.'  x7      '.' -> 'i'  x3
+        'k' -> 'h'  x2      's' -> 'S'  x2      'l' -> 'i'  x1
+        ':' -> '.'  x1      'X' -> 'x'  x1
 
   * the **punctuation cluster** `, ; : .` -- these are MULTI-COMPONENT
     glyphs, and a per-component classifier sees half of one. U4 and U10
@@ -85,6 +118,10 @@ G5  ties break deterministically, by label, so a repeated run gives the
 G6  classifying against no templates raises rather than inventing a label
 G7  `confusion()` reports the offending PAIRS, not only an accuracy --
     the accuracy alone would have hidden that every error is structural
+G8  every accuracy quoted here names its SPLIT RULE and its population.
+    An unqualified accuracy is not a result: the same experiment gives
+    43.8% or 93.7% for the extents channel depending on nothing but how
+    train and test were divided
 
 Non-guarantees (out of scope for U13)
 -------------------------------------
@@ -93,7 +130,10 @@ Non-guarantees (out of scope for U13)
     components joined before classification, which is U14's business.
   * no font-rendered reference templates -- that needs U9's rasterizer
     half, which is not built. Templates here come from labelled page ink
-    via U10's alignment.
+    via U10's alignment, so the measured protocol is not the deployment
+    condition either; it is the closest available.
+  * no claim about cross-font or cross-size matching. Measured externally
+    at 62-72% and NOT addressed here.
 """
 
 from __future__ import annotations

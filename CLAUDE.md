@@ -145,6 +145,28 @@ Axis invariance (row sweep == col sweep) is the foundation of later claims and
 is asserted at every level. Any change that breaks it is a real bug, not a test
 that needs relaxing.
 
+### State the population and the split rule beside every measured number
+
+Five findings so far were the same shape: the instrument was right and
+the conclusion was wider than what it could see. Four were about
+POPULATION — U0's colour fraction (sampled self-contained rows only),
+U9's font coverage (per-document vs per-glyph), U10's residual rates
+(three pages, one figure-heavy), U12's MI ranking (capped by
+cardinality). One was about PROTOCOL — U13's 97.1% extents accuracy,
+which was 43.8% the moment train and test stopped sharing documents.
+
+None is caught by a mutation sweep, because the code is correct in every
+case. What catches them is asking, before quoting any number:
+
+- **What population is this measured over, and what is it claimed of?**
+- **How were the samples divided, and does the division leak?**
+- **What is the maximum this number could be?** (U12's ceiling.)
+
+A measured figure without its population and its split rule is not a
+result. Quote both in the same sentence, and make the split rule an
+argument to the harness rather than a constant inside it — if it changes
+the answer, a reader must be able to change it.
+
 ### Mutate before you claim a guarantee is held
 
 Five times now a guarantee has been stated in a docstring, argued for in
