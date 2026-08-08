@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 342, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 351, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -148,6 +148,14 @@ They are all findable the same way, in minutes:
 
 Do this per unit, before recording a status line — not at the final review,
 which is where these have been surfacing.
+
+**A survivor is a lead, not a finding.** The sweep is a screening tool and
+it over-reports: a mutation that breaks the module at import time, or that
+patches a different occurrence than intended, reads as "survived" because
+the suite never got to the assertion. Confirm each survivor by hand before
+writing a test for it. Running the sweep over `font.py` reported eight
+survivors; six were real and two were the probe misfiring — including one
+branch that, mutated correctly, fails 18 tests.
 
 ## CodeGraph
 

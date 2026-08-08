@@ -1,10 +1,12 @@
 """Unit 9 tests. Every test name is quoted verbatim in the status report."""
 
+import subprocess
 import unittest
 
 from inkdrill.font import (MATH_FAMILIES, Coverage, FontKind, FontRecord,
-                           Usability, coverage, family_of, is_math_family,
-                           normalise, parse_pdffonts, resolve, usability)
+                           PdfFontsUnavailable, Usability, coverage,
+                           family_of, inventory, is_math_family, normalise,
+                           parse_pdffonts, resolve, usability)
 
 # Real pdffonts output, copied verbatim from the corpus. The column
 # widths are the ones pdffonts actually emits.
@@ -390,3 +392,118 @@ class T9_5_CoverageIsStratifiedByFamily(unittest.TestCase):
         self.assertEqual(cov.math_total, 10)
         self.assertEqual(cov.math_fraction, 0.0)
         self.assertEqual(cov.counts[Usability.UNRESOLVED], 10)
+
+
+# pdffonts output with a blank line in the body, and one with a rule line
+# too short to be a real table. Both reach guards that a branch-mutation
+# sweep found unreached.
+BLANKS = """\
+name                                 type              encoding         emb sub uni object ID
+------------------------------------ ----------------- ---------------- --- --- --- ---------
+NZRZGH+CMBX10                        Type 1C           Custom           yes yes no      10  0
+
+OFAQXU+CMR10                         Type 1C           Custom           yes yes no      14  0
+"""
+
+SHORT_RULE = """\
+name  type
+----- ----
+Foo   Type 1C
+"""
+
+MALFORMED_LONG = """\
+name                                 type              encoding         emb sub uni object ID
+------------------------------------ ----------------- ---------------- --- --- --- ---------
+AVeryLongNameWithNoFlagsAtAllInThisRow whatever whatever whatever
+"""
+
+
+class T9_6_BranchesFoundByMutationSweep(unittest.TestCase):
+    """Written after a `if True` / `if False` sweep over every non-trivial
+    branch in the module surfaced eight unreached ones. Each of these is a
+    branch that would otherwise first execute on real corpus data, and
+    whose failure mode is a silently wrong record rather than an
+    exception.
+
+    See CLAUDE.md, "Mutate before you claim a guarantee is held"."""
+
+    def test_a_blank_line_in_the_body_is_skipped(self):
+        recs = parse_pdffonts(BLANKS)
+        self.assertEqual([r.name for r in recs],
+                         ["NZRZGH+CMBX10", "OFAQXU+CMR10"])
+
+    def test_a_rule_line_with_too_few_columns_is_refused(self):
+        """Better to return nothing than to invent columns."""
+        self.assertEqual(parse_pdffonts(SHORT_RULE), [])
+
+    def test_a_row_with_no_yes_no_flags_is_skipped_not_invented(self):
+        """The fallback's own guard: a row it cannot read must be
+        dropped, not turned into a FontRecord with garbage fields."""
+        self.assertEqual(parse_pdffonts(MALFORMED_LONG), [])
+
+    def test_an_unrecognised_type_reads_as_other_and_is_not_an_outline(self):
+        self.assertEqual(FontKind.parse("Some Future Format"),
+                         FontKind.OTHER)
+        self.assertFalse(FontKind.OTHER.is_outline)
+
+    def test_the_literal_word_other_is_not_a_font_kind(self):
+        """FontKind.OTHER carries the value 'other'; matching on it would
+        make a font literally typed 'other' outrank a real kind."""
+        self.assertEqual(FontKind.parse("other"), FontKind.OTHER)
+        self.assertEqual(FontKind.parse("Type 1C"), FontKind.TYPE1C)
+
+    def test_an_exact_name_match_wins_over_an_embedded_sibling(self):
+        """The exact pass runs before the embedded tie-break. Without
+        that ordering, asking for a font BY NAME could return a different
+        font that merely shares its base name."""
+        exact = FontRecord("Times-Roman", FontKind.TYPE1, "Standard",
+                           False, False, False)
+        sibling = FontRecord("ABCDEF+Times-Roman", FontKind.TYPE1C,
+                             "Custom", True, True, False)
+        for order in ([exact, sibling], [sibling, exact]):
+            with self.subTest(first=order[0].name):
+                self.assertEqual(resolve("Times-Roman", order).name,
+                                 "Times-Roman")
+
+    def test_inventory_reports_a_failing_pdffonts_rather_than_guessing(self):
+        real = subprocess.run
+
+        class Proc:
+            returncode = 1
+            stdout = ""
+            stderr = "Syntax Error: Could not read file"
+
+        subprocess.run = lambda *a, **k: Proc()
+        try:
+            with self.assertRaises(PdfFontsUnavailable) as cm:
+                inventory("nonexistent.pdf")
+            self.assertIn("exited 1", str(cm.exception))
+        finally:
+            subprocess.run = real
+
+    def test_inventory_reports_a_missing_binary(self):
+        real = subprocess.run
+
+        def boom(*a, **k):
+            raise FileNotFoundError("pdffonts")
+
+        subprocess.run = boom
+        try:
+            with self.assertRaises(PdfFontsUnavailable):
+                inventory("whatever.pdf")
+        finally:
+            subprocess.run = real
+
+    def test_inventory_parses_a_successful_run(self):
+        real = subprocess.run
+
+        class Proc:
+            returncode = 0
+            stdout = REAL
+            stderr = ""
+
+        subprocess.run = lambda *a, **k: Proc()
+        try:
+            self.assertEqual(len(inventory("ok.pdf")), 5)
+        finally:
+            subprocess.run = real

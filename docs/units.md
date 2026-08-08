@@ -227,7 +227,7 @@ far and it needs its own contract and its own premise check. It is named
 here rather than half-built, and the split is not arbitrary: everything
 in the inventory half is exactly and hermetically testable against
 fixture text, while a rasterizer needs its own oracle.
-**Status: 43 tests passed (inventory half).**
+**Status: 52 tests passed (inventory half).**
 
 **U10 `gold.py` — pdfminer alignment and the many-to-many matcher.**
 *Depends: U1, U9.*
@@ -292,7 +292,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 342 - 4 = 338.
+count -- what actually runs on a bare checkout -- is 351 - 4 = 347.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -305,9 +305,9 @@ count -- what actually runs on a bare checkout -- is 342 - 4 = 338.
 | U6 `nest.py` | 29 | passed |
 | U7 `band.py` | 29 | passed |
 | U8 `sched.py` | 22 | passed |
-| U9 `font.py` | 43 | passed |
+| U9 `font.py` | 52 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 43 = 338, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 = 347, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.
