@@ -45,6 +45,8 @@ from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: 
 from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # noqa: E402
                            is_math_family)
+from inkdrill.gold import (Component as GComp, Glyph as GGlyph,  # noqa: E402
+                           MatchKind, match, page_transform)
 from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
@@ -613,8 +615,75 @@ def m_fonts(root, n, rng):
         print("  MATHS glyphs: none seen in this sample")
 
 
+def m_residuals(root, n, rng):
+    """units.md 3 "U10 premise check": the four residual classes.
+
+    Reports a PER-PAGE distribution, not just an aggregate. The
+    aggregate is dominated by whichever pages happen to be figure-heavy,
+    so the mechanism plus the spread is the claim -- not the mean."""
+    docs = [(cj.parent, cj) for cj in sorted(root.glob("*/*.chars.json"))
+            if (cj.parent / "inspect" / "pages").is_dir()]
+    per_page = []
+    agg = Counter()
+    for doc, cj in rng.sample(docs, min(len(docs), n * 6)):
+        if len(per_page) >= n:
+            break
+        try:
+            data = json.load(cj.open())
+        except Exception:
+            continue
+        for page in data["pages"]:
+            pdir = doc / "inspect" / "pages"
+            png = next((pdir / p for p in
+                        (f"p{page['page_number']}.png",
+                         f"page-{page['page_number']:04d}.png")
+                        if (pdir / p).exists()), None)
+            if png is None:
+                continue
+            img = read_png(png)
+            sx = img.width / page["width"]
+            if abs(sx - img.height / page["height"]) / sx > 0.01:
+                continue
+            mask = binarize(img.gray, img.width, img.height)
+            comps = [GComp(i, x0, y0, x1, y1)
+                     for i, ((x0, y0, x1, y1), _sub)
+                     in enumerate(components(mask, min_area=1, min_side=1))]
+            glyphs = [GGlyph(c["text"], c["x0"], c["y0"], c["x1"], c["y1"],
+                             c.get("fontname", ""))
+                      for c in page["chars"]
+                      if c.get("text") and len(c["text"]) == 1
+                      and c["text"].strip()]
+            t = page_transform(page["height"], sx * 72.0)
+            rep = match(comps, glyphs, to_pixels=t)
+            for k in MatchKind:
+                agg[k] += rep.count(k)
+            per_page.append((doc.name, rep))
+            print(f"  {doc.name[:26]:26} p{page['page_number']:<3} "
+                  f"{sx*72:.0f} dpi  1:1 {rep.fraction(MatchKind.ONE_TO_ONE):6.1%}"
+                  f"  image-only {rep.fraction(MatchKind.IMAGE_ONLY):6.1%}"
+                  f"  no-ink {rep.glyphs_without_ink:6.2%}")
+            break
+    if not per_page:
+        print("  no usable pages")
+        return
+    tot = sum(agg.values())
+    print(f"\n  AGGREGATE over {len(per_page)} pages, {tot} assignments")
+    for k in MatchKind:
+        if agg[k]:
+            print(f"    {agg[k]:7} ({agg[k]/tot:6.2%})  {k.value}")
+    for label, kind in (("1:1", MatchKind.ONE_TO_ONE),
+                        ("ink with no glyph", MatchKind.IMAGE_ONLY)):
+        vals = sorted(r.fraction(kind) for _d, r in per_page)
+        print(f"  per-page {label:18} min {vals[0]:6.1%}  "
+              f"median {vals[len(vals)//2]:6.1%}  max {vals[-1]:6.1%}")
+    noink = sorted(r.glyphs_without_ink for _d, r in per_page)
+    print(f"  per-page glyphs with no ink  min {noink[0]:6.2%}  "
+          f"median {noink[len(noink)//2]:6.2%}  max {noink[-1]:6.2%}")
+
+
 MEASUREMENTS = {
     "banding": (m_banding, 3),
+    "residuals": (m_residuals, 12),
     "fonts": (m_fonts, 25),
     "schedcost": (m_schedcost, 8),
     "stitchcost": (m_stitchcost, 2),

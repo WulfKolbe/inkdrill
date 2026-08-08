@@ -905,18 +905,45 @@ native resolution.
 
 | Class | 400 dpi | 200 dpi | 100 dpi |
 |---|---|---|---|
-| 1 : 1 | **66.93%** | 69.87% | 32.30% |
+| 1 : 1 | 66.93% | 69.87% | 32.30% |
 | ink with no glyph | 19.61% | 13.05% | 6.51% |
 | N ink : 1 glyph | 12.34% | 7.78% | 2.20% |
 | glyph with no ink | 1.11% | 9.20% | **58.78%** |
 | 1 ink : N glyphs | **0.02%** | 0.09% | 0.20% |
 
-**"Closely enough" is too optimistic, but the residual is structure, not
-error.** *Ink with no glyph* is overwhelmingly figures and rules — on a
-figure-heavy page it reaches 3,572 components while two text pages sit at
-4 and 35. That is the correct answer, not a failure: a diagram has no
-glyph. *N ink : 1 glyph* is `i`, `j`, `:`, accents and broken strokes —
-the multi-component glyphs U4 already had to accommodate.
+**CORRECTED 2026-08-08: two of those five numbers were artefacts of a
+three-page sample.** An independent 12-page sample at 400 dpi, all text
+pages:
+
+| Class | 3 pages | **12 pages** | per-page spread |
+|---|---|---|---|
+| 1 : 1 | 66.93% | **85.17%** | 81.2 – 86.7% |
+| ink with no glyph | 19.61% | **0.39%** | 0.0 – 2.8% |
+| N ink : 1 glyph | 12.34% | 13.75% | — |
+| glyph with no ink | 1.11% | 0.64% | 0.00 – 1.86% |
+| 1 ink : N glyphs | 0.02% | 0.05% | — |
+
+**The three structural classes reproduce; the two dominated by a single
+figure-heavy page did not.** That page contributed 3,572 image-only
+components against 4 and 35 on the other two, and it moved the aggregate
+by 50 points on 1:1 and by a factor of fifty on image-only.
+
+The mechanism was right — a diagram correctly has no glyph — but the
+*rate* was a property of that page mix, not of arXiv. This is the U0
+colour fraction and the U7 density dependence recurring a third time, and
+the rule it keeps teaching is the same: **record the mechanism and the
+spread, never the aggregate of a small sample.** The per-page columns
+above are the claim; the aggregate is context.
+
+Every figure here is at **400 dpi**, the corpus render. The pipeline's
+stated target is 600 dpi, where glyph loss should be lower still and is
+unmeasured.
+
+**The residual is structure, not error.** *Ink with no glyph* is figures
+and rules — a diagram correctly has no glyph — and on ordinary text pages
+it is under 1%. *N ink : 1 glyph* is `i`, `j`, `:`, accents and broken
+strokes: the multi-component glyphs U4 already had to accommodate, and at
+13–14% it is the largest genuine residual and the stable one.
 
 **The feared case barely exists.** One blob straddling two glyphs is
 **0.02%** at 400 dpi. Touching glyphs and ligatures are far rarer than

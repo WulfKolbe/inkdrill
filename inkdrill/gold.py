@@ -15,18 +15,27 @@ docs/units.md is explicit that the four classes are REPORTED rather than
 discarded. The premise check says why (§3 "U10 premise check", 18,519
 assignments at 400 dpi):
 
-        1 : 1                    66.93%
-        ink with no glyph        19.61%
-        N ink : 1 glyph          12.34%
-        glyph with no ink         1.11%
-        1 ink : N glyphs          0.02%
+                         3 pages   12 pages   per-page spread
+        1 : 1              66.93%     85.17%     81.2 - 86.7%
+        N ink : 1 glyph    12.34%     13.75%     --
+        glyph with no ink   1.11%      0.64%     0.00 - 1.86%
+        ink with no glyph  19.61%      0.39%     0.0 - 2.8%
+        1 ink : N glyphs    0.02%      0.05%     --
 
-Only two thirds are the easy case, and a single "agreement rate" would
-throw away everything interesting. **Ink with no glyph is overwhelmingly
-figures and rules** -- 3,572 components on a figure-heavy page against 4
-and 35 on two text pages -- and a diagram correctly has no glyph. **N ink
-per glyph is `i`, `j`, `:`, accents and broken strokes**, which U4
-already had to accommodate.
+All at 400 dpi, the corpus render; the stated target is 600.
+
+**Two of the first five numbers were artefacts of a three-page sample**
+and are corrected above -- one figure-heavy page contributed 3,572
+image-only components against 4 and 35 on the others, moving 1:1 by 50
+points and image-only by a factor of fifty. The three structural classes
+reproduced.
+
+Even at 85% clean, a single "agreement rate" would throw away everything
+interesting. **N ink per glyph is the largest genuine residual** at
+13-14% -- `i`, `j`, `:`, accents and broken strokes, the multi-component
+glyphs U4 already had to accommodate. **Ink with no glyph is figures and
+rules**, so it tracks page content entirely and a diagram correctly has
+no glyph.
 
 **The feared case barely exists.** One blob straddling two glyphs is
 0.02%. So the matcher does NOT split blobs; it reports the rare case and
@@ -232,6 +241,9 @@ class MatchReport:
                  f"glyphs, {n} assignments"]
         for k in MatchKind:
             c = self.count(k)
+            # presentational only: a zero-count class is omitted from the
+            # printed summary. `by_kind` and `count()` are unaffected, so
+            # nothing downstream depends on this branch.
             if c:
                 lines.append(f"  {c:7} ({c/n:6.2%})  {k.value}")
         return "\n".join(lines)

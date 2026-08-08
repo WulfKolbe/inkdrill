@@ -77,6 +77,53 @@ class T10_1_PageTransformIsComposed(unittest.TestCase):
                     self.assertGreaterEqual(x, -1e-6)
                     self.assertGreaterEqual(y, -1e-6)
 
+    def test_each_rotation_sends_a_known_corner_to_a_known_place(self):
+        """/Rotate 90 is CLOCKWISE: the PDF LEFT edge becomes the image
+        TOP edge. Direction and application both, so neither skipping the
+        rotation nor reversing it can pass.
+
+        The positivity test below is a good invariant and cannot replace
+        this: an unrotated page is already in positive coordinates, so
+        doing nothing at all satisfies it. Found by branch mutation --
+        deleting the rotation entirely passed all 386 tests."""
+        want = {
+            0:   ((0.0, 100.0), (0.0, 0.0)),
+            90:  ((0.0, 0.0), (100.0, 0.0)),
+            180: ((100.0, 0.0), (100.0, 100.0)),
+            270: ((100.0, 100.0), (0.0, 100.0)),
+        }
+        for r, (bottom_left, top_left) in want.items():
+            with self.subTest(rotate=r):
+                t = page_transform(100.0, 72.0, rotate=r,
+                                   page_width_pt=100.0)
+                self.assertEqual(
+                    tuple(round(v, 6) for v in t.point(0, 0)), bottom_left)
+                self.assertEqual(
+                    tuple(round(v, 6) for v in t.point(0, 100)), top_left)
+
+    def test_rotation_is_not_a_no_op(self):
+        """The blunt version of the above, stated on its own so the
+        intent survives any later edit to the corner table."""
+        plain = page_transform(100.0, 72.0, page_width_pt=100.0)
+        for r in (90, 180, 270):
+            with self.subTest(rotate=r):
+                turned = page_transform(100.0, 72.0, rotate=r,
+                                        page_width_pt=100.0)
+                self.assertNotEqual(turned.point(0, 0), plain.point(0, 0))
+
+    def test_four_rotations_return_to_the_start(self):
+        """Composing the 90-degree step four times is the identity, which
+        pins the direction without naming a corner."""
+        step = page_transform(100.0, 72.0, rotate=90, page_width_pt=100.0)
+        plain = page_transform(100.0, 72.0, page_width_pt=100.0)
+        rot_only = plain.inverse().then(step)
+        acc = rot_only
+        for _ in range(3):
+            acc = acc.then(rot_only)
+        x, y = acc.point(37.0, 61.0)
+        self.assertAlmostEqual(x, 37.0, places=6)
+        self.assertAlmostEqual(y, 61.0, places=6)
+
     def test_a_bad_rotation_is_refused(self):
         with self.assertRaises(ValueError):
             page_transform(792.0, 72.0, rotate=45)
