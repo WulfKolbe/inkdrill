@@ -445,6 +445,50 @@ against pdfminer's `role` as label; big operators and their ranges; fence
 matching; structure tree → LaTeX targeting the existing DOCMODEL
 projection.
 
+**BUILT: rows, reference lines, script detection, component grouping.
+NOT BUILT: big operators, fence matching, structure tree, LaTeX.** All
+four of the latter need reliable symbol identity for `∑ ∫ ( [`, and U13's
+measured population contained **no mathematics symbols at all** — its
+class filter excluded every one as too rare. Fence matching on a
+classifier never measured on a fence would be a structure tree resting on
+nothing. The geometry is measurable now; the rest is named.
+
+**`units.md` specified "against pdfminer's `role` as label". There is no
+`role` field in `chars.json`.** The label used instead is `size` — the
+PDF's own font metric, which the geometry side never sees, so the test is
+not circular. Measured on 37,759 glyphs over 12 pages:
+
+| | |
+|---|---|
+| precision | **100.0%** (0 false positives in 37,759) |
+| recall | 13.5% |
+| positives in population | 2.04% |
+
+**The precision figure is trustworthy and the recall figure is not.** The
+label is a proxy — "smaller than the row's modal size" catches captions,
+footnotes and mixed-size headings, not only scripts — so most misses are
+probably not scripts at all. 13.5% is a lower bound against an
+over-inclusive label, not a count of missed scripts. `detect_scripts` is
+therefore documented as a high-precision *detector*, not a classifier.
+
+Three faults surfaced during construction, all real:
+**rows must be seeded tallest-first** — in reading order a superscript
+opens a row of its own before the line it belongs to exists, and a
+determinism test cannot catch it because the wrong answer is perfectly
+deterministic; **grouping needs stacking, not width** — horizontal
+overlap alone merges a narrow letter sitting inside a wide one, since
+parts of one glyph sit *above* each other while adjacent letters sit
+*beside* each other; and **row overlap must be measured against the
+joining glyph's own height**, or the threshold that suits body text
+excludes exactly the scripts this unit exists to find.
+
+Tests: row partition over 60 random layouts; modal reference lines
+resisting a descender and a tall bracket, with a fixture where mode and
+median differ; both script signals required; grouping of `i` and `:` but
+not of adjacent letters. Branch sweep: 28 probed, 3 real gaps closed, 3
+equivalent.
+**Status: 33 tests passed.**
+
 ### Deferred
 
 `raster_region` detection (halftone / line-graphic discrimination) after
@@ -465,7 +509,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 484 - 4 = 480.
+count -- what actually runs on a bare checkout -- is 517 - 4 = 513.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -483,8 +527,9 @@ count -- what actually runs on a bare checkout -- is 484 - 4 = 480.
 | U11 `coverage.py` | 24 | passed |
 | U12 `domains.py` | 40 | passed |
 | U13 `classify.py` | 31 | passed |
+| U14 `mathstruct.py` | 33 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 40 + 31 = 480, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 40 + 31 + 33 = 513, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.

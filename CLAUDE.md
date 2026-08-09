@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 484, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 517, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -47,7 +47,7 @@ written as a docstring *before* the implementation. Every module states
 guarantees `G1`–`G7` at the top of that docstring; the tests exist to hold those
 specific numbered guarantees, so a test named for `G4` is not incidental.
 
-Built (U0–U13), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
+Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`/`band` → `sweep` → `raster` and
 `pngio.load_mask` → `raster.binarize`:
 
 - **`inkdrill/pngio.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
@@ -93,6 +93,10 @@ Built (U0–U13), all independent of each other except `reeb`/`aggregate`/`nest`
   `Classifier`, `confusion`. The bitmap channel alone reaches 99.1%; the
   confusion matrix says do not escalate. The signature is a verifier
   (`agrees`), not a discriminator.
+- **`inkdrill/mathstruct.py`** — rows, reference lines, script detection,
+  component grouping. `rows`, `reference_lines`, `detect_scripts`,
+  `group`. Rows seed tallest-first; grouping needs stacking, not width.
+  Big operators, fences and the structure tree are NOT built.
 
 Planned U4–U14 (`reeb`, `aggregate`, `nest`, `band`, `sched`, `font`, `gold`,
 `coverage`, `domains`, `classify`, `mathstruct`) are specified in `units.md`
