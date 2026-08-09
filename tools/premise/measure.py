@@ -21,6 +21,8 @@ skew         projection-profile skew of scanned pages
 premise      hole count and signature stability vs pdfminer ground truth
 contraction  RAG runs -> Reeb arcs reduction on real page ink
 rotation     signature survival under resampled rotation
+border       what the pixels just outside a component's runs say about
+             the field it sits on -- 2 samples per run
 boxes        drawn frames and filled panels from ink, cross-checked
              against the rectangles the PDF itself declares
 outlines     U9 rasterizer premise: which outline format maths glyphs are
@@ -1014,6 +1016,182 @@ def m_boxes(root, n, rng, fill_max=0.10, hole="bbox", doc=None):
           f"rectangles where the PDF declares no image")
 
 
+def _unfilter_rgb(dec, w, h):
+    """Unfilter to RGB and KEEP it.
+
+    A near-copy of `pngio._decode_gray_colour`'s loop with the luma
+    reduction removed. It lives here rather than in the package because
+    the package deliberately does not retain RGB, and whether it should
+    is exactly what this measurement is for -- see `m_border`.
+    """
+    stride, row_len = w * 3 + 1, w * 3
+    prev = bytearray(row_len)
+    out = []
+    for r in range(h):
+        base = r * stride
+        ft = dec[base]
+        line = bytearray(dec[base + 1:base + stride])
+        if ft == 1:
+            for i in range(3, row_len):
+                line[i] = (line[i] + line[i - 3]) & 0xFF
+        elif ft == 2:
+            for i in range(row_len):
+                line[i] = (line[i] + prev[i]) & 0xFF
+        elif ft == 3:
+            for i in range(row_len):
+                a = line[i - 3] if i >= 3 else 0
+                line[i] = (line[i] + ((a + prev[i]) >> 1)) & 0xFF
+        elif ft == 4:
+            for i in range(row_len):
+                a = line[i - 3] if i >= 3 else 0
+                b = prev[i]
+                c = prev[i - 3] if i >= 3 else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[i] = (line[i] + (a if (pa <= pb and pa <= pc)
+                                      else (b if pb <= pc else c))) & 0xFF
+        elif ft != 0:
+            raise ValueError(f"unknown filter type {ft} on row {r}")
+        prev = line
+        out.append(bytes(line))
+    return b"".join(out)
+
+
+def _shannon(cnt):
+    tot = sum(cnt.values())
+    if tot <= 0:
+        return 0.0
+    return -sum((v / tot) * math.log2(v / tot) for v in cnt.values())
+
+
+def _border_class(cnt, *, flat_max=2, texture_min=9):
+    """Which regime a component's border-colour histogram is in.
+
+    The classes are defined by DISTINCT COLOUR COUNT, which is why
+    quantising the samples cannot sharpen them -- see `m_border`.
+    """
+    d = len(cnt)
+    if d == 0:
+        return "empty"
+    if d == 1:
+        return "flat-white" if next(iter(cnt)) == (255, 255, 255) \
+            else "flat-coloured"
+    if d == 2:
+        return "boundary"
+    if d < texture_min:
+        return "mixed"
+    return "textured"
+
+
+def m_border(root, n, rng, quantise=0, doc=None):
+    """units.md "U0/U3 border colour": what the pixels just outside a
+    component's runs say about what it is sitting on.
+
+    A run is `(line, lo, hi)`, so `(lo-1, line)` and `(hi+1, line)` are
+    addresses the adjacency test already computes: 2 samples per RUN, not
+    per pixel.
+
+    POPULATION: rendered pages of corpus documents whose pdfdrill sidecar
+    declares at least one embedded image, so both photographic and vector
+    content are present on the same page. Neutral pages are reported
+    SEPARATELY and not pooled: a neutral page has no colour to sample,
+    and pooling them would dilute every class with pages on which the
+    measurement is vacuous by construction.
+
+    SPLIT: documents sampled without replacement, then one page each, so
+    no document contributes twice.
+
+    FILTER: `--quantise` rounds each channel before counting. It defaults
+    to 0 (off) because it is measured to destroy the classes rather than
+    sharpen them; it stays an argument so that result is re-runnable.
+    """
+    docs = [d for d in sorted(root.iterdir())
+            if d.is_dir() and (d / "inspect" / "pages").is_dir()]
+    if doc:
+        docs = [d for d in docs if d.name == doc]
+    else:
+        rng.shuffle(docs)
+    picked = []
+    for d in docs:
+        drill = _drill(d)
+        if drill is None:
+            continue
+        with_img = {e["page"] for e in drill["images_layer"]}
+        seen = {}
+        for p in sorted((d / "inspect" / "pages").glob("*.png")):
+            mt = re.fullmatch(r"p(?:age-)?0*(\d+)", p.stem)
+            if mt:
+                seen.setdefault(int(mt.group(1)), p)
+        pos = [(k, p) for k, p in sorted(seen.items()) if k in with_img]
+        if not pos:
+            continue
+        picked.extend(pos if doc else [rng.choice(pos)])
+        if len(picked) >= n:
+            break
+    picked = picked[:n]
+    if not picked:
+        print("  no document with rendered pages and a declared image")
+        return
+
+    print(f"  quantise {quantise or 'off'};  {len(picked)} pages")
+    totals, t_dec, t_sw, t_bd = Counter(), 0.0, 0.0, 0.0
+    neutral_pages = colour_pages = 0
+    pairs = Counter()
+    for pno, png in picked:
+        img = read_png(png)
+        if img.neutral:
+            neutral_pages += 1
+            continue
+        colour_pages += 1
+        (w, h), dec = inflate(png)
+        t = time.perf_counter()
+        rgb = _unfilter_rgb(dec, w, h)
+        t_dec += time.perf_counter() - t
+        mask = load_mask(png, threshold=200)
+        t = time.perf_counter()
+        res = sweep(mask, conn=8, capture=Capture.GRAPH)
+        t_sw += time.perf_counter() - t
+        node = {nd.id: nd for nd in res.nodes}
+        t = time.perf_counter()
+        per = []
+        for c in res.components:
+            cnt = Counter()
+            for i in c.nodes:
+                r = node[i].as_run()
+                off = r.line * w
+                for x in (r.lo - 1, r.hi + 1):
+                    if 0 <= x < w:
+                        o = (off + x) * 3
+                        px = (rgb[o], rgb[o + 1], rgb[o + 2])
+                        if quantise:
+                            px = tuple(v // quantise * quantise for v in px)
+                        cnt[px] += 1
+            per.append(cnt)
+        t_bd += time.perf_counter() - t
+        for cnt in per:
+            k = _border_class(cnt)
+            totals[k] += 1
+            if k == "boundary":
+                (a, na), (b, nb) = cnt.most_common(2)
+                # A CLOSED frame borders its two fields about equally.
+                pairs["balanced" if min(na, nb) / max(na, nb) > 0.5
+                      else "one-sided"] += 1
+    if not colour_pages:
+        print("  every sampled page was neutral -- nothing to sample")
+        return
+    tot = sum(totals.values())
+    print(f"  {colour_pages} colour pages measured, {neutral_pages} neutral "
+          f"pages SKIPPED (no colour to sample)")
+    for k, v in totals.most_common():
+        print(f"    {v:7} ({v/tot:6.2%})  {k}")
+    print(f"  boundary blobs by field balance: {dict(pairs)}")
+    print(f"  cost per page: RGB unfilter {t_dec/colour_pages:.2f}s, "
+          f"sweep {t_sw/colour_pages:.2f}s, "
+          f"border sampling {t_bd/colour_pages:.2f}s "
+          f"(+{100*t_bd/t_sw:.0f}% on the sweep, "
+          f"{100*t_bd/(t_dec+t_sw+t_bd):.0f}% of the three)")
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -1394,6 +1572,7 @@ def m_classify(root, n, rng, split="document"):
 
 MEASUREMENTS = {
     "banding": (m_banding, 3),
+    "border": (m_border, 10),
     "boxes": (m_boxes, 8),
     "classify": (m_classify, 6),
     "convexity": (m_convexity, 2),
@@ -1423,8 +1602,12 @@ def main():
     ap.add_argument("--n", type=int, default=None,
                     help="sample size; each measurement has its own default")
     ap.add_argument("--seed", type=int, default=20260807)
+    ap.add_argument("--quantise", type=int, default=0,
+                    help="border only: round each RGB channel to this step "
+                         "before counting. 0 = off, which is the measured "
+                         "answer -- quantising destroys the classes.")
     ap.add_argument("--doc", default=None,
-                    help="boxes only: measure one named corpus document, "
+                    help="boxes/border only: measure one named corpus document, "
                          "all of its pages, instead of a random sample.")
     ap.add_argument("--fill-max", type=float, default=0.10,
                     help="boxes only: how hollow a component must be to "
@@ -1447,7 +1630,10 @@ def main():
     for name in todo:
         fn, default_n = MEASUREMENTS[name]
         print(f"\n=== {name} " + "=" * (62 - len(name)))
-        if name == "boxes":
+        if name == "border":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               quantise=args.quantise, doc=args.doc)
+        elif name == "boxes":
             fn(root, args.n or default_n, random.Random(args.seed),
                fill_max=args.fill_max, hole=args.hole_measure, doc=args.doc)
         elif name == "classify":

@@ -1219,6 +1219,115 @@ deferred raster-region detection is the prerequisite, and its
 active-component ceiling is what should fire on such a page rather than
 a wrong box tree.
 
+### Border colour per blob — measured 2026-08-09, `measure.py border`
+
+An external proposal: sample the pixels immediately outside each run —
+`(lo-1, line)` and `(hi+1, line)`, addresses the adjacency test already
+computes — and classify a component by the entropy of the resulting
+histogram. Measured before building, as its own §6 asked.
+
+**The mechanism is real, and sharper than reported.** A figure frame
+comes out at exactly two border colours, the tint and the page:
+
+```
+1029x561  1116 runs  distinct 2  rgb(254,250,224) x1122 | rgb(255,255,255) x1110
+1017x562  1116 runs  distinct 2  rgb(250,237,205) x1124 | rgb(255,255,255) x1108
+1024x562  1116 runs  distinct 2  rgb(254,250,224) x1124 | rgb(255,255,255) x1108
+```
+
+The counts are **near-equal**, and that is the signal: a *closed* frame
+borders both fields about equally. The proposal printed `x404 | x3` for
+the same objects, which is a 133:1 split and would give a Shannon
+entropy of 0.06 rather than the 1.00 it also reported — the two halves
+of its own example disagree. The balanced split is what makes H = 1.00
+exactly, and `m_border` reports the balance as its own count because it,
+not the colour pair, is what distinguishes a frame from a stray edge.
+
+#### Four claims, measured
+
+**1. Cost — right number, wrong denominator.** Sampling is +26% to +28%
+on the sweep, close to the +32% claimed. But sampling needs an RGB
+buffer, and `pngio` reduces to luma and discards it:
+
+| per colour page (3400 x 4400) | time |
+|---|---|
+| RGB unfilter | 5.83–6.79 s |
+| sweep | 0.75–0.92 s |
+| border sampling | 0.21–0.24 s |
+
+Sampling is **3% of the three operations**. The cost that matters is
+retaining RGB, and it is not uniform: on the *colour* path `pngio`
+already unfilters RGB per row and throws it away, so the marginal cost
+is memory (3x the page buffer). On the **neutral** path it unfilters ONE
+channel by SWAR and never forms RGB at all, so retaining it there means
+roughly **3x the decode** — and decode is 85–95% of per-page work.
+Border colour on a neutral page is grey by construction and says
+nothing. **So the feature must be conditional on `neutral is False`,
+where it is also the only place it can pay.** One page in twelve sampled
+was neutral and `m_border` skips it rather than pooling it.
+
+**2. Quantisation — REFUTED, it does the opposite.** The proposal
+suggested rounding each channel to 8 or 16 to absorb JPEG noise, "which
+would sharpen every class". Measured on the same page:
+
+| quantise | textured | boundary | flat-white |
+|---|---|---|---|
+| off | 2653 | 61 | 969 |
+| 8 | 610 | 84 | 977 |
+| 16 | 152 | 165 | 992 |
+| 32 | **25** | **2374** | 1062 |
+
+At 32 the textured class has collapsed by 99% and 2,374 blobs have been
+promoted to clean two-colour "boundaries" — quantisation makes
+photographic regions look like frames, which destroys the halftone
+detector the proposal's §3 is built on. The reason is structural: the
+classes are defined by *distinct colour count*, and quantisation reduces
+that monotonically, so it can only compress the classes toward the flat
+end. It cannot sharpen them.
+
+The targeted variant — snap only near-white to white, leave the rest
+exact — is milder but still net-negative: at eps=4 it gains 2 blobs for
+flat-white and pulls 101 out of textured. The JPEG-noise contamination
+it was meant to fix is real but two orders of magnitude smaller than the
+damage. **Sample exact RGB.** `--quantise` defaults to 0 and stays an
+argument so this stays re-runnable.
+
+**3. "A frame knows what it separates" — true, but two colours is not a
+frame test.** Over the five image-bearing pages of the audited document,
+the `boundary` class holds **6,319 blobs, 22.85% of all components**.
+Any small glyph straddling two flat fields lands in it. Border colour
+says *what* a frame separates; it does not say a blob *is* one. The
+frame test is still `fill < 0.10` from `measure.py boxes`, and border
+colour is what should be attached to its output.
+
+**4. The flat-coloured class is not "annotation over a picture".**
+Rendered, the 70 such blobs on page 6 are text glyphs and fragments on a
+tinted panel — sizes 1x1, 5x1, 6x18, 7x7, 8x8, and a 31x20 letter
+cluster. The class is really *ink on a flat non-white field*, which
+includes body text inside a coloured box. That is still useful, but the
+stated separation holds only against **textured** content: a vector
+picture with flat fills gives its own ink H ≈ 0 too, so annotation and
+picture are indistinguishable there. The claim is sound for photographs
+and screens, not for figures in general.
+
+#### The population correction
+
+The four-class table came from one page. Across **11 colour pages from
+11 different documents**, all carrying at least one declared image:
+
+| class | audited page 6 | 11-document sample |
+|---|---|---|
+| flat-white | 26.74% | **89.87%** |
+| textured | 27.57% | **2.56%** |
+| boundary | 22.85% | 0.85% |
+| mixed | 18.46% | 2.61% |
+| flat-coloured | 4.39% | 4.11% |
+
+Every class is present and non-empty in both, so the **mechanism
+generalises**; the proportions do not. A page dense with tinted panels
+is not the corpus. Any threshold tuned on the first column would be
+tuned on a 10x over-representation of textured ground.
+
 ### `nest()` is 15x slower than the two sweeps it is equivalent to
 
 The audit's C2, reproduced on page 8 of the same document (3400 x 4400):

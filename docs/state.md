@@ -196,6 +196,14 @@ Reproduced in `measure.py boxes`; full record in `units.md`.
   Recorded, not changed.
 - **`Component.root` != `Component.nodes[0]`** on 1293 of 1310 real
   components. Now pinned by a test; see the conventions in `CLAUDE.md`.
+- **Border colour per blob works, but not as costed or classified.**
+  Sampling the 2 pixels outside each run is +28% on the sweep and 3% of
+  decode+sweep+sample — but it needs RGB, which `pngio` discards, and
+  retaining it costs ~3x decode on the NEUTRAL fast path where the
+  answer is grey anyway. Quantising the samples was **refuted**: at
+  step 32 the textured class collapses 2653 -> 25 and 2374 blobs
+  promote to false "boundaries". And 2 colours is not a frame test —
+  22.85% of blobs land there. `measure.py border`.
 - **MathPix ignores non-white backgrounds** — 0 regions inside the
   tinted panels of pages 2 and 4, but 89 of 104 inside page 7's
   white-background screenshot. A blind spot with a stateable trigger,
