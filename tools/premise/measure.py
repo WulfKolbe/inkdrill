@@ -21,6 +21,8 @@ skew         projection-profile skew of scanned pages
 premise      hole count and signature stability vs pdfminer ground truth
 contraction  RAG runs -> Reeb arcs reduction on real page ink
 rotation     signature survival under resampled rotation
+outlines     U9 rasterizer premise: which outline format maths glyphs are
+             in, and whether it is reachable without a PDF parser
 """
 
 from __future__ import annotations
@@ -44,7 +46,8 @@ from inkdrill.aggregate import component_moments, moments_of_mask  # noqa: E402
 from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: E402
 from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # noqa: E402
-                           is_math_family)
+                           family_of, is_math_family,
+                           normalise as fnormalise)
 from inkdrill.classify import (Channels, Classifier, Template,  # noqa: E402
                                confusion as classify_confusion, normalise)
 from inkdrill.coverage import Box, CoverageClass, Region, check  # noqa: E402
@@ -622,6 +625,175 @@ def m_fonts(root, n, rng):
         print("  MATHS glyphs: none seen in this sample")
 
 
+def _kpsewhich(names):
+    """Where the TeX tree keeps these font files, or None.
+
+    One subprocess per call, several candidate filenames per call;
+    kpsewhich prints one line per name it FINDS and nothing for the rest,
+    so the first line is the first candidate that exists. Callers must
+    therefore pass candidates in preference order and must not try to
+    join the output back to the input list positionally.
+    """
+    import subprocess
+    try:
+        out = subprocess.run(["kpsewhich", *names], capture_output=True,
+                             text=True, timeout=20).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.split("\n")[0] or None if out else None
+
+
+def m_outlines(root, n, rng):
+    """U9 rasterizer premise check: for the glyphs a maths classifier
+    must template, WHICH outline format is the program in, and is that
+    program reachable without writing a PDF parser?
+
+    Two routes are open and they are different modules:
+
+      A  extract the font program from the PDF -- needs an xref walker,
+         an object-stream inflater, and then one parser per format
+      B  find the same font in the TeX tree by name -- needs no PDF
+         parsing at all, and subsetting removes glyphs without altering
+         the outlines of the ones that remain
+
+    POPULATION: glyph instances, not font entries and not documents.
+    U9's inventory already showed those three denominators disagree by
+    78 points on the same corpus. SPLIT: documents sampled without
+    replacement; every glyph instance of a sampled document counts.
+    FILTER: glyphs whose `text` is blank are dropped (they are advance
+    records, not ink); the count kept and dropped is printed.
+    """
+    cands = [(cj.parent, cj, list(cj.parent.glob("*.pdf"))[0])
+             for cj in sorted(root.glob("*/*.chars.json"))
+             if list(cj.parent.glob("*.pdf"))]
+    if not cands:
+        print("  no documents with both chars.json and a pdf")
+        return
+    if _kpsewhich(["cmr10.pfb"]) is None:
+        print("  NOTE: kpsewhich found nothing -- route B numbers below "
+              "measure this machine's TeX tree, not the corpus")
+
+    kind_all, kind_math = Counter(), Counter()
+    disk_math, disk_all = Counter(), Counter()
+    missing_families = Counter()
+    kept_fams, drop_fams = Counter(), Counter()
+    joint = Counter()
+    ndoc = kept = dropped = 0
+    raw_ok = raw_docs = 0
+    where = {}
+
+    for d, cj, pdf in rng.sample(cands, min(n, len(cands))):
+        try:
+            recs = inventory(pdf)
+            data = json.load(cj.open())
+        except Exception as exc:
+            print(f"  skip {d.name[:26]}: {exc!r}"[:90])
+            continue
+        by_base = {}
+        for r in recs:
+            # An embedded record beats a non-embedded one of the same
+            # base name, exactly as font.resolve does (G4).
+            cur = by_base.get(r.base_name)
+            if cur is None or (r.embedded and not cur.embedded):
+                by_base[r.base_name] = r
+        names = Counter()
+        for pg in data["pages"]:
+            for ch in pg["chars"]:
+                if ch.get("text", "").strip():
+                    names[ch["fontname"]] += 1
+                else:
+                    dropped += 1
+        if not names:
+            continue
+        ndoc += 1
+
+        # Route A proxy: are the font-program streams visible in the
+        # uncompressed object layer? If /FontFile* tokens are fewer than
+        # the embedded fonts, the descriptors sit inside object streams
+        # and route A needs an ObjStm decoder before it can even look.
+        try:
+            blob = pdf.read_bytes()
+        except OSError:
+            blob = b""
+        if blob:
+            raw_docs += 1
+            seen = sum(blob.count(b"/FontFile" + s) for s in (b"", b"2", b"3"))
+            n_emb = sum(1 for r in recs if r.embedded)
+            raw_ok += seen >= n_emb > 0
+
+        for name, count in names.items():
+            base = fnormalise(name)
+            rec = by_base.get(base)
+            kind = rec.kind.value if rec else "unresolved"
+            math = is_math_family(name)
+            kept += count
+            kind_all[kind] += count
+            if math:
+                kind_math[kind] += count
+            if base not in where:
+                stem = base.split(",")[0].lower()
+                where[base] = _kpsewhich([stem + e for e in
+                                          (".pfb", ".otf", ".ttf", ".pfa")])
+            hit = where[base] is not None
+            disk_all[hit] += count
+            (kept_fams if math else drop_fams)[family_of(name)] += count
+            if math:
+                disk_math[hit] += count
+                # The format ON DISK is what a route-B parser must read,
+                # and it need not match what the PDF embedded: a
+                # producer may ship Type 1C for a font the TeX tree
+                # keeps as a .pfb. Record both or the parser count is a
+                # guess.
+                ext = pathlib.Path(where[base]).suffix if hit else "-"
+                joint[(kind, ext)] += count
+                if not hit:
+                    missing_families[base] += count
+
+    if not kept:
+        print("  no glyphs")
+        return
+    m = sum(kind_math.values())
+    print(f"  {ndoc} documents, {kept} glyph instances kept, "
+          f"{dropped} blank dropped")
+    print(f"  MATHS glyph instances {m} ({m/kept:.2%} of kept)")
+
+    def table(label, c, total):
+        print(f"  {label} (weighted by glyph instance, n={total}):")
+        for k, v in c.most_common():
+            print(f"    {v:8} ({v/total:6.2%})  {k}")
+
+    table("outline program format, ALL glyphs", kind_all, kept)
+    if m:
+        table("outline program format, MATHS glyphs", kind_math, m)
+        print(f"  route B -- font present in the TeX tree: "
+              f"{disk_math[True]/m:.2%} of maths glyph instances "
+              f"({disk_math[True]}/{m})")
+        if missing_families:
+            print("    maths fonts NOT on disk: " + ", ".join(
+                f"{b} {c}" for b, c in missing_families.most_common(6)))
+        # The two routes only substitute for each other if route B's
+        # hits are spread across formats. If route B covers exactly the
+        # formats route A would have handled, both are still needed and
+        # the marginals above are misleading.
+        print("  MATHS joint -- format in PDF x format on disk (the "
+              "marginals do not decide this):")
+        for (k, ext), v in sorted(joint.items(), key=lambda kv: -kv[1]):
+            print(f"    {v:8} ({v/m:6.2%})  {k:<14} -> "
+                  f"{ext if ext != '-' else 'NOT on disk'}")
+    print(f"  route B -- font present in the TeX tree, all glyphs: "
+          f"{disk_all[True]/kept:.2%}")
+    if raw_docs:
+        print(f"  route A proxy -- /FontFile* visible outside object "
+              f"streams: {raw_ok}/{raw_docs} documents")
+    # is_math_family is a fixed list, so it DEFINES the population above.
+    # Print both sides of it: a maths family missing from the list would
+    # sit in the dropped column and silently narrow every figure here.
+    print("  filter -- families is_math_family KEPT: " + ", ".join(
+        f"{f} {c}" for f, c in kept_fams.most_common(8)))
+    print("  filter -- families it DROPPED (check for maths among them): "
+          + ", ".join(f"{f} {c}" for f, c in drop_fams.most_common(10)))
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -1005,6 +1177,7 @@ MEASUREMENTS = {
     "classify": (m_classify, 6),
     "convexity": (m_convexity, 2),
     "missed": (m_missed, 8),
+    "outlines": (m_outlines, 30),
     "residuals": (m_residuals, 12),
     "fonts": (m_fonts, 25),
     "schedcost": (m_schedcost, 8),
