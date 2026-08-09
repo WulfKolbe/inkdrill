@@ -66,7 +66,8 @@ structurally cannot do.
 | U8 | `sched` | complete — band tier deliberately not built |
 | U9 | `font` | inventory: complete |
 | U9 | `type1` | outlines: font -> charstring bytes |
-| U9 | `charstring` | charstrings -> closed contours; **scan conversion remains** |
+| U9 | `charstring` | charstrings -> closed contours |
+| U9 | `scan` | contours -> InkMask — **rasterizer complete** |
 | U10 | `gold` | complete |
 | U11 | `coverage` | complete |
 | U12 | `domains` | complete |

@@ -136,25 +136,41 @@ class T9_11_Paths(unittest.TestCase):
         self.assertTrue(g.is_empty)
 
 
+# Distinguishable subroutines. A single-element `subrs=[sub]` cannot
+# verify that the interpreter used the number it popped -- an
+# implementation that always called subr 0 would pass every test built
+# on one. Each of these draws a different distance, so calling the wrong
+# one is visible. That is the same fixture-degeneracy that let
+# `test_hint_replacement...` pass against an interpreter which pushed
+# nothing: the fixture, not the assertion, was the hole.
+SUBRS = [cs(v, 0, b"\x05", b"\x0b") for v in (11, 22, 33, 44, 55)]
+
+
 class T9_12_Subroutines(unittest.TestCase):
     """callsubr, return, and G5's depth bound."""
 
     def test_a_subr_draws_into_the_caller(self):
-        sub = cs(100, 0, b"\x05", b"\x0b")
-        code = HSBW + cs(0, 0, b"\x15", 0, b"\x0a") + ENDCHAR
-        g = run(font({"A": code}, subrs=[sub]), code)
-        self.assertIn((100.0, 0.0), [(s.x, s.y) for s in g.contours[0]])
+        code = HSBW + cs(0, 0, b"\x15", 3, b"\x0a") + ENDCHAR
+        g = run(font({"A": code}, subrs=SUBRS), code)
+        self.assertIn((44.0, 0.0), [(s.x, s.y) for s in g.contours[0]])
+
+    def test_each_subr_number_selects_a_different_subr(self):
+        seen = []
+        for k, want in enumerate((11.0, 22.0, 33.0, 44.0, 55.0)):
+            code = HSBW + cs(0, 0, b"\x15", k, b"\x0a") + ENDCHAR
+            g = run(font({"A": code}, subrs=SUBRS), code)
+            seen.append(g.contours[0][1].x)
+        self.assertEqual(seen, [11.0, 22.0, 33.0, 44.0, 55.0])
 
     def test_return_resumes_the_caller(self):
-        sub = cs(50, 0, b"\x05", b"\x0b")
-        code = HSBW + cs(0, 0, b"\x15", 0, b"\x0a", 0, 70, b"\x05") + ENDCHAR
-        g = run(font({"A": code}, subrs=[sub]), code)
-        self.assertIn((50.0, 70.0), [(s.x, s.y) for s in g.contours[0]])
+        code = HSBW + cs(0, 0, b"\x15", 1, b"\x0a", 0, 70, b"\x05") + ENDCHAR
+        g = run(font({"A": code}, subrs=SUBRS), code)
+        self.assertIn((22.0, 70.0), [(s.x, s.y) for s in g.contours[0]])
 
     def test_an_out_of_range_subr_raises(self):
         code = HSBW + cs(0, 0, b"\x15", 9, b"\x0a") + ENDCHAR
         with self.assertRaises(CharstringError):
-            run(font({"A": code}, subrs=[b"\x0b"]), code)
+            run(font({"A": code}, subrs=SUBRS), code)
 
     def test_runaway_recursion_raises_rather_than_exhausting_the_stack(self):
         sub = cs(0, b"\x0a", b"\x0b")            # subr 0 calls itself
@@ -165,9 +181,10 @@ class T9_12_Subroutines(unittest.TestCase):
     def test_a_charstring_whose_hsbw_is_inside_a_subr_still_works(self):
         # The `callsubr` class first_ops could not verify: 2.166% of the
         # TeX tree opens this way, and only the interpreter can settle it.
-        sub = HSBW + b"\x0b"
-        code = cs(0, b"\x0a") + cs(0, 0, b"\x15", 10, 0, b"\x05") + ENDCHAR
-        g = run(font({"A": code}, subrs=[sub]), code)
+        code = cs(2, b"\x0a") + cs(0, 0, b"\x15", 10, 0, b"\x05") + ENDCHAR
+        subrs = list(SUBRS)
+        subrs[2] = HSBW + b"\x0b"
+        g = run(font({"A": code}, subrs=subrs), code)
         self.assertEqual(g.width, 500)
 
 

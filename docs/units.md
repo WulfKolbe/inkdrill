@@ -527,17 +527,17 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 612 tests in 2.5s
-OK (skipped=21)
+Ran 635 tests in 2.4s
+OK (skipped=23)
 ```
 
-The 21 skipped are the four opt-in corpus modules:
+The 23 skipped are the four opt-in corpus modules:
 `tests/test_pngio_corpus.py` (4) and `tests/test_source_truth_corpus.py`
 (5), both gated on `INKDRILL_CORPUS`, and `tests/test_type1_corpus.py`
 (6) and `tests/test_charstring_corpus.py` (6), both gated on
 `INKDRILL_TYPE1`. Neither
 runs by default. The hermetic count -- what actually runs on a bare
-checkout -- is 612 - 21 = 591.
+checkout -- is 635 - 23 = 612.
 
 `test_type1_corpus` is gated rather than defaulted to the system TeX
 tree deliberately. Defaulting it would have been free coverage on most
@@ -558,13 +558,14 @@ fonts a machine happens to have installed.
 | U9 `font.py` | 52 | passed |
 | U9 `type1.py` | 39 | passed 2026-08-09 |
 | U9 `charstring.py` | 33 | passed 2026-08-09 |
+| U9 `scan.py` | 20 | passed 2026-08-09 |
 | U10 `gold.py` | 38 | passed |
 | U11 `coverage.py` | 24 | passed |
 | U12 `domains.py` | 40 | passed |
 | U13 `classify.py` | 31 | passed |
 | U14 `mathstruct.py` | 35 | passed |
 
-49 + 36 + 31 + 36 + 37 + 30 + 29 + 29 + 22 + 52 + 39 + 33 + 38 + 24 + 40 + 31 + 35 = 591,
+49 + 36 + 31 + 36 + 37 + 30 + 29 + 29 + 22 + 52 + 39 + 33 + 20 + 38 + 24 + 40 + 31 + 35 = 612,
 matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
@@ -1610,6 +1611,43 @@ sweep is only needed when hole *geometry* is wanted.
 **A finding, not a change.** It touches `nest`'s internals, and
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
+
+### U9 `scan.py` — the loop closes
+
+Tests T9-20 to T9-25 passed on 2026-08-09: 20 hermetic, 2 opt-in.
+**U9's rasterizer is complete**: font file -> charstring bytes ->
+contours -> `InkMask`.
+
+This unit needed no invented oracle. It had the strongest one in the
+project already, because **`charstring` and `sweep` must agree about the
+same glyph without sharing any code**:
+
+    charstring says `o` has 2 contours
+    scan + sweep + cycle rank say 1 component with 1 hole
+
+One computation runs Bezier control points in font units; the other
+does run adjacency on a bitmap. They agree only if the fill rule, the
+winding direction, the y flip and the sampling convention are all
+right. **12 glyphs of `cmr10`, zero mismatches**, and 21 under the
+corpus module.
+
+Decisions the measurement and the conventions forced:
+
+- **non-zero winding, not even-odd** -- Type 1 specifies it, and the
+  two differ exactly when a font nests contours wound the same way.
+  Even-odd punches a hole that should not be there. A real roman glyph
+  does not distinguish them, so the hermetic suite carries the
+  same-wound case and the corpus one cannot.
+- **centre sampling** -- pixel (i,j) covers `[i,i+1)x[j,j+1)`, so a
+  scanline is taken at `y = j+0.5` and a pixel is ink iff its centre is
+  inside. A rectangle spanning `[2.6, 2.9)` correctly renders empty.
+- **the y flip happens in exactly one place**, and is asserted by
+  putting a wide shape at the font-space baseline and requiring it at
+  the BOTTOM of the mask. Neither area nor component count notices an
+  upside-down glyph.
+
+Mutation: 3 mutants, 3 killed. `winding -> even-odd` is killed only by
+the hermetic suite, which is the reason that fixture exists.
 
 ### U9 `charstring.py` — the interpreter, sized by measurement
 

@@ -36,7 +36,7 @@ classification and the structure tree.
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 612, of which 21 skip
+python3 -m unittest discover -s tests -t .   # full suite: 635, of which 23 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -151,6 +151,12 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   `measure.py charstrings`; `seac` and `callothersubr` are built because
   the alternative is a plausible wrong glyph. 119,800 real glyphs run
   with 0 errors and 0 unclosed contours. Scan conversion is NOT here.
+- **`inkdrill/scan.py`** — contours to an `InkMask`. `flatten`,
+  `rasterize`, `render`. Non-zero winding (Type 1's rule), centre
+  sampling per `raster`'s pixel convention, one y flip. **Completes
+  U9's rasterizer.** Its oracle is that `charstring`'s contour count
+  equals `sweep`'s components + holes — two computations sharing no
+  code.
 - **`inkdrill/gold.py`** — pdfminer alignment. `page_transform`, `match`,
   `to_coco`. The four residual classes are the product, not the
   leftovers: only 66.9% of real assignments are 1:1. Matches on component
@@ -330,13 +336,12 @@ same file and neither is wrong.
 Three things are missing on purpose, each with the measurement that
 decided it. Do not "fix" them without re-taking that measurement.
 
-- **U9's charstring interpreter and scan conversion.** `type1.py` now
-  gets from a font file to a glyph's charstring bytes; running that
-  charstring to contours and scan-converting them is not built. This is
-  the **highest-value next step** — see `docs/state.md` §5. It unblocks
-  maths classification, which unblocks U14's structure tree. Note the
-  route: outlines come from the TeX tree, NOT from the PDF, and CFF is
-  deliberately absent — `measure.py outlines` has the numbers.
+- **Maths templates and maths classification.** U9's rasterizer is now
+  complete (`type1` -> `charstring` -> `scan`), so the templates are
+  reachable and the next step is to measure classification on them.
+  Note the route: outlines come from the TeX tree, NOT from the PDF,
+  and it reaches **0 of 19** fonts on a Word document — see the
+  Infineon counterexample.
 - **U14's structure tree, fences, big operators, LaTeX.** All need symbol
   identity for `∑ ∫ ( [`, and U13's measured population contained no
   maths symbols at all.

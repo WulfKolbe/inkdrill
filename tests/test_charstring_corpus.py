@@ -29,6 +29,8 @@ import random
 import unittest
 
 from inkdrill.charstring import CharstringError, outline, run
+from inkdrill.scan import render
+from inkdrill.sweep import Capture, sweep
 from inkdrill.type1 import load
 
 _ROOT = os.environ.get("INKDRILL_TYPE1")
@@ -169,6 +171,52 @@ class T9_19_LetterformTopology(unittest.TestCase):
         self.assertTrue(outer[0] < inner[0] and outer[1] < inner[1]
                         and outer[2] > inner[2] and outer[3] > inner[3],
                         f"inner {inner} not inside outer {outer}")
+
+
+@unittest.skipUnless(_ROMAN_PATH, f"{_ROMAN} not found under INKDRILL_TYPE1")
+class T9_25_ClosingOracle(unittest.TestCase):
+    """`charstring` and `sweep` agree about the same glyph (scan G7).
+
+    Contour count from Bezier control points in font units, against
+    components plus holes from run adjacency on a bitmap. The two share
+    no code, and they agree only if the fill rule, the winding
+    direction, the y flip and the sampling convention are ALL right --
+    a sign error in any one breaks it.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.font = load(_ROMAN_PATH)
+
+    def test_contours_equal_components_plus_holes(self):
+        wrong, checked = [], 0
+        for name in _TOPOLOGY:
+            if name not in self.font.charstrings:
+                continue
+            g = outline(self.font, name)
+            mask, _ = render(g, self.font.units_per_em, 64)
+            res = sweep(mask, conn=8, capture=Capture.GRAPH)
+            got = len(res.components) + sum(c.cycle_count
+                                            for c in res.components)
+            checked += 1
+            if got != len(g.contours):
+                wrong.append((name, len(g.contours), got))
+        self.assertGreaterEqual(checked, 15)
+        self.assertEqual(wrong, [])
+
+    def test_the_identity_survives_a_small_raster(self):
+        """At 24 px a counter can close up; that is a resolution limit,
+        not a bug, so this asserts only that it does not go the other
+        way -- ink never gains holes as it shrinks."""
+        for name in ("o", "B", "eight"):
+            if name not in self.font.charstrings:
+                continue
+            g = outline(self.font, name)
+            mask, _ = render(g, self.font.units_per_em, 24)
+            res = sweep(mask, conn=8, capture=Capture.GRAPH)
+            got = len(res.components) + sum(c.cycle_count
+                                            for c in res.components)
+            self.assertLessEqual(got, len(g.contours), name)
 
 
 if __name__ == "__main__":
