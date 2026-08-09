@@ -27,6 +27,7 @@ border       what the pixels just outside a component's runs say about
              the field it sits on -- 2 samples per run
 boxes        drawn frames and filled panels from ink, cross-checked
              against the rectangles the PDF itself declares
+maths        THE measurement: maths-symbol classification, never done
 rasterisers  U9->U13 premise: template (scan) vs query (Ghostscript)
 charstrings  U9 interpreter premise: which Type 1 operators real fonts
              actually use, and which are subsystems rather than cases
@@ -1603,6 +1604,155 @@ def m_rasterisers(root, n, rng, doc=None):
     print("  sub-pixel bias must do as strokes thicken relative to it.")
 
 
+MATH_FONTS = ("cmmi10.pfb", "cmsy10.pfb", "cmex10.pfb",
+              "msam10.pfb", "msbm10.pfb")
+
+
+def _template_of(mask, label):
+    from inkdrill.aggregate import moments_of_mask
+    from inkdrill.reeb import graph_of, signature as reeb_signature
+    if mask is None or mask.width == 0 or mask.height == 0:
+        return None
+    sig = reeb_signature(graph_of(mask))
+    mo = moments_of_mask(mask)
+    w, h = mask.width, mask.height
+    return Template(label, normalise(mask),
+                    (sig.cycles, sig.births, sig.merges, sig.splits),
+                    (w / h, float(h), float(w), mo.elongation))
+
+
+def m_maths(root, n, rng, doc=None):
+    """**The measurement this whole chain was built for.**
+
+    Every accuracy figure in this repository is body text. U13's class
+    filter (>=12 instances) excluded every maths symbol and the only
+    non-ASCII survivors were the quotes and the fi ligature. So maths
+    classification has never been measured, and two units are partial on
+    it.
+
+    PROTOCOL: templates rendered from the FONT by
+    `type1 -> charstring -> scan`; queries rendered from the same font by
+    GHOSTSCRIPT. That is the real deployment shape -- a template comes
+    from the document's own font and a query comes from the page -- and
+    `measure.py rasterisers` established what the two paths do differ
+    by: an 18.8% ink bias at body-text size and 15 bits in 1024.
+
+    POPULATION: every glyph of the TeX maths families, so the class
+    count is in the hundreds rather than U13's 23. **State the class
+    count beside the accuracy** -- a 300-class problem and a 23-class
+    problem are not comparable, and chance alone differs by an order of
+    magnitude.
+
+    WHAT THIS DOES NOT TEST: the same font is on both sides, so this is
+    cross-RASTERISER, not cross-font. It also has no page noise, no
+    neighbouring ink and no baseline variation. It is the ceiling, and a
+    figure measured here is an upper bound on a real page.
+
+    THE RESIDUAL IS THE PRODUCT. A wrong answer that the signature
+    channel REJECTS is a detected error, which is what this project is
+    for; a wrong answer it accepts is the dangerous class. Both are
+    reported, never one accuracy.
+    """
+    import subprocess
+    from inkdrill.type1 import _split_pfb
+    tree = pathlib.Path(os.environ.get("INKDRILL_TYPE1",
+                                       "/usr/share/texmf-dist/fonts/type1"))
+    if not tree.is_dir():
+        print(f"  no Type 1 tree at {tree}; set INKDRILL_TYPE1")
+        return
+    pt, dpi = 10, 400
+    px_em = pt * dpi / 72.0
+    tmp = pathlib.Path(os.environ.get("TMPDIR", "/tmp"))
+
+    templates, queries = [], []
+    for fname in MATH_FONTS:
+        src = next(tree.rglob(fname), None)
+        if src is None:
+            continue
+        f = t1_load(src)
+        ps_name = (f.name or src.stem).upper()
+        clear, encp = _split_pfb(src.read_bytes())
+        font_ps = clear + encp + b"\n" + b"0" * 512 + b"\ncleartomark\n"
+        names = sorted(f.charstrings)
+        if n and len(names) > n:
+            names = rng.sample(names, n)
+        made = 0
+        for nm in names:
+            if nm == ".notdef":
+                continue
+            label = f"{src.stem}:{nm}"
+            try:
+                g = cs_outline(f, nm)
+            except Exception:
+                continue
+            if g.is_empty:
+                continue
+            mask, _ = scan_render(g, f.units_per_em, px_em)
+            t = _template_of(mask, label)
+            if t is None:
+                continue
+            body = ("\n/%s findfont %d scalefont setfont\n30 30 moveto\n"
+                    "/%s glyphshow\nshowpage\n" % (ps_name, pt, nm)).encode()
+            psf = tmp / "inkdrill_m.ps"
+            png = tmp / "inkdrill_m.png"
+            psf.write_bytes(b"%!PS\n" + font_ps + body)
+            r = subprocess.run(
+                ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=png16m",
+                 f"-r{dpi}", "-g400x400", "-dTextAlphaBits=4",
+                 "-dGraphicsAlphaBits=4", f"-sOutputFile={png}", str(psf)],
+                capture_output=True)
+            if r.returncode or not png.exists():
+                continue
+            got = components(load_mask(png, threshold=200),
+                             min_area=4, min_side=2)
+            qm = max((m for _, m in got), key=lambda m: m.ink_count,
+                     default=None)
+            q = _template_of(qm, label)
+            if q is None:
+                continue
+            templates.append(t)
+            queries.append(q)
+            made += 1
+        print(f"  {src.stem:10} {made} glyphs")
+    if not queries:
+        print("  nothing rendered; is ghostscript on PATH?")
+        return
+
+    labels = {t.label for t in templates}
+    print(f"  {len(templates)} templates, {len(queries)} queries, "
+          f"{len(labels)} CLASSES (chance = {1/len(labels):.3%})")
+    for name, ch in (("bitmap only", Channels(1.0, 0.0, 0.0)),
+                     ("extents only", Channels(0.0, 0.0, 1.0)),
+                     ("signature only", Channels(0.0, 1.0, 0.0)),
+                     ("all channels", Channels(1.0, 1.0, 1.0))):
+        clf = Classifier(channels=ch)
+        for t in templates:
+            clf.add(t)
+        right = detected = missed = 0
+        worst = Counter()
+        for q in queries:
+            pred = clf.classify(q)
+            if pred.label == q.label:
+                right += 1
+            else:
+                # A wrong answer the signature REJECTS is a DETECTED
+                # error -- the product. One it accepts is the dangerous
+                # class.
+                if clf.agrees(q, pred.label):
+                    missed += 1
+                    worst[(q.label, pred.label)] += 1
+                else:
+                    detected += 1
+        tot = len(queries)
+        print(f"    {name:15} {right/tot:7.2%}  "
+              f"wrong-and-detected {detected/tot:6.2%}  "
+              f"WRONG AND ACCEPTED {missed/tot:6.2%}")
+        if name == "all channels" and worst:
+            print("      most dangerous confusions (wrong, accepted):")
+            for (a, b), k in worst.most_common(6):
+                print(f"        {a}  read as  {b}   x{k}")
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -1986,6 +2136,7 @@ MEASUREMENTS = {
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
+    "maths": (m_maths, 0),
     "rasterisers": (m_rasterisers, 20),
     "white": (m_white, 8),
     "classify": (m_classify, 6),

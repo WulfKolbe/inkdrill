@@ -151,11 +151,21 @@ flex) and **scan conversion** to an `InkMask`. The 2.166% of charstrings
 that open `n callsubr` are exactly the ones only the interpreter can
 verify, so it also closes the parser's own oracle.
 
-**The U9 rasterizer is the unblocking move.** It also inherits the
+~~**The U9 rasterizer is the unblocking move.** It also inherits the
 self-validating property the design was built for: a query matched to a
 template must agree on hole count and Reeb signature, so a mismatch is a
-*detected* error rather than a confident wrong answer — which matters far
-more for `∑` vs `Σ` than for `e` vs `c`.
+*detected* error rather than a confident wrong answer.~~
+
+**Built, and the second half is REFUTED.** `measure.py maths`, the
+first maths measurement in the repository: over 647 classes from five
+TeX maths families, all channels read **70.94% correct, 2.01% wrong and
+detected, 27.05% wrong and ACCEPTED.** The verifier catches 6.9% of
+wrong answers. The signature is a 4-tuple of small counts, so hundreds
+of maths glyphs share one and `agrees` accepts 91.19% of everything —
+**a verifier must be finer than what it verifies, and this one is
+coarser.** More than a quarter of queries get a confident wrong answer
+that nothing flags, which is precisely the failure this project exists
+to prevent.
 
 **That note is now measured and was wrong.** `measure.py rasterisers`
 compared `scan` against Ghostscript on `cmr10` at four sizes: topology

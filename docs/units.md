@@ -1612,6 +1612,75 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### Maths classification — measured 2026-08-09, `measure.py maths`
+
+**The measurement this whole chain was built for**, and the first in
+the repository that is not body text. U13's class filter (>=12
+instances) excluded every maths symbol; the only non-ASCII survivors
+were the quotes and the fi ligature. So this had never been measured,
+and two units were partial on it.
+
+PROTOCOL: templates rendered from the font by `type1 -> charstring ->
+scan`; queries rendered from the same font by Ghostscript. That is the
+deployment shape — a template comes from the document's own font, a
+query from the page — and `measure.py rasterisers` established what the
+two paths differ by.
+
+POPULATION: every glyph of `cmmi10 cmsy10 cmex10 msam10 msbm10`.
+
+| channel | correct | wrong, DETECTED | **wrong, ACCEPTED** |
+|---|---|---|---|
+| bitmap only | 62.60% | 2.78% | 34.62% |
+| extents only | 29.83% | 47.14% | 23.03% |
+| signature only | 6.80% | 2.01% | 91.19% |
+| **all channels** | **70.94%** | **2.01%** | **27.05%** |
+
+**647 classes, chance 0.155%.**
+
+#### The class count is the headline, not the accuracy
+
+Sampling 40 glyphs per font instead of all of them gives 197 classes
+and reads **76.65% / 19.29%** — six points of accuracy and eight points
+of accepted error, bought purely by shrinking the problem. Quote the
+class count beside the number or the number means nothing: U13's 94% is
+a 23-class problem and this is a 647-class one.
+
+#### The self-validating property does NOT hold here — REFUTED
+
+The design rests on a claim stated in `state.md` §5: *"a query matched
+to a template must agree on hole count and Reeb signature, so a
+mismatch is a detected error rather than a confident wrong answer."*
+
+Measured, **it is not so.** Of 29.06% total error, only 2.01% is
+detected — the verifier catches **6.9% of wrong answers** and accepts
+the other 93.1%. More than a quarter of all queries receive a
+confidently wrong answer that nothing flags.
+
+The reason is cardinality, and U12 already measured it: the signature
+is a 4-tuple of small counts, so hundreds of distinct maths glyphs
+share one. `agrees` accepts 91.19% of everything, which makes it nearly
+a constant function at this class count. A verifier must be finer than
+the thing it verifies, and this one is coarser.
+
+#### The confusions are real, not artefacts
+
+```
+cmmi10:Theta read as cmmi10:O        cmmi10:i read as cmmi10:dotlessi
+cmmi10:o     read as cmmi10:O        cmmi10:j read as cmmi10:dotlessj
+cmmi10:Xi    read as cmsy10:union    arrowhookleft read as parenleftbig
+```
+
+`i`/`dotlessi` and `j`/`dotlessj` differ by one dot; `Theta`/`O` and
+`o`/`O` by a bar or a scale. These are the genuinely hard pairs, which
+means the ceiling is not a defect to be fixed by tuning — and a
+dot-sized difference is exactly what a 12x12 normalised bitmap discards.
+
+#### What this does not test
+
+The same font is on both sides, so this is cross-rasteriser and not
+cross-font. There is no page noise, no neighbouring ink and no baseline
+variation. **70.94% is a ceiling**, and a real page will be worse.
+
 ### Cross-rasteriser premise — measured 2026-08-09, `measure.py rasterisers`
 
 Maths templates come from the font and queries come from the page, so
