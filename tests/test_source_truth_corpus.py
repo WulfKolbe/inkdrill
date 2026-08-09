@@ -44,6 +44,18 @@ _AXIS_LENGTH_PT = 6.2 * _PT_PER_CM              # 175.7480
 _AXIS_WIDTH_PT = 0.25
 _DAYS = 31
 
+# A4's NOMINAL size. Not this document's -- its MediaBox is `0 0 595 842`
+# -- and that is the point: deriving dpi from the nominal size instead of
+# reading the PNG's pHYs chunk shifts the answer by 0.071 pt, which is
+# the same size as the residual being measured.
+_A4_NOMINAL_WIDTH_PT = 595.32
+
+# One tolerance, shared by the assertion and by the guard that proves the
+# assertion can fail. They must not drift apart: at 0.15 the measurement
+# passes at 0.072 AND the A4 error passes at 0.143, so the test admits
+# exactly the mistake its docstring claims to catch.
+_PANEL_TOL_PT = 0.10
+
 
 def _page():
     if not _ROOT:
@@ -113,8 +125,29 @@ class T11_1_DeclaredGeometry(unittest.TestCase):
         self.assertEqual(len(set(widths)), 1,
                          f"panel widths should be identical, got {set(widths)}")
         expected = _AXIS_LENGTH_PT - 2 * _AXIS_WIDTH_PT
-        self.assertAlmostEqual(self._pt(widths[0]), expected, delta=0.15,
+        self.assertAlmostEqual(self._pt(widths[0]), expected,
+                               delta=_PANEL_TOL_PT,
                                msg=f"{len(widths)} panels at {widths[0]} px")
+
+    def test_a_dpi_taken_from_nominal_A4_is_rejected_by_that_tolerance(self):
+        """The guard the test above rests on, asserted rather than implied.
+
+        `test_panel_width...` only catches a nominal-A4 dpi if its
+        tolerance is tighter than that error. Stating the tolerance in a
+        docstring does not make it so -- at delta=0.15 the wrong
+        derivation lands at 0.143 and passes. This asserts the
+        separation directly, so widening the tolerance past the mistake
+        fails here instead of silently disarming the check there.
+        """
+        widths = [c.width for c in self.blobs if 960 <= c.width <= 990]
+        expected = _AXIS_LENGTH_PT - 2 * _AXIS_WIDTH_PT
+        wrong = widths[0] * _A4_NOMINAL_WIDTH_PT / self.mask.width
+        self.assertGreater(
+            abs(wrong - expected), _PANEL_TOL_PT,
+            f"a dpi from nominal A4 gives {wrong:.3f} pt, only "
+            f"{abs(wrong - expected):.3f} pt from the authored "
+            f"{expected:.3f} -- the tolerance no longer catches it")
+        self.assertLess(abs(self._pt(widths[0]) - expected), _PANEL_TOL_PT)
 
     def test_the_ink_sweep_alone_cannot_find_these_panels(self):
         """Why the white sweep is not redundant with the ink sweep.

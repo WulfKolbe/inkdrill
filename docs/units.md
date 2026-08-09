@@ -527,16 +527,16 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 572 tests in 2.3s
-OK (skipped=14)
+Ran 573 tests in 2.3s
+OK (skipped=15)
 ```
 
-The 14 skipped are the three opt-in corpus modules:
+The 15 skipped are the three opt-in corpus modules:
 `tests/test_pngio_corpus.py` (4) and `tests/test_source_truth_corpus.py`
-(4), both gated on `INKDRILL_CORPUS`, and `tests/test_type1_corpus.py`
+(5), both gated on `INKDRILL_CORPUS`, and `tests/test_type1_corpus.py`
 (6, gated on `INKDRILL_TYPE1`). Neither
 runs by default. The hermetic count -- what actually runs on a bare
-checkout -- is 572 - 14 = 558.
+checkout -- is 573 - 15 = 558.
 
 `test_type1_corpus` is gated rather than defaulted to the system TeX
 tree deliberately. Defaulting it would have been free coverage on most
@@ -1258,6 +1258,40 @@ looks like a failed measurement. The tick marks themselves are one per
 day at `axis.length/31`, and at that pitch 348 intervals agree to
 0.0007 pt. **The parameter is not unmeasurable; it was the wrong
 parameter.**
+
+#### The fixture's own tolerance admitted the error it names
+
+Found by audit, not by the suite, and it is the sixth instance of the
+same shape. `test_panel_width_matches_the_authored_axis_length` was
+written with `delta=0.15` and a docstring explaining that reading the
+PNG's `pHYs` matters because a nominal-A4 derivation "gives 175.39 pt
+where the answer is 175.32". Both statements are true; together they do
+not hold:
+
+| | pt | vs authored 175.248 |
+|---|---|---|
+| measured, pHYs dpi | 175.320 | 0.072 |
+| measured, nominal-A4 dpi | 175.391 | **0.143** |
+| the tolerance | | 0.15 |
+
+**0.143 < 0.15, so the wrong derivation passed.** The guard was prose.
+
+Tightened to **0.10**, which rejects the A4 value and keeps a 0.028 pt
+margin on the true one. But a tolerance chosen to catch a specific
+mistake is itself a claim, so the separation is now asserted directly:
+`test_a_dpi_taken_from_nominal_A4_is_rejected_by_that_tolerance`
+recomputes the wrong value and requires it to fall outside the *same*
+shared constant. Widening the tolerance past the mistake now fails that
+test instead of silently disarming the other one.
+
+Four mutants, all killed, where two of them previously passed:
+
+| mutation | result |
+|---|---|
+| dpi from nominal A4 instead of `pHYs` | 3 failures |
+| tolerance widened back to 0.15 | 1 failure |
+| superseded `axis.width` (0.01 cm) | 2 failures |
+| tick pitch set to `label.inc` (5-day) | 1 failure |
 
 #### The sharpest ink-versus-white result so far
 

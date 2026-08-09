@@ -36,7 +36,7 @@ classification and the structure tree.
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 572, of which 14 skip
+python3 -m unittest discover -s tests -t .   # full suite: 573, of which 15 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -275,6 +275,10 @@ found by an audit, not by the suite, and each looked covered because a
 
 They are all findable the same way, in minutes:
 
+- **A tolerance is a guarantee too.** `delta=0.15` with a docstring
+  naming a 0.143 pt error admits it. Compute the wrong value in the
+  test, assert it falls outside the *same shared constant*, and the
+  tolerance can no longer be widened past the mistake it exists for.
 - **Delete the line the guarantee rests on.** If the suite still passes,
   the guarantee is prose.
 - **Force every non-trivial branch to a constant.** `if True` / `if False`
