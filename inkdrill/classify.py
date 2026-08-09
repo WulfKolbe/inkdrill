@@ -301,13 +301,31 @@ class Classifier:
             return Prediction(label, dist, ranked[1][0], ranked[1][1])
         return Prediction(label, dist, None, None)
 
-    def agrees(self, query: Template, label: str) -> bool:
-        """Does the SIGNATURE channel alone accept this label?
+    def agrees(self, query: Template, label: str,
+               *, extents_tol: float | None = None) -> bool:
+        """Is this label CONSISTENT with the query? (verifier, not judge)
 
-        The verifier use U12's measurement points at: the signature is
-        weak at generating an answer (30.7% alone) and highly stable
-        within a class, so it is better asked "is this consistent?" than
-        "what is this?".
+        The signature is weak at generating an answer and stable within
+        a class, so it is better asked "is this consistent?" than "what
+        is this?".
+
+        `extents_tol` makes the check a CONJUNCTION -- signature
+        consistent AND extents within tolerance -- and that is not a
+        matter of making the verifier finer. A verifier only catches
+        errors uncorrelated with its own blind spots. Measured on 647
+        maths classes, this same signature-only check caught 1.08% of
+        the BITMAP classifier's errors and 44.20% of the EXTENTS
+        classifier's: the bitmap picks a wrong label on shape and a
+        shape-match usually has matching topology, so the two fail
+        together, while extents picks on size and a size-match has
+        arbitrary topology, so they fail apart.
+
+        Adding extents covers the one failure the signature cannot see
+        by construction: `o` and `O` have the identical signature at
+        every size, because it is scale-invariant on purpose.
+
+        Left at None the check is signature-only, which is what every
+        recorded figure was measured with.
         """
         if not query.signature:
             return True
@@ -315,8 +333,17 @@ class Classifier:
                  if t.label == label and t.signature]
         if not peers:
             return False
-        return any(signature_distance(query.signature, t.signature) == 0
-                   for t in peers)
+        ok = [t for t in peers
+              if signature_distance(query.signature, t.signature) == 0]
+        if not ok:
+            return False
+        if extents_tol is None:
+            return True
+        if not query.extents:
+            return True
+        return any(t.extents and
+                   extents_distance(query.extents, t.extents) <= extents_tol
+                   for t in ok)
 
 
 def confusion(classifier: "Classifier",

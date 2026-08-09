@@ -241,5 +241,43 @@ class T13_6_ConfusionReportsPairs(unittest.TestCase):
         self.assertEqual(pairs, {})
 
 
+class T13_9_ConjunctionVerifier(unittest.TestCase):
+    """`agrees(extents_tol=...)`: signature AND extents.
+
+    The signature is scale-invariant by construction, so `o` and `O`
+    carry the identical one at every size and no amount of signature
+    resolution separates them. Extents is the channel that can, which is
+    why the verifier is a conjunction rather than a finer single check.
+    """
+
+    def _clf(self):
+        clf = Classifier()
+        # Same signature, very different size -- the o/O shape.
+        clf.add(Template("O", 0b1111, (1, 1, 1, 1, 1, 1), (1.0, 40.0, 40.0, 1.0)))
+        return clf
+
+    def test_signature_only_accepts_a_size_mismatch(self):
+        q = Template("o", 0b1111, (1, 1, 1, 1, 1, 1), (1.0, 12.0, 12.0, 1.0))
+        self.assertTrue(self._clf().agrees(q, "O"))
+
+    def test_the_conjunction_rejects_it(self):
+        q = Template("o", 0b1111, (1, 1, 1, 1, 1, 1), (1.0, 12.0, 12.0, 1.0))
+        self.assertFalse(self._clf().agrees(q, "O", extents_tol=0.4))
+
+    def test_the_conjunction_still_accepts_a_true_match(self):
+        q = Template("O", 0b1111, (1, 1, 1, 1, 1, 1), (1.0, 40.0, 41.0, 1.0))
+        self.assertTrue(self._clf().agrees(q, "O", extents_tol=0.4))
+
+    def test_a_signature_mismatch_is_rejected_whatever_the_tolerance(self):
+        q = Template("x", 0b1111, (2, 0, 3, 3, 1, 1), (1.0, 40.0, 40.0, 1.0))
+        self.assertFalse(self._clf().agrees(q, "O", extents_tol=1e9))
+
+    def test_the_default_is_unchanged(self):
+        # Every recorded figure was measured signature-only.
+        q = Template("o", 0b1111, (1, 1, 1, 1, 1, 1), (1.0, 12.0, 12.0, 1.0))
+        self.assertEqual(self._clf().agrees(q, "O"),
+                         self._clf().agrees(q, "O", extents_tol=None))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1612,7 +1612,61 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
-### Maths classification — measured 2026-08-09, `measure.py maths`
+### Maths classification, corrected — 2026-08-09, `measure.py maths`
+
+The first figures below were substantially an INSTRUMENT error, found
+by audit. Two defects, both in the harness:
+
+- `_template_of` stored four of `Signature`'s six fields, dropping
+  `parts` -- the field that separates `i`/`dotlessi` and `Theta`/`O`.
+  It was copied from `m_classify`, so **U13's signature figures carry
+  the same defect.**
+- the query was extracted as the LARGEST COMPONENT of the render, which
+  drops the dot of an `i` and the bar of a `Theta`. The harness
+  manufactured the very confusions it then reported as findings.
+
+With both fixed, over the same 647 classes:
+
+| | correct | wrong, detected | wrong, ACCEPTED |
+|---|---|---|---|
+| before (largest-component queries) | 70.94% | 2.01% | 27.05% |
+| **after (whole-ink queries)** | **88.10%** | 0.00% | **11.90%** |
+
+`i/dotlessi`, `j/dotlessj` and `Theta/O` disappear entirely.
+
+#### A verifier must be INDEPENDENT, not finer
+
+The signature-only check catches 1.08% of the bitmap classifier's
+errors and 44.20% of the extents classifier's. **The verifier did not
+change; the classifier did.** A verifier only catches errors
+uncorrelated with its own blind spots: the bitmap picks a wrong label on
+shape and a shape-match usually has matching topology, so they fail
+together; extents picks on size and a size-match has arbitrary topology,
+so they fail apart. Making the signature finer would drive it toward the
+bitmap and toward accepting exactly what the bitmap chose.
+
+So `agrees` gained `extents_tol`, making it a conjunction. Measured, and
+**both sides of the ledger reported** -- a verifier that rejects
+everything scores a perfect "accepted" rate:
+
+| verifier | wrong, ACCEPTED | correct, REJECTED |
+|---|---|---|
+| signature only | 11.90% | 8.25% |
+| + extents <= 0.15 | 0.15% | **53.33%** |
+| **+ extents <= 0.4** | **0.31%** | **14.39%** |
+| + extents <= 1.0 | 1.24% | 10.35% |
+| + extents <= 3.0 | 9.12% | 8.42% |
+
+**At 0.4 the silently-wrong rate falls 11.90% -> 0.31%, a factor of 38,
+for six points of false rejection.** At 0.15 it looks better still and
+is useless -- it rejects over half of all correct answers, which only
+the second column reveals.
+
+`o`/`O` is why extents and not more signature: they carry the
+*identical* signature at every size, because it is scale-invariant on
+purpose.
+
+### Maths classification — superseded first pass, 2026-08-09, `measure.py maths`
 
 **The measurement this whole chain was built for**, and the first in
 the repository that is not body text. U13's class filter (>=12

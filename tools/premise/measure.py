@@ -1559,8 +1559,7 @@ def m_rasterisers(root, n, rng, doc=None):
             capture_output=True)
         if r.returncode or not png.exists():
             return None
-        got = components(load_mask(png, threshold=200), min_area=4, min_side=2)
-        return max((m for _, m in got), key=lambda m: m.ink_count, default=None)
+        return _crop_ink(load_mask(png, threshold=200))
 
     def topo(m):
         res = sweep(m, conn=8, capture=Capture.GRAPH)
@@ -1608,6 +1607,33 @@ MATH_FONTS = ("cmmi10.pfb", "cmsy10.pfb", "cmex10.pfb",
               "msam10.pfb", "msbm10.pfb")
 
 
+def _crop_ink(mask):
+    """The whole inked area of a render, not its largest component.
+
+    Taking `max(components, key=ink_count)` drops the dot of an `i` and
+    the bar of a `Theta` -- which is exactly the `parts` field the
+    signature verifier depends on. A query stripped of its parts matches
+    `dotlessi` by construction, so the harness manufactured the very
+    confusions it then reported as findings.
+    """
+    from inkdrill.raster import InkMask
+    res = sweep(mask, conn=8, capture=Capture.GRAPH)
+    if not res.components:
+        return None
+    node = {nd.id: nd for nd in res.nodes}
+    runs = [node[i] for c in res.components for i in c.nodes]
+    x0 = min(r.lo for r in runs)
+    x1 = max(r.hi for r in runs)
+    y0 = min(r.line for r in runs)
+    y1 = max(r.line for r in runs)
+    w, h = x1 - x0 + 1, y1 - y0 + 1
+    buf = bytearray(w * h)
+    for r in runs:
+        b = (r.line - y0) * w - x0
+        buf[b + r.lo:b + r.hi + 1] = b"\xff" * (r.hi - r.lo + 1)
+    return InkMask(bytes(buf), w, h)
+
+
 def _template_of(mask, label):
     from inkdrill.aggregate import moments_of_mask
     from inkdrill.reeb import graph_of, signature as reeb_signature
@@ -1616,12 +1642,17 @@ def _template_of(mask, label):
     sig = reeb_signature(graph_of(mask))
     mo = moments_of_mask(mask)
     w, h = mask.width, mask.height
+    # The WHOLE signature. An earlier version stored four of its six
+    # fields and dropped `parts` and `closes` -- and `parts` is exactly
+    # what separates i/dotlessi and Theta/O. A verifier measured on a
+    # crippled feature is measuring the harness.
     return Template(label, normalise(mask),
-                    (sig.cycles, sig.births, sig.merges, sig.splits),
+                    (sig.parts, sig.cycles, sig.births, sig.closes,
+                     sig.merges, sig.splits),
                     (w / h, float(h), float(w), mo.elongation))
 
 
-def m_maths(root, n, rng, doc=None):
+def m_maths(root, n, rng, doc=None, extents_tol=None):
     """**The measurement this whole chain was built for.**
 
     Every accuracy figure in this repository is body text. U13's class
@@ -1703,11 +1734,7 @@ def m_maths(root, n, rng, doc=None):
                 capture_output=True)
             if r.returncode or not png.exists():
                 continue
-            got = components(load_mask(png, threshold=200),
-                             min_area=4, min_side=2)
-            qm = max((m for _, m in got), key=lambda m: m.ink_count,
-                     default=None)
-            q = _template_of(qm, label)
+            q = _template_of(_crop_ink(load_mask(png, threshold=200)), label)
             if q is None:
                 continue
             templates.append(t)
@@ -1728,17 +1755,23 @@ def m_maths(root, n, rng, doc=None):
         clf = Classifier(channels=ch)
         for t in templates:
             clf.add(t)
-        right = detected = missed = 0
+        right = detected = missed = false_reject = 0
         worst = Counter()
         for q in queries:
             pred = clf.classify(q)
             if pred.label == q.label:
                 right += 1
+                # The other side of the ledger. A verifier that rejects
+                # everything scores a perfect "accepted" rate, so the
+                # rate at which it rejects CORRECT answers must be
+                # printed beside it or the number is meaningless.
+                if not clf.agrees(q, pred.label, extents_tol=extents_tol):
+                    false_reject += 1
             else:
                 # A wrong answer the signature REJECTS is a DETECTED
                 # error -- the product. One it accepts is the dangerous
                 # class.
-                if clf.agrees(q, pred.label):
+                if clf.agrees(q, pred.label, extents_tol=extents_tol):
                     missed += 1
                     worst[(q.label, pred.label)] += 1
                 else:
@@ -1746,7 +1779,8 @@ def m_maths(root, n, rng, doc=None):
         tot = len(queries)
         print(f"    {name:15} {right/tot:7.2%}  "
               f"wrong-and-detected {detected/tot:6.2%}  "
-              f"WRONG AND ACCEPTED {missed/tot:6.2%}")
+              f"WRONG AND ACCEPTED {missed/tot:6.2%}  "
+              f"correct-but-REJECTED {false_reject/max(right,1):6.2%}")
         if name == "all channels" and worst:
             print("      most dangerous confusions (wrong, accepted):")
             for (a, b), k in worst.most_common(6):
@@ -2167,6 +2201,10 @@ def main():
     ap.add_argument("--n", type=int, default=None,
                     help="sample size; each measurement has its own default")
     ap.add_argument("--seed", type=int, default=20260807)
+    ap.add_argument("--extents-tol", type=float, default=None,
+                    help="maths only: make the verifier a CONJUNCTION -- "
+                         "signature AND extents within this distance. "
+                         "None (default) is signature-only.")
     ap.add_argument("--min-len", type=int, default=60,
                     help="white only: shortest white run counted as a gap, "
                          "in px. Chosen on two pages; not yet measured.")
@@ -2201,6 +2239,9 @@ def main():
         if name == "white":
             fn(root, args.n or default_n, random.Random(args.seed),
                min_len=args.min_len, doc=args.doc)
+        elif name == "maths":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               extents_tol=args.extents_tol)
         elif name == "border":
             fn(root, args.n or default_n, random.Random(args.seed),
                quantise=args.quantise, doc=args.doc)

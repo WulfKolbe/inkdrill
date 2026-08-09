@@ -162,8 +162,8 @@ TeX maths families, all channels read **70.94% correct, 2.01% wrong and
 detected, 27.05% wrong and ACCEPTED.** The verifier catches 6.9% of
 wrong answers. The signature is a 4-tuple of small counts, so hundreds
 of maths glyphs share one and `agrees` accepts 91.19% of everything —
-**a verifier must be finer than what it verifies, and this one is
-coarser.** More than a quarter of queries get a confident wrong answer
+**a verifier must be INDEPENDENT of the classifier's failure mode, not
+finer** -- `agrees(extents_tol=0.4)` cuts silently-wrong to 0.31%. More than a quarter of queries get a confident wrong answer
 that nothing flags, which is precisely the failure this project exists
 to prevent.
 
