@@ -36,11 +36,12 @@ classification and the structure tree.
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 568, of which 10 skip
+python3 -m unittest discover -s tests -t .   # full suite: 572, of which 14 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
 INKDRILL_TYPE1=/usr/share/texmf-dist/fonts/type1 python3 -m unittest tests.test_type1_corpus
+INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_source_truth_corpus
 ```
 
 The last two are opt-in: the default suite is hermetic and the corpus tests

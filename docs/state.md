@@ -196,6 +196,12 @@ Reproduced in `measure.py boxes`; full record in `units.md`.
   Recorded, not changed.
 - **`Component.root` != `Component.nodes[0]`** on 1293 of 1310 real
   components. Now pinned by a test; see the conventions in `CLAUDE.md`.
+- **The corpus now has a fixture with a declared answer.** `e12s39`
+  is 1995 PostScript through Ghostscript, and its geometry is stated as
+  arithmetic in the source. Panel width agrees to **0.072 pt** and tick
+  pitch to **0.0007 pt** over 348 intervals. The ink sweep finds **0**
+  of those 24 panels and the white sweep finds all 24 identically.
+  Pinned by `tests/test_source_truth_corpus.py`.
 - **A non-LaTeX counterexample now stands on the record.** The Infineon
   handbook (Word 2016, 110 pages) sends U9's route B to **0 of 19
   fonts** — 100% TrueType, CambriaMath the only maths family — so the

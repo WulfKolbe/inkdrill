@@ -527,15 +527,16 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 568 tests in 2.4s
-OK (skipped=10)
+Ran 572 tests in 2.3s
+OK (skipped=14)
 ```
 
-The 10 skipped are the two opt-in corpus modules:
-`tests/test_pngio_corpus.py` (4, gated on `INKDRILL_CORPUS`) and
-`tests/test_type1_corpus.py` (6, gated on `INKDRILL_TYPE1`). Neither
+The 14 skipped are the three opt-in corpus modules:
+`tests/test_pngio_corpus.py` (4) and `tests/test_source_truth_corpus.py`
+(4), both gated on `INKDRILL_CORPUS`, and `tests/test_type1_corpus.py`
+(6, gated on `INKDRILL_TYPE1`). Neither
 runs by default. The hermetic count -- what actually runs on a bare
-checkout -- is 568 - 10 = 558.
+checkout -- is 572 - 14 = 558.
 
 `test_type1_corpus` is gated rather than defaulted to the system TeX
 tree deliberately. Defaulting it would have been free coverage on most
@@ -1218,6 +1219,63 @@ connected component. Not built for, recorded as the stated limit. The
 deferred raster-region detection is the prerequisite, and its
 active-component ceiling is what should fire on such a page rather than
 a wrong box tree.
+
+### Validation against the drawing program — e12s39, measured 2026-08-09
+
+`e12s39.ps` is 5,093 lines of PostScript dated June 1995; `e12s39.pdf`
+is that file through Ghostscript 9.05 with nothing else in the path.
+**It is the only fixture in the corpus with a declared answer** — the
+geometry is stated as arithmetic in the source, so this is the first
+check against the drawing program rather than against another tool's
+opinion. Pinned by `tests/test_source_truth_corpus.py`.
+
+#### Two parameters, both closed
+
+| | authored | measured | residual |
+|---|---|---|---|
+| panel interior | `axis.length - 2*axis.width` = 175.248 pt | **175.320 pt**, 24 panels | **0.072 pt** = 0.40 px |
+| tick pitch | `axis.length / 31` = 5.6693 pt | **5.6700 pt**, 348 intervals | **0.0007 pt** = 0.004 px |
+
+Three corrections to how those numbers were first derived, each of which
+moves the answer by more than the residual it is quoted against:
+
+**`axis.width` is defined three times and PostScript is sequential.**
+Line 672 says `0.01 cm` (0.283 pt) and line 962 says `0.25` — and line
+962 is immediately before the `6.2 cm` at line 964 that draws these
+panels, so 0.25 is live. Using the superseded value gives a residual of
+0.139 pt; the live one gives **0.072 pt**, half as much.
+
+**Read the PNG's `pHYs`, do not derive dpi from an assumed page size.**
+The PDF's MediaBox is 595 x 842 pt, not A4's nominal 595.32 x 841.92.
+Deriving dpi from the nominal size gives 175.39 pt where the answer is
+175.32 — an error of 0.07 pt, exactly the size of the residual being
+reported. `pngio` already reads the chunk; use it.
+
+**The ticks are at the DAY pitch, not at `label.inc`.** `label.inc` is
+`axis.length/31*5` = 28.346 pt and is the *label* spacing — every fifth
+day carries a number. Searching for that pitch finds text glyphs and
+looks like a failed measurement. The tick marks themselves are one per
+day at `axis.length/31`, and at that pitch 348 intervals agree to
+0.0007 pt. **The parameter is not unmeasurable; it was the wrong
+parameter.**
+
+#### The sharpest ink-versus-white result so far
+
+The panel frames are connected to their axes, labels and traces, so
+**no ink component has a panel's extent — the ink sweep finds zero.**
+The white-gap sweep finds **24, all exactly 974 px wide, at two x
+positions**: not a distribution around a value, the same object drawn
+twenty-four times. Earlier the white detector beat the ink detector
+33/34 to 29/34; here the comparison is 24 to 0.
+
+Ticks are the complementary case to matplotlib, where each tick is its
+own component: here `ticmark` is part of the axis path, so a detector
+that looks for free-standing objects returns nothing. Recovering them
+needs the perpendicular-protrusion reading — scan the ink row just
+outside the white interior — which is four lines and is what the test
+does. **Whether ticks are separate components is a property of the
+drawing program, not of ticks**, and that is the same lesson as
+`booktabs` versus Word tables and stroked outlines versus filled tints.
 
 ### A non-LaTeX counterexample — Infineon handbook, measured 2026-08-09
 
