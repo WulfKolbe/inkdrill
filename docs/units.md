@@ -1219,6 +1219,95 @@ deferred raster-region detection is the prerequisite, and its
 active-component ceiling is what should fire on such a page rather than
 a wrong box tree.
 
+### White-run layout — measured 2026-08-09, `measure.py white`
+
+A proposal to build layout from the page's *gaps* rather than its ink —
+Baird 1994 and Breuel 2002 in run form, using the
+`sweep(mask.inverted(), conn=4)` this codebase already runs for holes.
+Measured before building.
+
+**The core mechanism is confirmed, and the failure it fixes is worse
+than reported.** Blobbing white with no filter gives one page-sized
+component covering **71.1% to 98.6%** of the page across five pages —
+the proposal said 53%. White connects around every object through the
+margins. The one-line fix works exactly as claimed:
+
+```python
+if r.lo == 0 or r.hi == limit - 1: continue    # margin, not a gap
+```
+
+On page 6 that turns 2,556 blobs with a 3400x4400 largest into 439 with
+a 2199x3748 largest — from an undifferentiated page to layout.
+
+#### The central claim is refuted, and it inverts
+
+The proposal's §4 states the two detectors want opposite thresholds:
+"Ink wants it HIGH so pale strokes count as ink. White wants it LOW so
+pale fills count as background", with figure panels recovered at 128 and
+vanishing at 200 and 240. Measured against the declared image
+rectangles on the same document:
+
+| threshold | declared images recovered |
+|---|---|
+| 128 | 19/34 |
+| 200 | 28/34 |
+| **240** | **33/34** |
+
+**White wants the HIGH threshold too**, and page 11 shows it starkly:
+0/12 at 128, 8/12 at 200, **12/12** at 240. Nothing vanishes at 240 —
+the three panels the proposal reported as threshold-sensitive are
+present at 128, 200 and 240 alike, to the same 0.1 pt.
+
+The reasoning was inverted. What a white rectangle needs is not a white
+*interior* but an **ink boundary**. At 128 a pale tint counts as
+background, so a tinted panel merges with the surrounding white and its
+rectangle is destroyed; at 240 the tint is ink and bounds the interior
+cleanly. So the "bracket" argument does not hold and the second pass is
+not needed for threshold reasons — **both detectors want 240.**
+
+#### White recovers the declared rectangles better than ink does
+
+On the audited document, at the threshold each detector prefers:
+
+| detector | recovered | worst size error |
+|---|---|---|
+| ink frames (`boxes`) | 29/34 | 1.72 pt |
+| **white gaps (`white`)** | **33/34** | **0.29–0.42 pt** on four pages of five |
+
+White is both more complete and an order of magnitude more accurate,
+and the reason is structural: a white blob's bbox is the object's own
+extent, while an ink frame's bbox is a stroked border with thickness, so
+the ink measurement carries the stroke width as error. The proposal's
+own §3 observed the two agree to the frame thickness; that thickness is
+precisely the ink detector's error bar.
+
+It also generalises better. On a random cross-document sample of
+image-bearing pages, white recovers **10/28** where ink recovered 0/13:
+a white gap around a figure exists far more often than a drawn border
+does.
+
+#### The cost claim is misattributed
+
+§5 reports 2.7 s for both axes and blames a per-pixel Python loop on the
+column axis, alongside `classify.normalise` and `nest._label`. **That
+loop is not in this package.** `raster._iter_runs_col` already reads
+columns with a C-speed step slice, and writing them back is a strided
+slice assignment — `buf[lo*W + line : hi*W + line + 1 : W]`. Built that
+way from the start, both axes cost **0.34–0.36 s to build plus
+0.36–0.57 s to sweep**, not 2.7 s. The run-discipline violation was in
+the prototype, not in the thing being measured.
+
+#### What remains unmeasured
+
+`--min-len` is still 60 px chosen on two pages, and it is an absolute
+number where the right one almost certainly scales with body-text size;
+it stays a harness argument. The ink-bounded rule discards genuine
+structure at the page edge — a full-bleed figure would be missed — and
+the proposal's suggestion to key it on the text block rather than the
+page is untested. The gutter and column-block result could not be
+reproduced at all: that document is in the corpus with a single rendered
+page and it is not page 1.
+
 ### Border colour per blob — measured 2026-08-09, `measure.py border`
 
 An external proposal: sample the pixels immediately outside each run —

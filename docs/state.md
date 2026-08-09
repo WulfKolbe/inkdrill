@@ -196,6 +196,14 @@ Reproduced in `measure.py boxes`; full record in `units.md`.
   Recorded, not changed.
 - **`Component.root` != `Component.nodes[0]`** on 1293 of 1310 real
   components. Now pinned by a test; see the conventions in `CLAUDE.md`.
+- **White-run layout beats the ink detector at its own job.** Building
+  layout from ink-bounded white runs recovers **33/34** declared image
+  rectangles to 0.3 pt, against the ink detector's 29/34 to 1.72 pt —
+  an ink frame's bbox carries its own stroke width as error. But the
+  proposal's central claim inverts: white wants threshold **240**, not
+  128 (19/34 -> 28/34 -> 33/34), because a white rectangle needs an ink
+  BOUNDARY, not a white interior. Both detectors want the same
+  threshold, so the "bracket" is retired. `measure.py white`.
 - **Border colour per blob works, but not as costed or classified.**
   Sampling the 2 pixels outside each run is +28% on the sweep and 3% of
   decode+sweep+sample — but it needs RGB, which `pngio` discards, and

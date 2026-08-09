@@ -21,6 +21,8 @@ skew         projection-profile skew of scanned pages
 premise      hole count and signature stability vs pdfminer ground truth
 contraction  RAG runs -> Reeb arcs reduction on real page ink
 rotation     signature survival under resampled rotation
+white        page layout from the GAPS -- ink-bounded white runs, cross-
+             checked against the declared image rectangles
 border       what the pixels just outside a component's runs say about
              the field it sits on -- 2 samples per run
 boxes        drawn frames and filled panels from ink, cross-checked
@@ -46,7 +48,7 @@ from collections import Counter, defaultdict
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from inkdrill.pngio import _is_neutral, load_mask, read_png  # noqa: E402
-from inkdrill.raster import INK, InkMask, binarize          # noqa: E402
+from inkdrill.raster import INK, InkMask, binarize, iter_runs  # noqa: E402
 from inkdrill.aggregate import (component_moments, moments_of_mask,  # noqa: E402
                                 moments_per_component)
 from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: E402
@@ -1192,6 +1194,140 @@ def m_border(root, n, rng, quantise=0, doc=None):
           f"{100*t_bd/(t_dec+t_sw+t_bd):.0f}% of the three)")
 
 
+def _white_mask(mask, *, min_len, bounded=True):
+    """A mask of the white runs that look like GAPS rather than margins.
+
+    Two rules, both one line, and the first is the whole trick: a white
+    run touching the scan-line edge is a margin -- white connects around
+    every object through the page border, so keeping those gives one
+    page-sized blob. Discarding them disconnects the page into layout.
+
+    Both axes are written with C-speed slice assignment, the row one
+    contiguous and the column one strided. Writing the column axis as a
+    per-pixel loop is the run-discipline violation this project keeps
+    finding; `raster._iter_runs_col` already reads that way.
+    """
+    W, H = mask.width, mask.height
+    inv = mask.inverted()
+    buf = bytearray(W * H)
+    kept = edge = short = 0
+    for axis in ("row", "col"):
+        limit = W if axis == "row" else H
+        for r in iter_runs(inv, axis):
+            if bounded and (r.lo == 0 or r.hi == limit - 1):
+                edge += 1
+                continue
+            n = r.hi - r.lo + 1
+            if n < min_len:
+                short += 1
+                continue
+            kept += 1
+            if axis == "row":
+                base = r.line * W
+                buf[base + r.lo:base + r.hi + 1] = b"\xff" * n
+            else:
+                buf[r.lo * W + r.line:r.hi * W + r.line + 1:W] = b"\xff" * n
+    return InkMask(bytes(buf), W, H), kept, edge, short
+
+
+def m_white(root, n, rng, min_len=60, doc=None):
+    """units.md "U11 white-run layout": what the page's GAPS say, rather
+    than its ink. Baird 1994 and Breuel 2002 in run form.
+
+    POPULATION: pages of corpus documents whose pdfdrill sidecar declares
+    at least one embedded image, so there is an independent oracle for
+    what the white rectangles should be. SPLIT: documents sampled without
+    replacement, one page each unless `--doc` names one document, in
+    which case all of its image-bearing pages are measured.
+
+    FILTERS, both arguments because both were chosen on two pages and
+    neither has a measured value: `--min-len` (default 60 px at 400 dpi,
+    which is an absolute number where the right one almost certainly
+    scales with body-text size) and the ink-bounded rule, whose cost is
+    printed as the count of runs it drops.
+
+    THRESHOLDS: 128, 200 and 240 are all run, because the proposal's
+    central claim is that white and ink want opposite ones.
+    """
+    docs = [d for d in sorted(root.iterdir())
+            if d.is_dir() and (d / "inspect" / "pages").is_dir()]
+    if doc:
+        docs = [d for d in docs if d.name == doc]
+    else:
+        rng.shuffle(docs)
+    picked = []
+    for d in docs:
+        drill = _drill(d)
+        if drill is None:
+            continue
+        with_img = {e["page"] for e in drill["images_layer"]}
+        seen = {}
+        for p in sorted((d / "inspect" / "pages").glob("*.png")):
+            mt = re.fullmatch(r"p(?:age-)?0*(\d+)", p.stem)
+            if mt:
+                seen.setdefault(int(mt.group(1)), p)
+        pos = [(k, p) for k, p in sorted(seen.items()) if k in with_img]
+        if not pos:
+            continue
+        picked.extend(pos if doc else [rng.choice(pos)])
+        if len(picked) >= n:
+            break
+        drills = drill
+    picked = picked[:n]
+    if not picked:
+        print("  no document with rendered pages and a declared image")
+        return
+    print(f"  min_len {min_len} px;  {len(picked)} pages")
+
+    by_th = defaultdict(lambda: [0, 0, 0.0])      # th -> [hit, decl, worst]
+    for pno, png in picked:
+        d = png.parent.parent.parent
+        drill = _drill(d)
+        decl = [e for e in drill["images_layer"] if e["page"] == pno]
+        pw_pt = drill["_page_pt"][0]
+        first = True
+        for th in (128, 200, 240):
+            mask = load_mask(png, threshold=th)
+            dpi = mask.width * 72.0 / pw_pt
+            if first:
+                # The failure the ink-bounded rule exists to prevent,
+                # measured rather than asserted.
+                naive, _, _, _ = _white_mask(mask, min_len=1, bounded=False)
+                nres = sweep(naive, conn=8, capture=Capture.GRAPH)
+                nmo = moments_per_component(nres)
+                big = max(nmo.values(), key=lambda c: c.area, default=None)
+                share = big.area / (mask.width * mask.height) if big else 0.0
+            wm, kept, edge, short = _white_mask(mask, min_len=min_len)
+            res = sweep(wm, conn=8, capture=Capture.GRAPH)
+            mo = moments_per_component(res)
+            hit, worst = 0, 0.0
+            for e in decl:
+                best = min((max(abs(c.width * 72.0 / dpi - e["w_pt"]),
+                                abs(c.height * 72.0 / dpi - e["h_pt"]))
+                            for c in mo.values()), default=None)
+                if best is not None and best <= 3.0:
+                    hit += 1
+                    worst = max(worst, best)
+            b = by_th[th]
+            b[0] += hit
+            b[1] += len(decl)
+            b[2] = max(b[2], worst)
+            if first:
+                print(f"    {d.name[:18]:18} p{pno:<3} images {len(decl):2}  "
+                      f"naive largest blob {share:5.1%} of page  "
+                      f"-> ink-bounded {len(res.components)} blobs "
+                      f"(dropped {edge} edge, {short} short)")
+                first = False
+            print(f"        th{th}: {len(res.components):5} blobs, "
+                  f"recovered {hit}/{len(decl)}"
+                  + (f", worst {worst:.2f} pt" if hit else ""))
+    print("  declared images recovered by threshold "
+          "(the proposal says white needs 128 and ink needs 240):")
+    for th in sorted(by_th):
+        hit, dec, worst = by_th[th]
+        print(f"    th{th}: {hit}/{dec}" + (f", worst {worst:.2f} pt" if hit else ""))
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -1574,6 +1710,7 @@ MEASUREMENTS = {
     "banding": (m_banding, 3),
     "border": (m_border, 10),
     "boxes": (m_boxes, 8),
+    "white": (m_white, 8),
     "classify": (m_classify, 6),
     "convexity": (m_convexity, 2),
     "missed": (m_missed, 8),
@@ -1602,6 +1739,9 @@ def main():
     ap.add_argument("--n", type=int, default=None,
                     help="sample size; each measurement has its own default")
     ap.add_argument("--seed", type=int, default=20260807)
+    ap.add_argument("--min-len", type=int, default=60,
+                    help="white only: shortest white run counted as a gap, "
+                         "in px. Chosen on two pages; not yet measured.")
     ap.add_argument("--quantise", type=int, default=0,
                     help="border only: round each RGB channel to this step "
                          "before counting. 0 = off, which is the measured "
@@ -1630,7 +1770,10 @@ def main():
     for name in todo:
         fn, default_n = MEASUREMENTS[name]
         print(f"\n=== {name} " + "=" * (62 - len(name)))
-        if name == "border":
+        if name == "white":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               min_len=args.min_len, doc=args.doc)
+        elif name == "border":
             fn(root, args.n or default_n, random.Random(args.seed),
                quantise=args.quantise, doc=args.doc)
         elif name == "boxes":
