@@ -16,12 +16,12 @@ Nearly every test glyph had a near-identical twin -- same document, page,
 font and size -- in the training half. Measured both ways on the same
 8 pages, changing only the split rule:
 
-        channel              by component   by DOCUMENT
-        signature only            11.8%        11.2%
-        extents only              93.7%        43.8%
-        bitmap only               95.7%        94.0%
-        bitmap + extents          95.8%        95.8%
-        all three                 96.0%        95.7%
+        channel            by component   by DOCUMENT   by FONT
+        signature only         11.8%         11.2%        9.2%
+        extents only           93.7%         43.8%       29.5%
+        bitmap only            95.7%         94.0%       61.5%
+        bitmap + extents       95.8%         95.8%       68.8%
+        all three              96.0%         95.7%       86.3%
 
 **The extents channel was almost entirely leakage: 93.7% -> 43.8%.** Its
 absolute height and width identify the *document's body size*, not the
@@ -29,52 +29,60 @@ character, so with the same document on both sides it is close to a
 lookup table. An earlier revision reported 97.1% for extents alone and
 drew conclusions from it; that number was an artefact of the protocol.
 
-**The bitmap channel survives: 95.7% -> 94.0%, a 1.7-point drop.** Shape
-normalised to a grid is genuinely document-independent, which is what
-makes 1-NN on it a real result rather than a memorisation.
+**The bitmap channel is document-independent but NOT font-independent:
+94.0% across documents, 61.5% across fonts.** Normalised shape survives a
+change of paper and survives a change of body size; it does not survive a
+change of typeface.
 
-So the decision stands, on an honest protocol: **do not escalate.**
-Bitmap-only reaches 94% across documents and adding every other channel
-buys under two points. But it stands FOR THIS POPULATION, and the
-condition is now recorded with it.
+**And the channels only earn their keep when the problem is hard.**
+Across documents, adding signature and extents to the bitmap buys +1.7
+points. Across FONTS it buys **+24.8** -- 61.5% to 86.3%. An earlier
+revision concluded from the easy split that "the signature adds nothing
+measurable"; that was protocol-dependent too. docs/units.md was right to
+specify several channels, and the easy protocol hid why.
 
-Where this does NOT hold, and it is not a small caveat
-------------------------------------------------------
-An external check (auditor's probe, PIL renders of Latin Modern and
-DejaVu Serif -- not reproducible by `tools/premise/measure.py`, which is
-standard library only) varied the split further:
+So the escalation decision splits by population:
 
-        split by size, same font, 22/24px -> 40/44px      bitmap 62.1%
-        split by font, same size, LM -> DejaVu Serif      bitmap 72.2%
+  * **within a document, do not escalate.** 1-NN on the bitmap reaches
+    94% and the rest buys under two points.
+  * **across fonts, 1-NN is not enough.** 61.5% bitmap-only, 86.3% with
+    every channel, and that is the condition for the ~5% of glyphs U9
+    found with no usable embedded font and for the entire scanned corpus,
+    which has no font to template from at all.
 
-Cross-font and cross-size, 1-NN falls to 62-72%. That matters because it
-is the condition for two real populations:
+WHAT POPULATION THIS IS MEASURED OVER
+-------------------------------------
+59 classes survived a "at least 12 instances" filter over 8 body-text
+pages. The non-ASCII survivors are `""` and `fi` -- smart quotes and a
+ligature. **There is not one mathematics symbol in the measured
+population.** No `sum`, `integral`, `radical`, `pm`, `leq`, `in`.
 
-  * the ~5% of glyphs U9 measured as having no usable embedded font, and
-  * the scanned corpus, which has no font to template from at all.
-
-For those, 62-72% would justify escalating, and this unit's measurement
-does not speak to them. What it does establish is the within-document
-case, which is the one U9's rasterizer templates are meant to serve.
+So every number above describes BODY TEXT, and says nothing about the
+maths symbols that are this project's first application. Raising the page
+count does not fix it: a rare symbol stays rare. Answering it needs pages
+selected for maths content, which is not done here. The class filter is
+one line and it was a decision, so `measure.py classify` now prints the
+surviving class list beside the accuracy table.
 
 What the channels are actually worth
 ------------------------------------
 docs/units.md proposes the bitmap and the Reeb signature as two channels,
 with extents "carried separately". Corrected for the split rule:
 
-  * **the bitmap channel is the unit** -- 94% alone, across documents;
-  * **extents are a within-document aid, not a channel that generalises**
-    -- 43.8% alone across documents, though still worth +1.8pp on top of
-    the bitmap, which is where the case pairs live;
-  * **the signature is weak alone at 11.2%** and adds nothing measurable
-    on top of the bitmap.
+  * **the bitmap channel carries the within-document case** -- 94% alone;
+  * **extents do not generalise across documents alone** (43.8%) but are
+    worth +1.8pp on top of the bitmap, which is where the case pairs live;
+  * **the signature is weak alone everywhere** (9-12%) and adds nothing
+    on the easy splits -- but the three together gain 24.8 points over the
+    bitmap alone across fonts, so the channels are complementary exactly
+    where a single one fails.
 
-The signature is therefore exposed as a VERIFIER (`agrees`, `margin`)
-rather than mixed into one distance. U12 measured the topological
-dimensions as narrow but the most efficient per available bit, and
-`cycles` as 98.7-100% stable within a class: good for rejecting a wrong
-answer, poor for generating one. Blending that into a single distance
-would waste the stability and gain nothing.
+The signature is still exposed as a VERIFIER (`agrees`, `margin`) as well
+as a distance term. U12 measured the topological dimensions as narrow but
+the most efficient per available bit, and `cycles` as 98.7-100% stable
+within a class: good for rejecting a wrong answer, poor for generating
+one. Having both uses available is why it is a named channel rather than
+a number folded into one distance.
 
 Every residual error is structural
 ----------------------------------
@@ -132,8 +140,9 @@ Non-guarantees (out of scope for U13)
     half, which is not built. Templates here come from labelled page ink
     via U10's alignment, so the measured protocol is not the deployment
     condition either; it is the closest available.
-  * no claim about cross-font or cross-size matching. Measured externally
-    at 62-72% and NOT addressed here.
+  * no claim about MATHS SYMBOLS. The measured population is body text --
+    see above. This is the project's first application and it is
+    unmeasured here.
 """
 
 from __future__ import annotations

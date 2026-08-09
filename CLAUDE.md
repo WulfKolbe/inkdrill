@@ -167,6 +167,13 @@ result. Quote both in the same sentence, and make the split rule an
 argument to the harness rather than a constant inside it — if it changes
 the answer, a reader must be able to change it.
 
+**Filters are decisions too, and they hide in the same way.** U13's
+`if count >= 12` silently excluded every maths symbol, so a conclusion
+about "classification" was really about body text. The split rule and the
+class filter were three lines apart, both written once and correctly, and
+both stopped being read as choices. Print what a filter kept and what it
+dropped, beside the result.
+
 ### Mutate before you claim a guarantee is held
 
 Five times now a guarantee has been stated in a docstring, argued for in

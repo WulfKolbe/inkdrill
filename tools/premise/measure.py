@@ -924,7 +924,9 @@ def m_classify(root, n, rng, split="document"):
                 s = signature(graph_of(sub))
                 mo = moments_of_mask(sub)
                 w, h = sub.width, sub.height
-                rows.append((doc.name, page["page_number"],
+                font = next((c.get("fontname", "") for c in page["chars"]
+                             if c.get("text") == hit[0][0]), "")
+                rows.append((doc.name, page["page_number"], font,
                              Template(hit[0][0], normalise(sub),
                                       (s.cycles, s.births, s.merges,
                                        s.splits),
@@ -935,9 +937,19 @@ def m_classify(root, n, rng, split="document"):
                   f"{len(rows)} glyphs")
             break
 
-    counts = Counter(t.label for _d, _p, t in rows)
+    counts = Counter(r[3].label for r in rows)
     common = {c for c, k in counts.items() if k >= 12}
-    rows = [r for r in rows if r[2].label in common]
+    rows = [r for r in rows if r[3].label in common]
+    # The class filter is a decision, not plumbing: it silently excludes
+    # every character too rare to clear the threshold, which on body-text
+    # pages means every maths symbol. Print what survived.
+    dropped = sorted(c for c in counts if c not in common)
+    print(f"\n  CLASSES KEPT ({len(common)}, >=12 instances): "
+          f"{''.join(sorted(common))}")
+    print(f"  CLASSES DROPPED ({len(dropped)}): {''.join(dropped)[:80]}")
+    mathy = [c for c in common if ord(c) > 127]
+    print(f"  non-ASCII among kept: {''.join(sorted(mathy)) or 'NONE'}"
+          f"   <- if none, this measures BODY TEXT only")
     if len(rows) < 100:
         print("  not enough labelled glyphs")
         return
@@ -946,17 +958,23 @@ def m_classify(root, n, rng, split="document"):
         shuffled = rows[:]
         rng.shuffle(shuffled)
         cut = len(shuffled) // 2
-        train = [t for _d, _p, t in shuffled[:cut]]
-        test = [(t.label, t) for _d, _p, t in shuffled[cut:]]
+        train = [r[3] for r in shuffled[:cut]]
+        test = [(r[3].label, r[3]) for r in shuffled[cut:]]
         note = "component-level random split -- LEAKY, pages on both sides"
     else:
-        key = 0 if split == "document" else 1
+        key = {"document": 0, "page": 1, "font": 2}[split]
         groups = sorted({r[key] for r in rows})
+        if len(groups) < 2:
+            print(f"\n  cannot split by {split}: only {len(groups)} group "
+                  f"present ({groups}). The corpus cannot test this axis, "
+                  f"so the question stays OPEN rather than answered.")
+            return
         rng.shuffle(groups)
         held = set(groups[:max(1, len(groups) // 2)])
-        train = [t for r in rows for t in (r[2],) if r[key] not in held]
-        test = [(r[2].label, r[2]) for r in rows if r[key] in held]
-        note = f"split by {split}: no {split} appears on both sides"
+        train = [r[3] for r in rows if r[key] not in held]
+        test = [(r[3].label, r[3]) for r in rows if r[key] in held]
+        note = (f"split by {split}: no {split} appears on both sides "
+                f"({len(groups)} groups)")
 
     test = test[:600]
     if not train or not test:
@@ -1012,7 +1030,7 @@ def main():
                     help="sample size; each measurement has its own default")
     ap.add_argument("--seed", type=int, default=20260807)
     ap.add_argument("--split", default="document",
-                    choices=("component", "page", "document"),
+                    choices=("component", "page", "document", "font"),
                     help="classify only: how train and test are divided. "
                          "The split rule IS the experiment -- see the "
                          "U13 premise check in docs/units.md.")

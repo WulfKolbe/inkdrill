@@ -381,35 +381,44 @@ pages appearing on both sides, so nearly every test glyph had a
 near-identical twin — same document, page, font and size — in training.
 Measured both ways on the same 8 pages, changing only the split rule:
 
-| channel | by component (leaky) | **by document** |
-|---|---|---|
-| signature only | 11.8% | 11.2% |
-| **extents only** | 93.7% | **43.8%** |
-| **bitmap only** | 95.7% | **94.0%** |
-| bitmap + extents | 95.8% | 95.8% |
-| all three | 96.0% | 95.7% |
+| channel | by component (leaky) | by document | **by font** |
+|---|---|---|---|
+| signature only | 11.8% | 11.2% | 9.2% |
+| **extents only** | 93.7% | **43.8%** | 29.5% |
+| **bitmap only** | 95.7% | **94.0%** | **61.5%** |
+| bitmap + extents | 95.8% | 95.8% | 68.8% |
+| **all three** | 96.0% | 95.7% | **86.3%** |
 
-**The extents channel was almost entirely leakage — 93.7% → 43.8%.** Its
-absolute height and width identify the document's body size, not the
-character, so with one document on both sides it is close to a lookup
-table. The previously reported 97.1% was an artefact of the protocol.
+**Extents was almost entirely leakage — 93.7% → 43.8%.** Absolute height
+and width identify the document's body size, not the character. The
+previously reported 97.1% was an artefact of the protocol.
 
-**The bitmap channel survives — 95.7% → 94.0%.** Normalised shape is
-genuinely document-independent, which is what makes 1-NN on it a result
-rather than memorisation.
+**The bitmap is document-independent but not font-independent — 94.0%
+across documents, 61.5% across fonts.** Normalised shape survives a
+change of paper and of body size; it does not survive a change of
+typeface. (An external PIL probe independently found 62.1% cross-size and
+72.2% cross-font; the corpus reproduces this at 61.5% over 44 font
+groups, so the axis is testable from data already in hand.)
 
-**So the decision stands on an honest protocol: do not escalate** —
-bitmap-only reaches 94% across documents and every other channel adds
-under two points. But it stands *for this population*, and the condition
-is now recorded with it.
+**The channels only earn their keep when the problem is hard.** Across
+documents they add +1.7pp to the bitmap; across fonts they add **+24.8**,
+61.5% → 86.3%. A previous revision concluded from the easy split that the
+signature "adds nothing measurable" — also protocol-dependent. `units.md`
+was right to specify several channels and the easy protocol hid why.
 
-**Where it does not hold.** An external check (auditor's probe, PIL
-renders — not reproducible by the stdlib-only harness) split by size and
-by font: **bitmap-only falls to 62.1% cross-size and 72.2% cross-font.**
-That is the condition for the ~5% of glyphs U9 found with no usable
-embedded font, and for the entire scanned corpus, which has no font to
-template from. For those populations 62–72% *would* justify escalating,
-and this measurement does not speak to them.
+**So the escalation decision splits by population.** Within a document,
+do not escalate. Across fonts, 1-NN is not enough — and that is the
+condition for the ~5% of glyphs U9 found without a usable embedded font,
+and for the whole scanned corpus.
+
+**The measured population is BODY TEXT.** 59 classes survived an
+"at least 12 instances" filter over 8 pages; the only non-ASCII survivors
+are `“”` and `ﬁ`. **Not one mathematics symbol.** So none of these
+numbers speak to maths symbol classification, which is this project's
+first application. More pages will not fix it — a rare symbol stays rare;
+it needs pages selected for maths content. The class filter was one line
+and a decision, so the harness now prints the surviving class list beside
+the accuracy table.
 
 **Every residual error is structural**, not a modelling failure:
 `i . : 1 l` are the multi-component and thin-stroke cluster a
@@ -422,9 +431,10 @@ Tests: scale invariance; each distance a metric; runner-up and finite
 margin; deterministic tie-breaking; channels independently disable-able;
 the signature as verifier; confusion reporting pairs not just accuracy.
 Branch sweep: 24 probed, 3 real gaps closed, 5 equivalent mutants.
-Re-run: `measure.py classify --split document|component|page` — the
-split rule is an explicit argument because it changes the answer by 50
-points.
+Re-run: `measure.py classify --split document|component|page|font` — the
+split rule is an explicit argument because it moves the answer by 50
+points, and the harness prints the surviving class list because the class
+filter is a decision too.
 **Scope limit:** templates come from labelled page ink via U10, not from
 font-rendered references — that needs U9's rasterizer half.
 **Status: 31 tests passed.**
