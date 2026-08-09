@@ -1612,6 +1612,43 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### Cross-rasteriser premise — measured 2026-08-09, `measure.py rasterisers`
+
+Maths templates come from the font and queries come from the page, so
+the classifier's first real measurement is a **cross-rasteriser**
+comparison. Ghostscript fills by coverage with anti-aliasing; `scan`
+samples pixel centres with none. Measured on `cmr10`, both paths at the
+same nominal size:
+
+| pt | px/em | topology | signature | bitmap median | ink gs/scan |
+|---|---|---|---|---|---|
+| 10 | 56 | 19/20 | 18/20 | 15/1024 | **1.188** |
+| 12 | 67 | 20/20 | 20/20 | 12/1024 | 1.165 |
+| 20 | 111 | 20/20 | 19/20 | 7/1024 | 1.099 |
+| 40 | 222 | 20/20 | 17/20 | 5/1024 | 1.055 |
+
+**The stroke bias is real, one-sided and confirmed.** Ghostscript lays
+down 18.8% more ink at body-text size, and the excess *shrinks* with
+size — 1.188, 1.165, 1.099, 1.055 — which is exactly what an absolute
+sub-pixel bias must do as strokes thicken relative to it.
+
+**But it does not make the bitmap channel weak.** 15 differing bits in
+1024 is 1.5% Hamming at 10 pt, and it improves with size. The
+prediction that a cross-rasteriser bitmap comparison would land *below*
+U13's 61.5% cross-font figure is not supported: changing the rasteriser
+perturbs only the edge of a glyph, while changing the font changes the
+letterform itself, and those are not comparable perturbations.
+
+**And the Reeb signature is the LEAST robust of the three, not the most.**
+It was expected to be strongest because it is stroke-weight invariant by
+construction. It agrees 17/20 to 20/20, never better than topology, and
+its worst row is 40 pt — the size with the *smallest* bitmap distance.
+So signature disagreement here is not driven by the stroke bias at all,
+and the argument from stroke-weight invariance does not reach it.
+
+Consequence for the classification harness: **do not dilate templates**,
+and do not weight away from the bitmap channel on this evidence.
+
 ### U9 `scan.py` — the loop closes
 
 Tests T9-20 to T9-25 passed on 2026-08-09: 20 hermetic, 2 opt-in.

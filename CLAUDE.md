@@ -79,7 +79,8 @@ is reported here:
 **Every measured figure is re-runnable.** `tools/premise/measure.py`
 carries one subcommand per claim — `neutrality colour throughput skew
 premise contraction rotation moments nesting banding stitchcost schedcost
-fonts outlines boxes border white residuals missed convexity classify`. If you quote a
+fonts outlines boxes border white charstrings rasterisers residuals
+missed convexity classify`. If you quote a
 number, quote
 the subcommand that produces it. If a measurement decides whether to
 build something, the harness must be committed *before* the decision is

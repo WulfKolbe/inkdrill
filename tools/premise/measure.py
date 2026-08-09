@@ -27,6 +27,7 @@ border       what the pixels just outside a component's runs say about
              the field it sits on -- 2 samples per run
 boxes        drawn frames and filled panels from ink, cross-checked
              against the rectangles the PDF itself declares
+rasterisers  U9->U13 premise: template (scan) vs query (Ghostscript)
 charstrings  U9 interpreter premise: which Type 1 operators real fonts
              actually use, and which are subsystems rather than cases
 outlines     U9 rasterizer premise: which outline format maths glyphs are
@@ -72,6 +73,8 @@ from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
 from inkdrill.type1 import load as t1_load                  # noqa: E402
+from inkdrill.charstring import outline as cs_outline       # noqa: E402
+from inkdrill.scan import render as scan_render             # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -1506,6 +1509,100 @@ def m_charstrings(root, n, rng, doc=None):
                 print(f"    {k}: {mathc[k]} occurrences in {mglyphs} glyphs")
 
 
+def m_rasterisers(root, n, rng, doc=None):
+    """U9 -> U13 premise: does a template rendered by `scan` match a
+    query rendered by Ghostscript?
+
+    Maths templates come from the font and queries come from the page,
+    so the classifier's first real measurement is a CROSS-RASTERISER
+    comparison. The two differ by construction: Ghostscript fills by
+    coverage with anti-aliasing and `scan` samples pixel centres with
+    none, so the same nominal stroke lands a fraction of a pixel wider
+    on one side than the other.
+
+    POPULATION: glyphs of one roman text face (`cmr10`), rendered both
+    ways at the SAME nominal size, over several sizes -- because the
+    bias is absolute and sub-pixel, so its importance is a function of
+    how thick the strokes are, and one size cannot show that.
+
+    `root` is ignored; the font comes from the TeX tree, like the rest
+    of route B.
+    """
+    import subprocess
+    from inkdrill.type1 import _split_pfb
+    tree = pathlib.Path(os.environ.get("INKDRILL_TYPE1",
+                                       "/usr/share/texmf-dist/fonts/type1"))
+    src = next(tree.rglob("cmr10.pfb"), None) if tree.is_dir() else None
+    if src is None:
+        print(f"  cmr10.pfb not found under {tree}; set INKDRILL_TYPE1")
+        return
+    clear, enc = _split_pfb(src.read_bytes())
+    # A PFB is a segmented wrapper around a PostScript program. Inlined
+    # rather than `run`, because Ghostscript sandboxes file access.
+    font_ps = clear + enc + b"\n" + b"0" * 512 + b"\ncleartomark\n"
+    f = t1_load(src)
+    names = ["o", "e", "a", "b", "d", "g", "B", "A", "O", "R", "eight",
+             "zero", "two", "three", "P", "D", "c", "n", "s", "u"][:max(n, 4)]
+    dpi = 400
+
+    def gs(nm, pt):
+        body = ("\n/CMR10 findfont %d scalefont setfont\n30 30 moveto\n"
+                "/%s glyphshow\nshowpage\n" % (pt, nm)).encode()
+        tmp = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / "inkdrill_r.ps"
+        png = tmp.with_suffix(".png")
+        tmp.write_bytes(b"%!PS\n" + font_ps + body)
+        r = subprocess.run(
+            ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=png16m",
+             f"-r{dpi}", "-g400x400", "-dTextAlphaBits=4",
+             "-dGraphicsAlphaBits=4", f"-sOutputFile={png}", str(tmp)],
+            capture_output=True)
+        if r.returncode or not png.exists():
+            return None
+        got = components(load_mask(png, threshold=200), min_area=4, min_side=2)
+        return max((m for _, m in got), key=lambda m: m.ink_count, default=None)
+
+    def topo(m):
+        res = sweep(m, conn=8, capture=Capture.GRAPH)
+        try:
+            sig = signature(contract(res))
+        except Exception:
+            sig = None
+        return (len(res.components),
+                sum(c.cycle_count for c in res.components), sig)
+
+    print("  cmr10, Ghostscript (coverage + AA) vs scan (centre, no AA)")
+    print(f"  {'pt':>4} {'px/em':>6} {'topology':>9} {'signature':>10} "
+          f"{'bitmap med':>11} {'ink gs/scan':>12}")
+    for pt in (10, 12, 20, 40):
+        px_em = pt * dpi / 72.0
+        ok_t = ok_s = tot = 0
+        dists, ratios = [], []
+        for nm in names:
+            if nm not in f.charstrings:
+                continue
+            a = gs(nm, pt)
+            if a is None:
+                continue
+            b, _ = scan_render(cs_outline(f, nm), f.units_per_em, px_em)
+            ca, ha, sa = topo(a)
+            cb, hb, sb = topo(b)
+            tot += 1
+            ok_t += (ca == cb and ha == hb)
+            ok_s += (sa == sb)
+            dists.append((normalise(a) ^ normalise(b)).bit_count())
+            if b.ink_count:
+                ratios.append(a.ink_count / b.ink_count)
+        if not tot:
+            continue
+        med = sorted(dists)[len(dists) // 2]
+        rat = sorted(ratios)[len(ratios) // 2] if ratios else float("nan")
+        print(f"  {pt:>4} {px_em:>6.0f} {ok_t:>4}/{tot:<4} {ok_s:>5}/{tot:<4} "
+              f"{med:>8}/1024 {rat:>12.3f}")
+    print("  The ink ratio is the stroke bias: Ghostscript is heavier, and")
+    print("  the excess SHRINKS with size, which is what an absolute")
+    print("  sub-pixel bias must do as strokes thicken relative to it.")
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -1889,6 +1986,7 @@ MEASUREMENTS = {
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
+    "rasterisers": (m_rasterisers, 20),
     "white": (m_white, 8),
     "classify": (m_classify, 6),
     "convexity": (m_convexity, 2),

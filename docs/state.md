@@ -157,10 +157,15 @@ template must agree on hole count and Reeb signature, so a mismatch is a
 *detected* error rather than a confident wrong answer — which matters far
 more for `∑` vs `Σ` than for `e` vs `c`.
 
-One design note for that measurement: font-rendered templates against
-page-rendered queries is a *cross-rasteriser* comparison, so expect
-U13's cross-font row (61.5% bitmap-only, 86.3% all channels), not its
-within-document row.
+**That note is now measured and was wrong.** `measure.py rasterisers`
+compared `scan` against Ghostscript on `cmr10` at four sizes: topology
+agrees 19–20 of 20, the bitmap differs by **15 bits in 1024** at
+body-text size, and Ghostscript lays down 18.8% more ink with the
+excess shrinking as strokes thicken. A cross-*rasteriser* comparison
+perturbs only a glyph's edge; a cross-*font* one changes the letterform.
+They are not comparable, so do not expect the 61.5% row. The Reeb
+signature, expected to be the robust channel, is the least robust of the
+three.
 
 ## 6. Other open work, ranked
 
