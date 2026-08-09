@@ -963,9 +963,23 @@ def m_boxes(root, n, rng, fill_max=0.10, hole="bbox", doc=None):
     fp_pages = fp_rects = 0
     worst = 0.0
     unbordered = []
+    dropped_repeats = 0
+    pos_deltas = []
     for d, drill, png, pno in picked:
-        decl = [e for e in drill["images_layer"] if e["page"] == pno]
         pw_pt, _ = drill["_page_pt"]
+        # The oracle is a list of XObject PLACEMENTS, not of figures. A
+        # repeated header logo is 109 of one corporate document's 213
+        # entries, so a recovery rate over the raw list has a 49%
+        # ceiling no detector can pass. Count each distinct placement
+        # once and say how many were dropped.
+        seen_place, uniq = set(), []
+        for e in drill["images_layer"]:
+            k = (e.get("name"), round(e["w_pt"], 1), round(e["h_pt"], 1))
+            if k not in seen_place:
+                seen_place.add(k)
+                uniq.append(e)
+        repeats = len(drill["images_layer"]) - len(uniq)
+        decl = [e for e in uniq if e["page"] == pno]
         union, per_th = {}, []
         solids = 0
         for th in thresholds:
@@ -991,6 +1005,18 @@ def m_boxes(root, n, rng, fill_max=0.10, hole="bbox", doc=None):
             if best is not None and best <= 3.0:
                 hit += 1
                 deltas.append(best)
+        dropped_repeats = max(dropped_repeats, repeats)
+        # Locate by POSITION, then ask how wrong the SIZE is. Matching on
+        # size alone cannot tell a miss from a padded figure.
+        for e in decl:
+            near = [(max(abs(c.x0 * 72.0 / dp - e["x0"]),
+                         abs(c.y0 * 72.0 / dp - e["y0"])), c, dp)
+                    for c, dp in union.values()]
+            near = [t for t in near if t[0] <= 12.0]
+            if near:
+                _, c, dp = min(near, key=lambda t: t[0])
+                pos_deltas.append(max(abs(c.width * 72.0 / dp - e["w_pt"]),
+                                      abs(c.height * 72.0 / dp - e["h_pt"])))
         tot_decl += len(decl)
         tot_hit += hit
         if deltas:
@@ -1016,6 +1042,20 @@ def m_boxes(root, n, rng, fill_max=0.10, hole="bbox", doc=None):
     print("  an upper-bound check on the bordered ones, never an accuracy.")
     print(f"  FALSE POSITIVES on {fp_pages} control pages: {fp_rects} "
           f"rectangles where the PDF declares no image")
+    if dropped_repeats:
+        print(f"  oracle hygiene: {dropped_repeats} repeated placements "
+              f"dropped (a header logo repeats once per page)")
+    if pos_deltas:
+        ds = sorted(pos_deltas)
+        mid = ds[len(ds) // 2]
+        p90 = ds[max(0, int(0.9 * len(ds)) - 1)]
+        print(f"  size error where the figure WAS located (matched by "
+              f"position, n={len(ds)}): median {mid:.2f} pt, p90 {p90:.2f} pt, "
+              f"max {ds[-1]:.2f} pt")
+        print("  A declared rectangle is the PLACEMENT BOX; ink gives the "
+              "CONTENT EXTENT. They coincide for tight vector figures and")
+        print("  differ by the raster's own white padding otherwise, so a "
+              "tight tolerance measures the padding, not the detector.")
 
 
 def _unfilter_rgb(dec, w, h):

@@ -225,6 +225,16 @@ Axis invariance (row sweep == col sweep) is the foundation of later claims and
 is asserted at every level. Any change that breaks it is a real bug, not a test
 that needs relaxing.
 
+### The corpus is arXiv. Say so, and check the counterexample
+
+Every figure in this project was measured on LaTeX-produced papers
+until the Infineon handbook (Word 2016) was added, and it inverted three
+conclusions at once: U9's TeX-tree route reaches **0 of 19** fonts,
+`images_layer` is **51.2%** one repeated header logo, and both layout
+detectors score 0/28 because a pasted raster has neither a drawn frame
+nor a gutter. Before generalising a layout or font result, run it on
+`Infineon-motorcontrol_handbook-...` — it is kept for that purpose.
+
 ### State the population and the split rule beside every measured number
 
 Five findings so far were the same shape: the instrument was right and

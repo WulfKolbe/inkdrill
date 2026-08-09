@@ -196,6 +196,15 @@ Reproduced in `measure.py boxes`; full record in `units.md`.
   Recorded, not changed.
 - **`Component.root` != `Component.nodes[0]`** on 1293 of 1310 real
   components. Now pinned by a test; see the conventions in `CLAUDE.md`.
+- **A non-LaTeX counterexample now stands on the record.** The Infineon
+  handbook (Word 2016, 110 pages) sends U9's route B to **0 of 19
+  fonts** — 100% TrueType, CambriaMath the only maths family — so the
+  94.61% is arXiv-specific exactly as its stated population said. Its
+  `images_layer` is **51.2% one repeated header logo**, and both layout
+  detectors score 0/28 there because borderless JPEGs need the third
+  polarity, **solid fill**, whose threshold was wrong by a wide margin
+  (`fill > 0.9` recovers 1 of 34; `> 0.5` recovers 10). LaTeX draws
+  frames and leaves gutters; Word pastes rasters.
 - **White-run layout beats the ink detector at its own job.** Building
   layout from ink-bounded white runs recovers **33/34** declared image
   rectangles to 0.3 pt, against the ink detector's 29/34 to 1.72 pt —

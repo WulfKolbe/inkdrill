@@ -1219,6 +1219,87 @@ deferred raster-region detection is the prerequisite, and its
 active-component ceiling is what should fire on such a page rather than
 a wrong box tree.
 
+### A non-LaTeX counterexample — Infineon handbook, measured 2026-08-09
+
+Everything measured on this project so far has been arXiv. The corpus
+also holds a 110-page Infineon motor-control handbook produced by
+**Microsoft Word 2016** — A4, 213 declared images, 141,033 glyph
+instances — and it breaks three conclusions in three different ways. It
+is kept as the standing counterexample.
+
+#### U9's route B goes to zero
+
+| | arXiv sample | this handbook |
+|---|---|---|
+| font kinds | 48% Type 1C, 46% Type 1 | **100% TrueType / CID TrueType** |
+| maths families | CMMI, CMSY, CMEX, MSBM … | **CambriaMath only** |
+| found in the TeX tree | 94.61% of maths glyph mass | **0 of 19 font records** |
+
+`type1.py` reaches nothing here, and CambriaMath is a font this
+project's own U9 measurement already named in its 5.39% miss list. The
+94.61% is **arXiv-specific**, exactly as the contract's stated
+population said, and this document is what that caveat looks like when
+it fires. Serving this population needs a TrueType `glyf` parser, which
+is a different module and has no measurement behind it.
+
+U9's *inventory* half is unaffected and generalises cleanly: 140,946 of
+141,033 glyph instances (99.94%) are on the embedded-outline fast path.
+Note the consequence for the two routes — the fonts here are embedded,
+so **route A would work where route B cannot**. The route choice is a
+property of the population, not of the format.
+
+#### The oracle is half boilerplate
+
+`images_layer` lists XObject **placements**, not figures. Here 109 of
+213 entries (**51.2%**) are one repeated header logo — `Image9`, 72.0 x
+31.4 pt, on 109 of 110 pages. A recovery rate computed over the raw list
+has a 49% ceiling that no detector can pass. `m_boxes` now counts each
+distinct placement once and prints how many it dropped.
+
+#### Both layout detectors are the wrong polarity here
+
+On the eight pages carrying real figures, `boxes` (hollow frames) and
+`white` (ink-bounded gaps) each recover **0 of 28**. Neither is broken:
+these are borderless JPEGs dropped into Word, so there is no stroked
+frame and no gutter. The figures are **solid ink components** —
+page 7's `171.2 x 208.5 at (212,437)` is the declared `Image197`
+`171.20 x 208.47 at (212,437)`, matching to **0.00 pt**.
+
+The right detector is the filled polarity identified earlier as F1 —
+and its threshold was badly wrong. `_solid_candidates` used `fill > 0.9`:
+
+| `fill >` | recovered of 34 |
+|---|---|
+| 0.9 | 1 |
+| 0.75 | 1 |
+| 0.6 | 10 |
+| **0.5** | **10** |
+
+A photographic panel is not 90% ink. So the three polarities are
+**hollow frame / white gap / solid fill**, and which one applies is a
+property of the producing toolchain: LaTeX draws frames and leaves
+gutters, Word pastes rasters.
+
+#### A tight tolerance measures padding, not detection
+
+Even where a figure is found, the two quantities being compared are not
+the same thing. Matching by **position** and then asking how wrong the
+size is:
+
+| population | median | p90 | max |
+|---|---|---|---|
+| arXiv 2409.18839 | 0.92 pt | 8.44 pt | 20.05 pt |
+| Infineon handbook | 2.64 pt | 20.23 pt | 163.53 pt |
+
+**A declared rectangle is the placement box; ink gives the content
+extent.** They coincide for tight vector figures, which is why the
+arXiv numbers read 0.3–1.7 pt, and they differ by the raster's own white
+padding otherwise. The 3 pt tolerance used earlier was calibrated on a
+population where the two happen to coincide; on padded rasters it
+measures the padding. `m_boxes` now reports the position-matched
+distribution beside the hit count, because the distribution is the
+finding and the hit count is not.
+
 ### White-run layout — measured 2026-08-09, `measure.py white`
 
 A proposal to build layout from the page's *gaps* rather than its ink —
