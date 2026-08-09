@@ -527,16 +527,17 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 573 tests in 2.3s
-OK (skipped=15)
+Ran 612 tests in 2.5s
+OK (skipped=21)
 ```
 
-The 15 skipped are the three opt-in corpus modules:
+The 21 skipped are the four opt-in corpus modules:
 `tests/test_pngio_corpus.py` (4) and `tests/test_source_truth_corpus.py`
 (5), both gated on `INKDRILL_CORPUS`, and `tests/test_type1_corpus.py`
-(6, gated on `INKDRILL_TYPE1`). Neither
+(6) and `tests/test_charstring_corpus.py` (6), both gated on
+`INKDRILL_TYPE1`. Neither
 runs by default. The hermetic count -- what actually runs on a bare
-checkout -- is 573 - 15 = 558.
+checkout -- is 612 - 21 = 591.
 
 `test_type1_corpus` is gated rather than defaulted to the system TeX
 tree deliberately. Defaulting it would have been free coverage on most
@@ -556,13 +557,14 @@ fonts a machine happens to have installed.
 | U8 `sched.py` | 22 | passed |
 | U9 `font.py` | 52 | passed |
 | U9 `type1.py` | 39 | passed 2026-08-09 |
+| U9 `charstring.py` | 33 | passed 2026-08-09 |
 | U10 `gold.py` | 38 | passed |
 | U11 `coverage.py` | 24 | passed |
 | U12 `domains.py` | 40 | passed |
 | U13 `classify.py` | 31 | passed |
 | U14 `mathstruct.py` | 35 | passed |
 
-49 + 36 + 31 + 36 + 37 + 30 + 29 + 29 + 22 + 52 + 39 + 38 + 24 + 40 + 31 + 35 = 558,
+49 + 36 + 31 + 36 + 37 + 30 + 29 + 29 + 22 + 52 + 39 + 33 + 38 + 24 + 40 + 31 + 35 = 591,
 matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
@@ -1608,6 +1610,39 @@ sweep is only needed when hole *geometry* is wanted.
 **A finding, not a change.** It touches `nest`'s internals, and
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
+
+### U9 `charstring.py` — the interpreter, sized by measurement
+
+Tests T9-10 to T9-19 passed on 2026-08-09: 33 hermetic, 6 opt-in.
+
+`measure.py charstrings` counted operators over 400 fonts, 209,550
+charstrings and 157,177 subroutines before the module was written, so
+the interpreter is sized by what fonts use rather than by what the spec
+lists. Two of the 25 operators are subsystems rather than switch cases
+-- `seac` (1.89%) and `callothersubr` (0.31%) -- and both are built,
+because at 1.89% `seac` is every accented character and skipping it
+returns the base letter without its accent: a *plausible* wrong glyph,
+which is the failure mode this project exists to prevent.
+
+**At scale: 119,800 glyphs over 250 fonts, 0 errors, 0 unclosed
+contours.** That settles the `callsubr` class `first_ops` had to defer.
+
+**The independent oracle is letterform topology**, not "it ran". A
+roman `o` has two contours in every face ever cut, and no arithmetic
+error inside an interpreter produces that by accident. 21 glyph names
+of `cmr10` check out exactly.
+
+Applying the same table to `cmmi10` and `cmsy10` produced four
+"failures" that were all correct answers -- `cmmi10`'s `g` is a
+single-storey italic with 2 contours and `cmsy10`'s `B O P R` are
+script capitals drawn in one stroke. The population again: a roman
+table describes roman faces.
+
+**Mutation sweep: 10 mutants, 10 killed** -- but one only after a fix.
+`test_hint_replacement_leaves_a_value_for_its_pop` passed against an
+interpreter that pushed nothing, because all four subrs in its fixture
+were bare `return`s: calling subr 0 instead of subr 3 changed nothing
+observable. The subrs now differ, and the wrong `pop` fails the test.
 
 ### U9 rasterizer premise check — measured 2026-08-09, before `type1.py` was planned
 

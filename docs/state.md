@@ -65,7 +65,8 @@ structurally cannot do.
 | U7 | `band` | complete |
 | U8 | `sched` | complete — band tier deliberately not built |
 | U9 | `font` | inventory: complete |
-| U9 | `type1` | outlines: **font -> charstring bytes**; no interpreter yet |
+| U9 | `type1` | outlines: font -> charstring bytes |
+| U9 | `charstring` | charstrings -> closed contours; **scan conversion remains** |
 | U10 | `gold` | complete |
 | U11 | `coverage` | complete |
 | U12 | `domains` | complete |

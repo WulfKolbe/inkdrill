@@ -36,7 +36,7 @@ classification and the structure tree.
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 573, of which 15 skip
+python3 -m unittest discover -s tests -t .   # full suite: 612, of which 21 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -146,6 +146,11 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   including everything a producer embedded as Type 1C. `first_ops()`
   reports four classes, not a pass rate; see units.md for why that
   distinction was load-bearing twice.
+- **`inkdrill/charstring.py`** — run a Type 1 charstring, get closed
+  contours. `run`, `outline`, `Glyph`, `Segment`. Sized by
+  `measure.py charstrings`; `seac` and `callothersubr` are built because
+  the alternative is a plausible wrong glyph. 119,800 real glyphs run
+  with 0 errors and 0 unclosed contours. Scan conversion is NOT here.
 - **`inkdrill/gold.py`** — pdfminer alignment. `page_transform`, `match`,
   `to_coco`. The four residual classes are the product, not the
   leftovers: only 66.9% of real assignments are 1:1. Matches on component
