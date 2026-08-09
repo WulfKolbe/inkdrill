@@ -10,3 +10,6 @@ __pycache__/
 # local session-resume helper -- runs with --dangerously-skip-permissions,
 # must never be published in a public repo
 resume.sh
+
+# chat transcripts, exported locally
+inkdrillchat.txt

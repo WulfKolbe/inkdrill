@@ -12,6 +12,12 @@ It appears only in imports and one directory name — changing it later is a
 **Reporting rule for this document:** a unit is never "done". It is
 "tests T-n.m passed on <date>". Section 3 lists what has actually run.
 
+**Companion documents.** [`state.md`](state.md) is the map — goals, unit
+status, and the single next step. [`algorithms.md`](algorithms.md) is the
+algorithm and inner-loop performance reference, written by the project
+auditor, with a ranked improvement list. This file remains the
+authoritative per-unit record and the home of every measurement.
+
 ---
 
 ## 1. Conventions locked in U1–U3
@@ -248,6 +254,15 @@ straddling component and on a narrow glyph in a wide advance box; COCO
 export carrying the match class and component ids.
 **Scope limit:** no rasterization, so this compares ink to the *advance*
 box, not ink to ink. That comparison needs U9's rasterizer half.
+Two defects surfaced after the auditor's algorithm review and were
+reproduced exactly: `rows()` seeded from the MAXIMUM height, so one 50 px
+brace spanning three body lines collapsed `[8,8,8]` into `[25]` — **fixed**,
+it now seeds from the modal height; and `group()` absorbs a display big
+operator's limits into the operator — **confirmed, not fixed**, because a
+display limit does not vertically overlap its operator so `detect_scripts`
+never classifies it, and telling an accent from a limit geometrically is
+symbol identity again. Pinned by
+`test_a_display_operator_absorbs_its_limits_KNOWN_DEFECT`.
 **Status: 35 tests passed.**
 
 ### Application
@@ -487,7 +502,16 @@ resisting a descender and a tall bracket, with a fixture where mode and
 median differ; both script signals required; grouping of `i` and `:` but
 not of adjacent letters. Branch sweep: 28 probed, 3 real gaps closed, 3
 equivalent.
-**Status: 33 tests passed.**
+Two defects surfaced after the auditor's algorithm review and were
+reproduced exactly: `rows()` seeded from the MAXIMUM height, so one 50 px
+brace spanning three body lines collapsed `[8,8,8]` into `[25]` — **fixed**,
+it now seeds from the modal height; and `group()` absorbs a display big
+operator's limits into the operator — **confirmed, not fixed**, because a
+display limit does not vertically overlap its operator so `detect_scripts`
+never classifies it, and telling an accent from a limit geometrically is
+symbol identity again. Pinned by
+`test_a_display_operator_absorbs_its_limits_KNOWN_DEFECT`.
+**Status: 35 tests passed.**
 
 ### Deferred
 
@@ -509,7 +533,7 @@ OK (skipped=4)
 
 The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
 `INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 517 - 4 = 513.
+count -- what actually runs on a bare checkout -- is 519 - 4 = 515.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -527,9 +551,9 @@ count -- what actually runs on a bare checkout -- is 517 - 4 = 513.
 | U11 `coverage.py` | 24 | passed |
 | U12 `domains.py` | 40 | passed |
 | U13 `classify.py` | 31 | passed |
-| U14 `mathstruct.py` | 33 | passed |
+| U14 `mathstruct.py` | 35 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 40 + 31 + 33 = 513, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 40 + 31 + 35 = 515, matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.

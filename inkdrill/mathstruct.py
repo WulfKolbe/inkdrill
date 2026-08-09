@@ -166,7 +166,7 @@ class Script:
 
 
 def rows(glyphs: Iterable[Glyph], *, overlap: float = 0.4) -> list[Row]:
-    """Group glyphs into text lines by vertical overlap.
+    r"""Group glyphs into text lines by vertical overlap.
 
     A glyph joins a row when it shares more than `overlap` of ITS OWN
     height with the row -- not of the smaller of the two heights.
@@ -178,20 +178,34 @@ def rows(glyphs: Iterable[Glyph], *, overlap: float = 0.4) -> list[Row]:
     them. Measured against the glyph's own height, a superscript joins
     and a genuinely separate line still does not.
 
-    Glyphs are considered TALLEST FIRST, so body text seeds the rows and
-    smaller glyphs join them. Processing in reading order instead lets a
+    Glyphs are considered NEAREST THE MODAL HEIGHT FIRST, so body text
+    seeds the rows and everything else joins them.
+
+    Two failures shaped this rule. Processing in READING ORDER lets a
     superscript -- which sits higher than the line it belongs to -- open a
-    row of its own before that line exists, and then nothing can merge
-    them. That is an ordering artefact, and a determinism test cannot
-    catch it: the wrong answer was perfectly deterministic.
+    row of its own before that line exists. Processing TALLEST FIRST fixes
+    that and introduces a worse one: a 50 px `\left\{` spanning three
+    body lines seeds before any of them, opens a row across the whole
+    span, and every body glyph's own-height overlap then clears the
+    threshold -- three lines collapse into one. Measured: `[8, 8, 8]`
+    becomes `[25]`.
+
+    "Tallest first" is not "body text first". The modal height is.
+    Neither failure is caught by a determinism test, because both wrong
+    answers were perfectly deterministic.
 
     G1: every glyph lands in exactly one row. G2: deterministic, because
     the order is fully specified by the sort key.
     """
     if not 0.0 < overlap < 1.0:
         raise ValueError(f"overlap must be in (0, 1), got {overlap}")
+    items = list(glyphs)
+    if not items:
+        return []
+    modal_h = _mode([g.height for g in items])
     out: list[Row] = []
-    for g in sorted(glyphs, key=lambda g: (-g.height, g.top, g.x0, g.id)):
+    for g in sorted(items, key=lambda g: (abs(g.height - modal_h),
+                                          g.top, g.x0, g.id)):
         for r in out:
             share = min(r.bottom, g.bottom) - max(r.top, g.top)
             if share > overlap * (g.height or 1.0):
@@ -258,7 +272,7 @@ def detect_scripts(row: Row, *, max_height_ratio: float = 0.80,
 
 def group(glyphs: Sequence[Glyph], *, share: float = 0.5,
           max_gap: float = 2.5, stack: float = 0.5) -> list[list[int]]:
-    """Join components that belong to one glyph -- `i`, `j`, `:`, `=`.
+    r"""Join components that belong to one glyph -- `i`, `j`, `:`, `=`.
 
     U13's confusion matrix is dominated by these: a per-component
     classifier sees a dot or a stem and names it `.` or `l`.
@@ -277,6 +291,22 @@ def group(glyphs: Sequence[Glyph], *, share: float = 0.5,
     they were side by side, not stacked, and the rule could not tell.
     Parts of one glyph sit ABOVE each other; adjacent letters sit BESIDE
     each other, and that is the whole distinction.
+
+    KNOWN DEFECT, measured and not fixed: **a display big operator's
+    limits are absorbed into the operator.** A `sum` with limits above and
+    below groups as one glyph -- the limits x-overlap it almost totally,
+    are stacked, and sit close relative to its height, so all three
+    conditions hold. `i` + dot, an accent and an inline `x^2` are all
+    handled correctly; only the display-operator case fails.
+
+    It is not fixed here because the obvious fix does not work. Excluding
+    what `detect_scripts` found would close it if the limits were in the
+    operator's row -- but a display limit does not vertically overlap its
+    operator at all, so `rows()` separates them and nothing classifies
+    them as scripts. Distinguishing an accent from a limit geometrically
+    is the same problem as knowing the operator is an operator, which is
+    symbol identity, which is the thing with no measurement behind it.
+    Recorded rather than papered over.
     """
     if not 0.0 < share <= 1.0:
         raise ValueError(f"share must be in (0, 1], got {share}")

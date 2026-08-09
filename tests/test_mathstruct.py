@@ -69,6 +69,19 @@ class T14_1_RowsPartition(unittest.TestCase):
         self.assertEqual(len(got), 1)
         self.assertIn(99, [m.id for m in got[0].members])
 
+    def test_a_tall_brace_does_not_swallow_the_lines_it_spans(self):
+        """Rows seed from the MODAL height, not the maximum. Seeding
+        tallest-first fixed the superscript case and broke this one: a
+        50px \\left\\{ spanning three body lines opened a row across the
+        whole span and collapsed [8, 8, 8] into [25]."""
+        body = []
+        for k, y in enumerate((0.0, 20.0, 40.0)):
+            body += [g(k * 10 + i, i * 10.0, y, i * 10.0 + 8, y + 10.0)
+                     for i in range(8)]
+        brace = g(999, 200.0, 0.0, 210.0, 50.0)
+        sizes = sorted(len(r.members) for r in rows(body + [brace]))
+        self.assertEqual(sizes, [1, 8, 8, 8])
+
     def test_rows_come_back_top_to_bottom(self):
         got = rows(line(4, y=300.0, start=200) + line(4, y=100.0))
         self.assertLess(got[0].top, got[1].top)
@@ -250,6 +263,26 @@ class T14_4_ComponentGrouping(unittest.TestCase):
         # and the same dot directly above DOES join
         own_dot = g(2, 10.0, 90.0, 14.0, 94.0)
         self.assertEqual(group([stem, own_dot]), [[0, 2]])
+
+    def test_a_display_operator_absorbs_its_limits_KNOWN_DEFECT(self):
+        """Measured and NOT fixed. A big operator's limits x-overlap it
+        almost totally, are stacked, and sit close relative to its height,
+        so all three grouping conditions hold and it groups as one glyph.
+
+        Excluding what detect_scripts found would not close it: a display
+        limit does not vertically overlap its operator, so rows() puts
+        them in different rows and nothing classifies them as scripts.
+        Telling an accent from a limit geometrically is the same problem
+        as knowing the operator is an operator -- symbol identity, which
+        has no measurement behind it. This test pins the current
+        behaviour so the fix is visible when it lands."""
+        op = g(10, 100.0, 100.0, 130.0, 140.0)
+        above = g(11, 108.0, 88.0, 122.0, 98.0)
+        below = g(12, 108.0, 142.0, 122.0, 152.0)
+        self.assertEqual(group([op, above, below]), [[10, 11, 12]])
+        # and they are in three separate rows, which is why the obvious
+        # fix does not reach them
+        self.assertEqual(len(rows([op, above, below])), 3)
 
     def test_a_vertically_distant_pair_is_not_merged(self):
         top = g(0, 10.0, 20.0, 13.0, 23.0)

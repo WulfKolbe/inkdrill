@@ -2,10 +2,41 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## What this project is for
+
+Scan-event topology for document layout analysis and mathematics
+expression recognition. Pure standard library.
+
+**The purpose is to support high-quality scanning by locating errors and
+areas other tools have missed.** That is a cross-check, not an OCR
+engine: given a page and another tool's opinion of it, say what that tool
+did not see. Two consequences run through every unit —
+
+- **The residual is the product.** `coverage.py` reports ink with no
+  region; `gold.py` reports four alignment classes rather than one
+  agreement rate. A single accuracy number would throw the finding away.
+- **Topology before recognition.** Holes, branches and nesting come from
+  ink alone, before anything is named. They are what let a wrong answer
+  be *detected* rather than confidently returned.
+
+**Orientation, in reading order:** [`docs/state.md`](docs/state.md) for
+goals and current state, [`docs/units.md`](docs/units.md) for the
+authoritative per-unit record and every measurement, and
+[`docs/algorithms.md`](docs/algorithms.md) for the algorithms, the
+inner-loop performance analysis and the ranked improvement list.
+
+**Current state.** All fifteen units exist. U9 is its inventory half only
+(no rasterizer) and U14 is its geometry only (no structure tree); U8's
+band tier was deliberately not built. All three are recorded with the
+measurement that decided them. **The single highest-value next step is
+the U9 rasterizer** — see `docs/state.md` §5 for why it unblocks maths
+classification and the structure tree, and why the corpus cannot
+substitute for it.
+
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 517, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 519, of which 4 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -37,8 +68,35 @@ is reported here:
 - **A unit is never "done".** It is "tests T-n.m passed on `<date>`". Section 3
   of `units.md` lists what has actually run. Update it with measured results,
   never with assertions.
-- **Section 4 lists 10 unverified assumptions.** If your work bears on one,
-  say which number, and move it to Section 3 only when a test proves it.
+- **Section 4 lists the assumptions.** Seven are now struck through with
+  the measurement that closed them and three were *refuted*, changing the
+  design. If your work bears on one, say which number, and move it only
+  when a test proves it.
+
+**Every measured figure is re-runnable.** `tools/premise/measure.py`
+carries one subcommand per claim — `neutrality colour throughput skew
+premise contraction rotation moments nesting banding stitchcost schedcost
+fonts residuals missed convexity classify`. If you quote a number, quote
+the subcommand that produces it. If a measurement decides whether to
+build something, the harness must be committed *before* the decision is
+acted on — that rule exists because it was broken twice.
+
+## Measure the premise before writing the plan
+
+The standing rule, and the one that has paid off most. Before planning a
+unit, measure the single claim its design rests on. It has repeatedly
+changed what got built:
+
+- U8's band tier was **not built** — decode is 85–95% of per-page work, so
+  parallelising the sweep ceilings at 1.17×.
+- U13 does **not** escalate beyond 1-NN — the confusion matrix said so.
+- U14's structure tree was **not built** — it needs symbol identity, which
+  has no measurement behind it.
+- U5's contract gained "integer accumulation" because that is *why* axis
+  invariance is exact rather than approximate.
+
+A premise check that changes nothing is cheap. One that changes the plan
+saves a unit.
 
 ## Architecture
 
@@ -228,6 +286,25 @@ looks like a logic bug in whatever you touched last.
 `if …:` lines misses ternaries, `while`, and comprehension conditions; two
 sweeps that cover different constructs will report different totals for the
 same file and neither is wrong.
+
+## Where the deliberate gaps are
+
+Three things are missing on purpose, each with the measurement that
+decided it. Do not "fix" them without re-taking that measurement.
+
+- **U9's rasterizer half.** No CFF/TrueType outline parsing, no scan
+  conversion. This is the **highest-value next step** — see
+  `docs/state.md` §5. It unblocks maths classification, which unblocks
+  U14's structure tree.
+- **U14's structure tree, fences, big operators, LaTeX.** All need symbol
+  identity for `∑ ∫ ( [`, and U13's measured population contained no
+  maths symbols at all.
+- **U8's band tier and shared memory.** Measured into the ground;
+  conditional on decode continuing to dominate.
+
+One known defect is pinned rather than fixed: `group()` absorbs a display
+big operator's limits into the operator. The obvious remedy does not
+reach it, and the real fix is symbol identity again.
 
 ## CodeGraph
 
