@@ -176,6 +176,31 @@ From `algorithms.md` §9, with status:
    identity. Pinned by a test.
 7. Native port sites. *Open.*
 
+## 6a. Findings from the 2026-08-09 external audit
+
+Reproduced in `measure.py boxes`; full record in `units.md`.
+
+- **Box detection works, at a tenth of the proposed threshold.** The
+  audit's `fill < 0.35` yields 125 false positives across nine text
+  pages; `fill < 0.10` yields **0** and recovers exactly the same 29 of
+  34 declared images. Its "zero false positives" claim came from
+  looking at two control pages out of nine.
+- **The reported depth-2 layer is glyphs.** Page 6's 21x21 "boxes" are
+  italic zeros, established by rendering the pixels. The deepest chains
+  built on them do not exist.
+- **`pdfdrill`'s `images_layer` is a free independent oracle** — 29/34
+  recovered to 1.72 pt, the border thickness. But a declared image only
+  yields a rectangle when the figure is *drawn with a border*; on a
+  random corpus sample recovery is 0/13 and the detector is not wrong.
+- **`nest()` is 15.0x slower** than the two sweeps it is equivalent to.
+  Recorded, not changed.
+- **`Component.root` != `Component.nodes[0]`** on 1293 of 1310 real
+  components. Now pinned by a test; see the conventions in `CLAUDE.md`.
+- **MathPix ignores non-white backgrounds** — 0 regions inside the
+  tinted panels of pages 2 and 4, but 89 of 104 inside page 7's
+  white-background screenshot. A blind spot with a stateable trigger,
+  and its own residual class for U11.
+
 ## 7. Not measured, and load-bearing
 
 - maths-symbol classification (§5)
@@ -185,6 +210,11 @@ From `algorithms.md` §9, with status:
 - Reeb signature rotation under a gentle, anti-aliased rasteriser rather
   than nearest-neighbour resampling
 - anything downstream of U13's 61.5% cross-font figure
+- box detection on a **screened** reproduction. Both polarities assume
+  constant-colour regions and continuous strokes; a halftone screen
+  turns a tint into a dot lattice and a border into a dotted line, and
+  invalidates both. Deferred raster-region detection is the
+  prerequisite
 
 ## 8. How to work here
 

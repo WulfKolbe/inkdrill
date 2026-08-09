@@ -36,7 +36,7 @@ classification and the structure tree.
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 564, of which 10 skip
+python3 -m unittest discover -s tests -t .   # full suite: 568, of which 10 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -78,7 +78,8 @@ is reported here:
 **Every measured figure is re-runnable.** `tools/premise/measure.py`
 carries one subcommand per claim — `neutrality colour throughput skew
 premise contraction rotation moments nesting banding stitchcost schedcost
-fonts outlines residuals missed convexity classify`. If you quote a number, quote
+fonts outlines boxes residuals missed convexity classify`. If you quote a
+number, quote
 the subcommand that produces it. If a measurement decides whether to
 build something, the harness must be committed *before* the decision is
 acted on — that rule exists because it was broken twice.
@@ -202,6 +203,14 @@ These are decided and under test. Inherit them rather than re-litigating.
 - **Connectivity is paired**: 8 for foreground, 4 for background, always.
 - **`keep_regions` / `clear_regions` are two polarities of one parameter**, not
   two code paths.
+- **A component's identity is `Component.root`. `nodes[0]` is not it.**
+  `moments_per_component` keys by `root`; `SweepResult.components` is
+  *ordered* by `nodes[0]`. On one real page 1293 of 1310 components had
+  `root != nodes[0]`, so a caller keying its own lookup by `nodes[0]` hit
+  17 of 1310 and silently took the default for the rest — reporting zero
+  holes everywhere and finding no boxes on a page with fourteen. Nothing
+  raises: both are valid ints and `dict.get` has a default. Pinned by
+  `T5_7_ComponentIdentityIsRootNotFirstNode`.
 
 ### Testing style
 
@@ -314,7 +323,15 @@ decided it. Do not "fix" them without re-taking that measurement.
 - **U8's band tier and shared memory.** Measured into the ground;
   conditional on decode continuing to dominate.
 
-One known defect is pinned rather than fixed: `group()` absorbs a display
+One known performance defect is recorded rather than fixed: **`nest()`
+is 15.0x slower than the two sweeps it is equivalent to** (19.70 s vs
+1.31 s on a 3400x4400 page, byte-identical output — 3,390 ink regions,
+1,190 holes). It flood-fills per pixel and accumulates extents in a
+per-pixel Python loop, the same run-discipline violation as
+`classify.normalise`. `measure.py boxes` uses the two-sweep form
+directly, so the cost is avoided where it was measured.
+
+One known correctness defect is pinned rather than fixed: `group()` absorbs a display
 big operator's limits into the operator. The obvious remedy does not
 reach it, and the real fix is symbol identity again.
 

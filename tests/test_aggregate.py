@@ -308,5 +308,54 @@ class T5_6_MomentsAdd(unittest.TestCase):
         self.assertEqual((s.x0, s.y0, s.x1, s.y1), (0, 0, 2, 2))
 
 
+class T5_7_ComponentIdentityIsRootNotFirstNode(unittest.TestCase):
+    """The two component identifiers, pinned because they differ.
+
+    `moments_per_component` keys by `Component.root`, while
+    `SweepResult.components` is ordered by `Component.nodes[0]`. Those
+    are two identifiers for the same object and they are NOT equal: on
+    one real corpus page, 1293 of 1310 components had
+    `root != nodes[0]`, so an external caller keying its own per-
+    component lookup by `nodes[0]` hit 17 of 1310 and silently took the
+    default for the rest -- reporting zero holes everywhere and finding
+    no boxes on a page that has fourteen.
+
+    Nothing raised, and no test failed, because both identifiers are
+    valid ints and `dict.get` has a default. These tests exist so the
+    keying is a stated contract rather than an implementation detail
+    that a caller has to discover by getting a wrong answer.
+    """
+
+    LETTER_H = ["#...#", "#...#", "#####", "#...#", "#...#"]
+
+    def _result(self):
+        m = InkMask.from_rows(self.LETTER_H)
+        return sweep(m, conn=8, capture=Capture.GRAPH)
+
+    def test_moments_are_keyed_by_root(self):
+        res = self._result()
+        mo = moments_per_component(res)
+        self.assertEqual(sorted(mo), sorted(c.root for c in res.components))
+
+    def test_root_and_first_node_really_do_differ(self):
+        # Guards the test above from becoming vacuous: if some future
+        # change made root == nodes[0] everywhere, the keying question
+        # would be moot and this test should be the one that says so.
+        c = self._result().components[0]
+        self.assertNotEqual(c.root, c.nodes[0])
+
+    def test_keying_by_first_node_misses(self):
+        """The failure exactly as it occurred, so it cannot recur silently."""
+        res = self._result()
+        mo = moments_per_component(res)
+        self.assertNotIn(res.components[0].nodes[0], mo)
+
+    def test_components_are_ordered_by_first_node_not_by_root(self):
+        m = InkMask.from_rows(["#.#.#", "###.#", "#.#.#"])
+        res = sweep(m, conn=8, capture=Capture.GRAPH)
+        firsts = [c.nodes[0] for c in res.components]
+        self.assertEqual(firsts, sorted(firsts))
+
+
 if __name__ == "__main__":
     unittest.main()

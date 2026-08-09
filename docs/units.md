@@ -527,7 +527,7 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 564 tests in 2.4s
+Ran 568 tests in 2.4s
 OK (skipped=10)
 ```
 
@@ -535,7 +535,7 @@ The 10 skipped are the two opt-in corpus modules:
 `tests/test_pngio_corpus.py` (4, gated on `INKDRILL_CORPUS`) and
 `tests/test_type1_corpus.py` (6, gated on `INKDRILL_TYPE1`). Neither
 runs by default. The hermetic count -- what actually runs on a bare
-checkout -- is 564 - 10 = 554.
+checkout -- is 568 - 10 = 558.
 
 `test_type1_corpus` is gated rather than defaulted to the system TeX
 tree deliberately. Defaulting it would have been free coverage on most
@@ -549,7 +549,7 @@ fonts a machine happens to have installed.
 | U2 `raster.py` | 31 | passed |
 | U3 `sweep.py` | 36 | passed |
 | U4 `reeb.py` | 37 | passed |
-| U5 `aggregate.py` | 26 | passed |
+| U5 `aggregate.py` | 30 | passed |
 | U6 `nest.py` | 29 | passed |
 | U7 `band.py` | 29 | passed |
 | U8 `sched.py` | 22 | passed |
@@ -561,7 +561,7 @@ fonts a machine happens to have installed.
 | U13 `classify.py` | 31 | passed |
 | U14 `mathstruct.py` | 35 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 39 + 38 + 24 + 40 + 31 + 35 = 554,
+49 + 36 + 31 + 36 + 37 + 30 + 29 + 29 + 22 + 52 + 39 + 38 + 24 + 40 + 31 + 35 = 558,
 matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
@@ -1059,6 +1059,184 @@ reversed.
 Re-run: `tools/premise/measure.py --corpus <dir> schedcost`
 
 ---
+
+### U11 box detection — measured 2026-08-09, `measure.py boxes`
+
+An external audit proposed a frame detector, gave numbers for arXiv
+2409.18839, and asked that they be reproduced and turned into a harness.
+Four of its claims reproduce exactly, three do not, and one of the three
+inverts the conclusion. Everything below is `measure.py boxes`, which
+takes the two parameters that changed the answer as **arguments**
+because they do.
+
+**The predicate.** Two sweeps — foreground at conn=8, the inverted mask
+at conn=4 — then a component is a frame iff `fill < fill_max` and it
+encloses a hole covering at least half its bbox. No `nest`, no
+`min_side`.
+
+**What reproduced.** With `--hole-measure bbox`, the audit's counts came
+back to the digit, including a three-way depth histogram:
+
+| page | threshold | audit | measured |
+|---|---|---|---|
+| 4 | 200 | 13 (9/4) | 13 (9/4) |
+| 4 | 240 | 9 (8/1) | 9 (8/1) |
+| 6 | 200 | 154 (14/131/9) | 154 (14/131/9) |
+| 6 | 240 | 56 (29/27) | 56 (29/27) |
+
+That four-cell agreement is what identified the one term the audit left
+ambiguous: "hole area" is the hole's **bounding-box** area. Measured as
+pixel area the same pages give 9, 6, 75 and 24.
+
+#### The clean-control claim is false, and by a wide margin
+
+The audit reported "zero false positives on the text-only pages (5 and
+8)". Under the very predicate that produces its other four numbers,
+**page 5 yields 13 rectangles and page 8 yields 7**. Both claims cannot
+hold; the counts settle which.
+
+Across all nine text pages of the document:
+
+| `--fill-max` | declared images recovered | false positives on 9 control pages |
+|---|---|---|
+| **0.35** (as proposed) | 29/34 | **125** |
+| **0.10** (corrected) | 29/34 | **0** |
+
+**Recovery is identical.** The permissive cutoff buys nothing and costs
+125 false positives, 32 of them on page 13 alone. The audit saw zero
+because it looked at two control pages; the two it did not look at
+contribute 56.
+
+#### What the false positives are, and why no size filter separates them
+
+Rendering the pixels rather than arguing about them: the page-5 and
+page-8 rectangles are **hollow glyphs** — `O`, `D`, `o` at 400 dpi, 36
+by 38 px, `fill` 0.32 to 0.35. Real frames on the same document read
+`fill` **0.016 to 0.031**, an order of magnitude away.
+
+The same rendering settles a second claim. The audit rejected a
+`min_side` filter because "the depth-2 boxes on page 6 are 21 x 21 px,
+smaller than the body text", and built its deepest chains on them:
+
+```
+=== 21x19 at (1822,1919) fill 0.313
+   .....#############...
+   .......###......####.
+   ......###.........###
+   .....###..........###
+   ....###..........###.
+   ...###........###....
+   #############........
+```
+
+**They are italic zeros.** Page 6's entire depth-2 layer is glyphs, and
+with it the reported chains `22x22 < 165x37 < 1024x562`. At
+`--fill-max 0.10` the layer disappears and page 6 reads depth
+`{0: 10, 1: 9}` while still recovering 10 of 10 declared images.
+
+So the audit's C3 is right that `min_side` is the wrong predicate, and
+right that rectangularity is the right axis — but wrong about which end
+of it discriminates, and the object it offered as proof was a character.
+
+#### The independent oracle holds
+
+`pdfdrill` writes an `images_layer` giving every embedded XObject's
+rectangle in PDF points. Comparing it to the measured ink frames on
+2409.18839: **29 of 34 declared images recovered, worst size error 1.72
+pt** — the border thickness, so this is agreement to the limit of the
+geometry. Page 4 recovers 7/7 and page 6 recovers 10/10, both as
+claimed.
+
+**State the denominator.** A declared image yields a measurable
+rectangle only when the figure is *drawn with a border*. A bare
+photograph has no stroked frame, so a miss is not a detector failure —
+on a random corpus sample of eight pages from four other documents,
+recovery is 0/13 and the detector is not wrong. This is an upper-bound
+check on bordered figures, never an accuracy, and the harness prints
+that beside the ratio.
+
+#### No single threshold suffices (audit F2, confirmed and sharpened)
+
+Per-threshold rectangle counts on the same document:
+
+| page | th 200 | th 240 | union |
+|---|---|---|---|
+| 2 | 3 | 0 | 3 (3/3 images) |
+| 4 | 5 | 7 | 7 (7/7) |
+| 6 | 17 | 7 | 19 (10/10) |
+| 11 | 6 | 0 | 6 (8/12) |
+
+Page 4 needs 240 and pages 2, 6 and 11 need 200. Neither threshold
+recovers all 34; the union does the work, at the cost of one extra pass.
+Pale pink and green borders sit at grey 200–240, which is why.
+
+#### Both polarities exist (audit F1, confirmed)
+
+A layout panel drawn as a translucent tint is a nearly **solid**
+component, and the hollow test cannot see it at any threshold. Page 6
+carries 7 such regions and page 7 carries 6. The complementary test is
+the opposite end of the same axis and needs no new computation, so
+`_solid_candidates` is reported beside the frames. Note it needs a
+threshold of its own: page 4's tints appear only at 250, not at 200 or
+240 — so three thresholds are in play, not two.
+
+#### MathPix ignores non-white backgrounds (audit Part 4, confirmed exactly)
+
+Counting `lines.json` regions whose centre falls inside a declared image
+rectangle:
+
+| page | images | regions | inside |
+|---|---|---|---|
+| 2 | 3 | 37 | **0** |
+| 4 | 7 | 31 | **0** |
+| 6 | 10 | 20 | 1 |
+| 11 | 12 | 5 | 1 |
+| **7** | 2 | 104 | **89** |
+
+Page 7 is the counterexample that makes this a mechanism rather than a
+correlation: its figure is a **white-background screenshot** of a
+journal page, and MathPix reads straight through it. The coloured-tint
+panels on 2, 4, 6 and 11 it collapses to a single `diagram` and reads
+nothing inside.
+
+**Consequence for U11.** "Ink with no region" over a coloured figure
+panel is not a MathPix failure; it is a systematic blind spot with a
+stateable trigger — non-white background — and it deserves its own
+residual class, because the remedy differs. Missed text is an error; a
+declined panel is the other tool behaving as designed and inkdrill
+supplying what it declines to look at. Page 11 is the extreme case: 12
+figures, 5 regions.
+
+#### The boundary of all of the above
+
+Every figure in this document is vector-drawn or smoothly compressed, so
+a constant-colour fill really is constant. **A screened reproduction of
+the same figure invalidates both polarities**: a filled tint becomes a
+dot lattice, so `fill` collapses to the screen's tone value; a 2 px
+border becomes a broken dotted line, so the frame stops being one
+connected component. Not built for, recorded as the stated limit. The
+deferred raster-region detection is the prerequisite, and its
+active-component ceiling is what should fire on such a page rather than
+a wrong box tree.
+
+### `nest()` is 15x slower than the two sweeps it is equivalent to
+
+The audit's C2, reproduced on page 8 of the same document (3400 x 4400):
+
+| | time | ink regions | holes |
+|---|---|---|---|
+| `nest()` | 19.70 s | 3,390 | 1,190 |
+| `sweep(m)` + `sweep(m.inverted(), conn=4)` | **1.31 s** | 3,390 | 1,190 |
+
+Identical output, **15.0x**. `nest` flood-fills per pixel and
+accumulates extents in a per-pixel Python loop — the same
+run-discipline violation as `classify.normalise`, in a more expensive
+place. The cycle rank already gives the hole *count* free, so the second
+sweep is only needed when hole *geometry* is wanted.
+
+**A finding, not a change.** It touches `nest`'s internals, and
+`measure.py boxes` uses the two-sweep form directly, so the cost is
+already avoided where it was measured.
 
 ### U9 rasterizer premise check — measured 2026-08-09, before `type1.py` was planned
 

@@ -21,6 +21,8 @@ skew         projection-profile skew of scanned pages
 premise      hole count and signature stability vs pdfminer ground truth
 contraction  RAG runs -> Reeb arcs reduction on real page ink
 rotation     signature survival under resampled rotation
+boxes        drawn frames and filled panels from ink, cross-checked
+             against the rectangles the PDF itself declares
 outlines     U9 rasterizer premise: which outline format maths glyphs are
              in, and whether it is reachable without a PDF parser
 """
@@ -32,6 +34,7 @@ import json
 import math
 import pathlib
 import random
+import re
 import struct
 import sys
 import time
@@ -40,9 +43,10 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from inkdrill.pngio import _is_neutral, read_png            # noqa: E402
+from inkdrill.pngio import _is_neutral, load_mask, read_png  # noqa: E402
 from inkdrill.raster import INK, InkMask, binarize          # noqa: E402
-from inkdrill.aggregate import component_moments, moments_of_mask  # noqa: E402
+from inkdrill.aggregate import (component_moments, moments_of_mask,  # noqa: E402
+                                moments_per_component)
 from inkdrill.band import canonical, stitch, sweep_bands, sweep_banded  # noqa: E402
 from inkdrill.nest import Kind, nest  # noqa: E402
 from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # noqa: E402
@@ -794,6 +798,222 @@ def m_outlines(root, n, rng):
           + ", ".join(f"{f} {c}" for f, c in drop_fams.most_common(10)))
 
 
+_PAGE_SIZE = re.compile(r"([\d.]+)\s*x\s*([\d.]+)\s*pts")
+
+
+def _drill(doc):
+    """The pdfdrill sidecar for a corpus document, or None.
+
+    `images_layer` lists every embedded XObject's rectangle in PDF
+    points. That is an independent oracle for a box detector -- produced
+    by a different tool, from the PDF's own object graph rather than
+    from ink -- and it is already on disk, so using it costs nothing.
+    """
+    hits = list(doc.glob("*.drill.json"))
+    if not hits:
+        return None
+    try:
+        d = json.load(hits[0].open())
+    except (OSError, ValueError):
+        return None
+    info = d.get("pdfinfo") or {}
+    m = _PAGE_SIZE.search(info.get("page_size") or "")
+    if not m or not d.get("images_layer"):
+        return None
+    d["_page_pt"] = (float(m.group(1)), float(m.group(2)))
+    return d
+
+
+def _rect_candidates(mask, *, fill_max, hole):
+    """Components that look like a drawn frame, as (moments, hole).
+
+    Two sweeps, no `nest`: the foreground gives components and the
+    inverted mask at conn=4 gives holes, which is the same pair `nest`
+    computes and 15x cheaper (see the C2 note in units.md).
+
+    `hole` selects how a hole's size is measured -- "bbox" or "area".
+    It is an ARGUMENT because it changes the answer by a factor of two
+    and because the two readings disagree about what the detector even
+    found; see the U11 box section of units.md.
+    """
+    fg = sweep(mask, conn=8, capture=Capture.GRAPH)
+    bg = sweep(mask.inverted(), conn=4, capture=Capture.GRAPH)
+    comps = moments_per_component(fg)
+    W, H = mask.width, mask.height
+    # A background component touching the page border is the page, not a
+    # hole. Everything else is enclosed by ink.
+    def size(h):
+        return h.width * h.height if hole == "bbox" else h.area
+    holes = sorted((h for h in moments_per_component(bg).values()
+                    if h.x0 > 0 and h.y0 > 0 and h.x1 < W - 1 and h.y1 < H - 1),
+                   key=lambda h: -size(h))
+    out = []
+    for c in comps.values():
+        bb = c.width * c.height
+        if bb == 0 or c.area / bb >= fill_max:
+            continue
+        for h in holes:                     # sorted, so the first fit wins
+            if size(h) * 2 < bb:
+                break
+            if (h.x0 >= c.x0 and h.y0 >= c.y0 and h.x1 <= c.x1
+                    and h.y1 <= c.y1 and size(h) >= 0.5 * bb):
+                out.append((c, h))
+                break
+    return out
+
+
+def _solid_candidates(mask, *, min_px=50_000, fill_min=0.9, min_side=40):
+    """The OTHER polarity: a filled tint, not a stroked frame (F1).
+
+    A layout panel drawn as a translucent fill is a nearly solid
+    component, and the hollow test cannot see it at all -- `fill` near 1
+    is the opposite end of the same axis. Same moments, no new
+    computation.
+    """
+    res = sweep(mask, conn=8, capture=Capture.GRAPH)
+    return [c for c in moments_per_component(res).values()
+            if c.width * c.height >= min_px and c.width >= min_side
+            and c.height >= min_side
+            and c.area / (c.width * c.height) > fill_min]
+
+
+def _depths(rects):
+    """Nesting depth per rectangle, by strict bbox containment."""
+    bs = [(c.x0, c.y0, c.x1, c.y1) for c in rects]
+    area = [(b[2] - b[0]) * (b[3] - b[1]) for b in bs]
+    return [sum(1 for j, b in enumerate(bs)
+                if j != i and b[0] <= a[0] and b[1] <= a[1]
+                and b[2] >= a[2] and b[3] >= a[3] and area[j] > area[i])
+            for i, a in enumerate(bs)]
+
+
+def m_boxes(root, n, rng, fill_max=0.10, hole="bbox", doc=None):
+    """units.md "U11 box detection": frames and rules from ink alone,
+    cross-checked against the rectangles the PDF itself declares.
+
+    POPULATION: rendered pages of corpus documents that carry a pdfdrill
+    sidecar with a non-empty `images_layer`. The sample is deliberately
+    HALF pages with declared images and half without: a detector
+    measured only on pages that contain boxes cannot report a false
+    positive, and the control pages are where the interesting number is.
+
+    SPLIT: documents sampled without replacement, then pages within
+    them; a page never appears under two thresholds as two samples.
+
+    FILTERS, both of which change the answer and are therefore
+    arguments rather than constants:
+
+        --fill-max      how hollow a component must be. At the 0.35
+                        originally proposed this admits every hollow
+                        GLYPH: an italic zero at 400 dpi reads
+                        fill 0.31, and real frames read 0.016-0.031
+        --hole-measure  bbox or area. "bbox" finds every declared
+                        image; "area" loses a third of them
+    """
+    docs = [d for d in sorted(root.iterdir())
+            if d.is_dir() and (d / "inspect" / "pages").is_dir()]
+    if doc:
+        docs = [d for d in docs if d.name == doc]
+        if not docs:
+            print(f"  no document named {doc} in the corpus")
+            return
+    else:
+        rng.shuffle(docs)
+    thresholds = (200, 240)
+    picked = []
+    for d in docs:
+        drill = _drill(d)
+        if drill is None:
+            continue
+        with_img = {e["page"] for e in drill["images_layer"]}
+        # Page files are `p<n>.png` in most of the corpus and
+        # `page-<nnnn>.png` in some of it; a naive `p*.png` sort raised
+        # on the second form rather than skipping it.
+        seen_no = {}
+        for p in sorted((d / "inspect" / "pages").glob("*.png")):
+            m = re.fullmatch(r"p(?:age-)?0*(\d+)", p.stem)
+            if m:
+                # Some documents carry BOTH conventions for the same
+                # page; keeping both put one page in the sample twice.
+                seen_no.setdefault(int(m.group(1)), p)
+        numbered = sorted(seen_no.items())
+        pos = [p for k, p in numbered if k in with_img]
+        neg = [p for k, p in numbered if k not in with_img]
+        nums = dict((p, k) for k, p in numbered)
+        if not pos or not neg:
+            continue
+        k = max(1, min(len(pos), len(neg), (n - len(picked)) // 2))
+        chosen = (pos + neg) if doc else (rng.sample(pos, k) + rng.sample(neg, k))
+        for p in chosen:
+            picked.append((d, drill, p, nums[p]))
+        if len(picked) >= n:
+            break
+    if not picked:
+        print("  no document with rendered pages and an images_layer")
+        return
+
+    print(f"  fill_max {fill_max}  hole={hole}  thresholds {thresholds}")
+    print(f"  {len(picked)} pages from "
+          f"{len({d.name for d, _, _, _ in picked})} documents")
+    tot_decl = tot_hit = 0
+    fp_pages = fp_rects = 0
+    worst = 0.0
+    unbordered = []
+    for d, drill, png, pno in picked:
+        decl = [e for e in drill["images_layer"] if e["page"] == pno]
+        pw_pt, _ = drill["_page_pt"]
+        union, per_th = {}, []
+        solids = 0
+        for th in thresholds:
+            mask = load_mask(png, threshold=th)
+            dpi = mask.width * 72.0 / pw_pt
+            rects = [c for c, _ in _rect_candidates(mask, fill_max=fill_max,
+                                                    hole=hole)]
+            per_th.append((th, len(rects)))
+            solids = max(solids, len(_solid_candidates(mask)))
+            for c in rects:              # union by bbox identity (F2)
+                union[(c.x0, c.y0, c.x1, c.y1)] = (c, dpi)
+        rects = [c for c, _ in union.values()]
+        hist = Counter(_depths(rects))
+        # Cross-check: every declared image should have a measured
+        # rectangle of the same size. Sizes, not positions -- the
+        # declared rectangle is the image's placement box and the ink
+        # frame is drawn on its border.
+        hit, deltas = 0, []
+        for e in decl:
+            best = min(((max(abs(c.width * 72.0 / dpi - e["w_pt"]),
+                             abs(c.height * 72.0 / dpi - e["h_pt"])))
+                        for c, dpi in union.values()), default=None)
+            if best is not None and best <= 3.0:
+                hit += 1
+                deltas.append(best)
+        tot_decl += len(decl)
+        tot_hit += hit
+        if deltas:
+            worst = max(worst, max(deltas))
+        if not decl:
+            fp_pages += 1
+            fp_rects += len(rects)
+        if decl and hit == 0 and rects:
+            unbordered.append((d.name, pno, len(decl)))
+        print(f"    {d.name[:18]:18} p{pno:<3} "
+              f"{'images ' + str(len(decl)) if decl else 'CONTROL':>9}  "
+              f"rects {len(rects):4} " +
+              " ".join(f"th{t}:{k}" for t, k in per_th) +
+              f"  depth {dict(sorted(hist.items()))}"
+              f"  solid {solids}" +
+              (f"  recovered {hit}/{len(decl)}" if decl else ""))
+    print(f"  declared images recovered: {tot_hit}/{tot_decl}"
+          + (f", worst size error {worst:.2f} pt" if tot_hit else ""))
+    print("  NOTE on that denominator: a declared image yields a measurable")
+    print("  rectangle only when the figure is DRAWN WITH A BORDER. A bare")
+    print("  photograph has no stroked frame, so there is no ink rectangle")
+    print("  to recover and a miss is not a detector failure. Recovery is")
+    print("  an upper-bound check on the bordered ones, never an accuracy.")
+    print(f"  FALSE POSITIVES on {fp_pages} control pages: {fp_rects} "
+          f"rectangles where the PDF declares no image")
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -1174,6 +1394,7 @@ def m_classify(root, n, rng, split="document"):
 
 MEASUREMENTS = {
     "banding": (m_banding, 3),
+    "boxes": (m_boxes, 8),
     "classify": (m_classify, 6),
     "convexity": (m_convexity, 2),
     "missed": (m_missed, 8),
@@ -1202,6 +1423,16 @@ def main():
     ap.add_argument("--n", type=int, default=None,
                     help="sample size; each measurement has its own default")
     ap.add_argument("--seed", type=int, default=20260807)
+    ap.add_argument("--doc", default=None,
+                    help="boxes only: measure one named corpus document, "
+                         "all of its pages, instead of a random sample.")
+    ap.add_argument("--fill-max", type=float, default=0.10,
+                    help="boxes only: how hollow a component must be to "
+                         "count as a frame. 0.35 admits hollow glyphs.")
+    ap.add_argument("--hole-measure", default="bbox",
+                    choices=("bbox", "area"),
+                    help="boxes only: how a hole's size is measured. "
+                         "Changes the count by 2x -- see units.md.")
     ap.add_argument("--split", default="document",
                     choices=("component", "page", "document", "font"),
                     help="classify only: how train and test are divided. "
@@ -1216,7 +1447,10 @@ def main():
     for name in todo:
         fn, default_n = MEASUREMENTS[name]
         print(f"\n=== {name} " + "=" * (62 - len(name)))
-        if name == "classify":
+        if name == "boxes":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               fill_max=args.fill_max, hole=args.hole_measure, doc=args.doc)
+        elif name == "classify":
             fn(root, args.n or default_n, random.Random(args.seed),
                split=args.split)
         else:
