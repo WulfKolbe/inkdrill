@@ -27,6 +27,8 @@ border       what the pixels just outside a component's runs say about
              the field it sits on -- 2 samples per run
 boxes        drawn frames and filled panels from ink, cross-checked
              against the rectangles the PDF itself declares
+charstrings  U9 interpreter premise: which Type 1 operators real fonts
+             actually use, and which are subsystems rather than cases
 outlines     U9 rasterizer premise: which outline format maths glyphs are
              in, and whether it is reachable without a PDF parser
 """
@@ -36,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import pathlib
 import random
 import re
@@ -68,6 +71,7 @@ from inkdrill.gold import (Component as GComp, Glyph as GGlyph,  # noqa: E402
 from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import Capture, sweep                   # noqa: E402
+from inkdrill.type1 import load as t1_load                  # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -1368,6 +1372,140 @@ def m_white(root, n, rng, min_len=60, doc=None):
         print(f"    th{th}: {hit}/{dec}" + (f", worst {worst:.2f} pt" if hit else ""))
 
 
+_T1_OPS = {
+    1: "hstem", 3: "vstem", 4: "vmoveto", 5: "rlineto", 6: "hlineto",
+    7: "vlineto", 8: "rrcurveto", 9: "closepath", 10: "callsubr",
+    11: "return", 13: "hsbw", 14: "endchar", 21: "rmoveto", 22: "hmoveto",
+    30: "vhcurveto", 31: "hvcurveto",
+}
+_T1_ESC = {
+    0: "dotsection", 1: "vstem3", 2: "hstem3", 6: "seac", 7: "sbw",
+    12: "div", 16: "callothersubr", 17: "pop", 33: "setcurrentpoint",
+}
+
+
+def _t1_ops(cs):
+    """Operators used by one Type 1 charstring, as a Counter.
+
+    Decodes the number encoding so an argument byte below 32 is never
+    read as a command -- the mistake that made `first_ops` report 88%
+    on a correct tree.
+    """
+    out, i = Counter(), 0
+    while i < len(cs):
+        b = cs[i]
+        if b >= 32:
+            i += 1 if b <= 246 else (2 if b <= 254 else 5)
+            continue
+        if b == 12:
+            if i + 1 >= len(cs):
+                out["TRUNCATED"] += 1
+                break
+            out[_T1_ESC.get(cs[i + 1], f"esc{cs[i + 1]}")] += 1
+            i += 2
+            continue
+        out[_T1_OPS.get(b, f"op{b}")] += 1
+        i += 1
+    return out
+
+
+def m_charstrings(root, n, rng, doc=None):
+    """U9 interpreter premise: which of the Type 1 charstring language a
+    rasterizer must actually implement.
+
+    The spec has 25 operators. Building all of them before knowing which
+    occur is how a unit doubles in size for nothing -- and two of them,
+    `seac` and `callothersubr`, are not drawing commands at all but
+    escape hatches into composite glyphs and into the flex/hint-
+    replacement protocol, each of which is a subsystem rather than a
+    case in a switch.
+
+    POPULATION: Type 1 fonts on this machine, not the corpus -- `root`
+    is ignored, because U9's route B reads outlines from the TeX tree
+    and that is where the charstrings to be interpreted live. Reported
+    twice: over ALL fonts, and over MATHS families only, since maths is
+    the application and body text is 99% of any unweighted count.
+
+    SPLIT: fonts sampled without replacement; every charstring of a
+    sampled font counts, so a font with 3,000 glyphs outweighs one with
+    100 -- which is correct here, because the question is what an
+    interpreter will MEET, not what a typical font declares.
+
+    SUBRS ARE PART OF THE POPULATION. The first version of this
+    measurement scanned charstrings only and reported `return` as
+    occurring in 0 of 209,550 -- which is impossible in a language with
+    subroutines, and is what exposed the error: `return` only ever
+    appears inside a subr. An interpreter meets both, so both are
+    counted, and the two are reported separately because a subr is
+    entered by reference and a charstring is not.
+    """
+    tree = pathlib.Path(os.environ.get("INKDRILL_TYPE1",
+                                       "/usr/share/texmf-dist/fonts/type1"))
+    if not tree.is_dir():
+        print(f"  no Type 1 tree at {tree}; set INKDRILL_TYPE1")
+        return
+    files = sorted(tree.rglob("*.pfb"))
+    if not files:
+        print(f"  no .pfb under {tree}")
+        return
+    picked = files if len(files) <= n else rng.sample(files, n)
+    allc, mathc = Counter(), Counter()
+    glyphs = mglyphs = 0
+    per_glyph = Counter()
+    subc, per_sub = Counter(), Counter()
+    subs = 0
+    fonts = mfonts = 0
+    for p in picked:
+        try:
+            f = t1_load(p)
+        except Exception:
+            continue
+        fonts += 1
+        maths = is_math_family(f.name or p.stem)
+        mfonts += maths
+        for cs in f.charstrings.values():
+            ops = _t1_ops(cs)
+            glyphs += 1
+            allc.update(ops)
+            for k in ops:
+                per_glyph[k] += 1
+            if maths:
+                mglyphs += 1
+                mathc.update(ops)
+        for sub in f.subrs:
+            if sub:
+                subs += 1
+                sops = _t1_ops(sub)
+                subc.update(sops)
+                for k in sops:
+                    per_sub[k] += 1
+    if not glyphs:
+        print("  no charstrings parsed")
+        return
+    print(f"  {fonts} fonts ({mfonts} maths), {glyphs} charstrings "
+          f"({mglyphs} in maths fonts)")
+    print(f"  operators by SHARE OF GLYPHS that use them at least once:")
+    for k, v in per_glyph.most_common():
+        star = "  <-- subsystem" if k in ("seac", "callothersubr") else ""
+        print(f"    {v:9} ({v/glyphs:7.2%})  {k}{star}")
+    print(f"  {subs} subroutines, operators by share of SUBRS using them:")
+    for k, v in per_sub.most_common(8):
+        print(f"    {v:9} ({v/subs:7.2%})  {k}")
+    both = set(per_glyph) | set(per_sub)
+    never = [o for o in list(_T1_OPS.values()) + list(_T1_ESC.values())
+             if o not in both]
+    print(f"  operators never seen in EITHER population ({len(never)}): "
+          f"{', '.join(never) or '-'}")
+    if mglyphs:
+        print("  maths-font glyphs only, share using each:")
+        seen = Counter()
+        for k, v in mathc.items():
+            seen[k] = v
+        for k in ("seac", "callothersubr", "div", "flex", "hvcurveto"):
+            if k in mathc:
+                print(f"    {k}: {mathc[k]} occurrences in {mglyphs} glyphs")
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -1749,6 +1887,7 @@ def m_classify(root, n, rng, split="document"):
 MEASUREMENTS = {
     "banding": (m_banding, 3),
     "border": (m_border, 10),
+    "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
     "white": (m_white, 8),
     "classify": (m_classify, 6),
