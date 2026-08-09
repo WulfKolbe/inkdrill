@@ -527,13 +527,20 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 297 tests in 2.216s
-OK (skipped=4)
+Ran 564 tests in 2.4s
+OK (skipped=10)
 ```
 
-The 4 skipped are `tests/test_pngio_corpus.py`, opt-in and gated on
-`INKDRILL_CORPUS` (see below); they do not run by default. The hermetic
-count -- what actually runs on a bare checkout -- is 519 - 4 = 515.
+The 10 skipped are the two opt-in corpus modules:
+`tests/test_pngio_corpus.py` (4, gated on `INKDRILL_CORPUS`) and
+`tests/test_type1_corpus.py` (6, gated on `INKDRILL_TYPE1`). Neither
+runs by default. The hermetic count -- what actually runs on a bare
+checkout -- is 564 - 10 = 554.
+
+`test_type1_corpus` is gated rather than defaulted to the system TeX
+tree deliberately. Defaulting it would have been free coverage on most
+machines, and would have made the count in this table depend on which
+fonts a machine happens to have installed.
 
 | Unit | Tests | Result |
 |---|---|---|
@@ -547,13 +554,15 @@ count -- what actually runs on a bare checkout -- is 519 - 4 = 515.
 | U7 `band.py` | 29 | passed |
 | U8 `sched.py` | 22 | passed |
 | U9 `font.py` | 52 | passed |
+| U9 `type1.py` | 39 | passed 2026-08-09 |
 | U10 `gold.py` | 38 | passed |
 | U11 `coverage.py` | 24 | passed |
 | U12 `domains.py` | 40 | passed |
 | U13 `classify.py` | 31 | passed |
 | U14 `mathstruct.py` | 35 | passed |
 
-49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 38 + 24 + 40 + 31 + 35 = 515, matching the hermetic count above.
+49 + 36 + 31 + 36 + 37 + 26 + 29 + 29 + 22 + 52 + 39 + 38 + 24 + 40 + 31 + 35 = 554,
+matching the hermetic count above.
 
 Regression: U1 and U2 re-run clean after U3 landed. U0 lands after U3 and
 depends on U2 (`binarize`) alone; the full suite stays green.
@@ -1051,7 +1060,79 @@ Re-run: `tools/premise/measure.py --corpus <dir> schedcost`
 
 ---
 
-### U9 premise check — measured 2026-08-08, before U9 was planned
+### U9 rasterizer premise check — measured 2026-08-09, before `type1.py` was planned
+
+Re-run with `measure.py outlines`. The question was which outline format
+a maths glyph's program is in, and whether reaching it needs a PDF
+parser. **Population: glyph instances** — not font entries, not
+documents; the same three denominators that disagreed by 78 points in
+the inventory premise check below. **Split:** 30 documents sampled
+without replacement, every glyph instance of each counted. **Filter:**
+`is_math_family`, whose kept and dropped families the harness prints.
+
+| Measured over maths glyph instances (n = 17,916) | Result |
+|---|---|
+| format the PDF embedded | 48.13% Type 1C, 46.48% Type 1 |
+| format the same font has **on disk** | **94.61% a `.pfb` in the TeX tree** |
+| `/FontFile*` reachable outside object streams | 20/30 documents |
+
+**The marginals and the joint disagree about what to build.** Read the
+first row alone and the plan is a CFF interpreter *and* a Type 1
+interpreter, behind a PDF extractor with an object-stream decoder. The
+joint says one parser and no PDF handling: every maths font in the
+sample resolves to a Type 1 `.pfb`, *including* the ones a producer
+embedded as Type 1C, because the producer converted at embed time.
+Subsetting drops glyphs without altering the outlines of those that
+remain, so the on-disk outline is the embedded outline for every glyph a
+page actually used.
+
+The 5.39% this route misses is named rather than absorbed:
+LibertinusMath 872, Cambria Math 58, CambriaMath 36 — non-TeX OpenType
+maths fonts, which are also the whole `CID Type 0C` column.
+
+**Two limits stated with the figure.** `is_math_family` is
+under-inclusive: it drops CMR (446,410 instances), which is where TeX
+keeps maths digits and fences. The bias runs the favourable way, because
+CMR is itself a `.pfb`. And 94.61% is against *one machine's* TeX tree —
+without `texmf-dist` it is 0%. That is why `type1.py` never searches for
+a font: the caller supplies the path and owns the missing-font class.
+
+### U9 `type1.py` — the oracle was wrong twice before the parser was
+
+Tests T9-1 to T9-9 passed on 2026-08-09. 39 hermetic, 6 opt-in on
+`INKDRILL_TYPE1`.
+
+The parser has no golden file. Its oracle is that a charstring opens
+with `hsbw` or `sbw`, so a wrong length, offset, key or `lenIV` decodes
+as something else. Run over the TeX tree that oracle read **88.33%**,
+then **97.86%**, then clean — and *both* corrections were to the
+instrument:
+
+| Reading | What the gap was |
+|---|---|
+| 88.33% | `div`. cm-super writes every width as `<num> <den> div hsbw`, and `div` is 12-12 — below 32, like a command. Counting it as one declares all 585 charstrings of a correct font broken |
+| 97.86% | **subroutinization**. Roboto, Tinos and Cascadia hold the `hsbw` inside a subr, so 436 of Roboto-Black's 1,250 glyphs correctly open `n callsubr` |
+
+Calling `callsubr` a failure or calling it a pass would both have been
+assertions, so it is a class of its own, deferred to the interpreter.
+Final reading over **7,616 fonts and 3,413,996 charstrings**: 97.834%
+`hsbw`, 2.166% `callsubr`, **0 in the wrong class, 0 files rejected.**
+
+This is the "residual is the product" rule applied to an instrument
+rather than to a page: a single pass rate would have made both
+corrections look like parser bugs, and the second one is not fixable at
+all without the interpreter.
+
+**Mutation sweep** (per the standing rule): 20 mutants, 19 killed. Two
+initially survived and both were real gaps — the phantom-entry guard was
+tested with a trap in the *plaintext*, where encryption hides it, and
+the PFB-trailer guard had no assertion at all. Both are now pinned, with
+the note that no font in 400 sampled from the tree distinguishes either.
+One equivalent mutant remains and is unkillable by design: `decrypt(enc,
+EEXEC_R, 4)` → `skip=0`. Every access into the private dict is by
+search, never by absolute offset, so a four-byte prefix shifts nothing.
+
+### U9 inventory premise check — measured 2026-08-08, before U9 was planned
 
 `units.md` called assumption 8 "the cheapest assumption to check and
 worth checking before U9 starts". It was, and it produced a lesson about

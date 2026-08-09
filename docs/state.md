@@ -64,15 +64,17 @@ structurally cannot do.
 | U6 | `nest` | complete |
 | U7 | `band` | complete |
 | U8 | `sched` | complete — band tier deliberately not built |
-| U9 | `font` | **inventory half only** — no rasterizer |
+| U9 | `font` | inventory: complete |
+| U9 | `type1` | outlines: **font -> charstring bytes**; no interpreter yet |
 | U10 | `gold` | complete |
 | U11 | `coverage` | complete |
 | U12 | `domains` | complete |
 | U13 | `classify` | complete |
 | U14 | `mathstruct` | **geometry only** — no structure tree |
 
-Two units are deliberately partial and one tier was deliberately dropped.
-All three are recorded with the measurement that decided them.
+One unit is deliberately partial and one tier was deliberately dropped;
+both are recorded with the measurement that decided them. U9 is partial
+because it is in progress, not by decision.
 
 ## 4. What the measurements settled
 
@@ -89,6 +91,11 @@ Every figure below is reproducible via `tools/premise/measure.py`.
 - band stitching is indistinguishable from a single sweep at every K
 - four sweep orientations cost two scans
 - maths font families are **100%** on U9's embedded-outline fast path
+- **94.61% of maths glyph mass resolves to a Type 1 `.pfb` in the TeX
+  tree** — including everything a producer embedded as Type 1C, so the
+  outline route needs one parser and no PDF handling at all
+- `type1.py` parses **7,616 fonts / 3,413,996 charstrings** with none in
+  the wrong class and no file rejected
 
 **Refuted, and the design changed:**
 
@@ -125,6 +132,22 @@ class. So the dependency is a chain, not a cycle:
 ```
 U9 rasterizer → maths templates → maths classification → U14 structure tree
 ```
+
+**Progress, 2026-08-09.** The route through that chain is now measured
+and its first link is built. `measure.py outlines` asked which format a
+maths glyph's outline is actually in, and the joint distribution
+overturned the marginals: reading only "48.13% Type 1C, 46.48% Type 1"
+gives a plan of two charstring interpreters behind a PDF extractor,
+while **94.61% of the same glyph mass resolves to a Type 1 `.pfb` in the
+TeX tree**, Type 1C included, because the producer converted at embed
+time. So the route is one parser, from disk, with no PDF handling —
+`inkdrill/type1.py`, tested against 7,616 real fonts.
+
+What remains of the rasterizer is the charstring **interpreter** (the
+Type 1 stack machine: `hsbw`, the path operators, `callsubr`, `seac`,
+flex) and **scan conversion** to an `InkMask`. The 2.166% of charstrings
+that open `n callsubr` are exactly the ones only the interpreter can
+verify, so it also closes the parser's own oracle.
 
 **The U9 rasterizer is the unblocking move.** It also inherits the
 self-validating property the design was built for: a query matched to a

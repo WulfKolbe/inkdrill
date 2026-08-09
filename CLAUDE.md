@@ -25,25 +25,27 @@ authoritative per-unit record and every measurement, and
 [`docs/algorithms.md`](docs/algorithms.md) for the algorithms, the
 inner-loop performance analysis and the ranked improvement list.
 
-**Current state.** All fifteen units exist. U9 is its inventory half only
-(no rasterizer) and U14 is its geometry only (no structure tree); U8's
-band tier was deliberately not built. All three are recorded with the
-measurement that decided them. **The single highest-value next step is
-the U9 rasterizer** — see `docs/state.md` §5 for why it unblocks maths
-classification and the structure tree, and why the corpus cannot
-substitute for it.
+**Current state.** All fifteen units exist. U14 is its geometry only (no
+structure tree) and U8's band tier was deliberately not built; both are
+recorded with the measurement that decided them. U9's rasterizer is
+**under way**: `type1.py` reads Type 1 font programs (font -> charstring
+bytes); the charstring interpreter and scan conversion are not built
+yet. See `docs/state.md` §5 for why that chain unblocks maths
+classification and the structure tree.
 
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 519, of which 4 skip
+python3 -m unittest discover -s tests -t .   # full suite: 564, of which 10 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
+INKDRILL_TYPE1=/usr/share/texmf-dist/fonts/type1 python3 -m unittest tests.test_type1_corpus
 ```
 
-The last one is opt-in: the default suite is hermetic and the corpus tests skip
-unless `INKDRILL_CORPUS` names a directory of rendered pages.
+The last two are opt-in: the default suite is hermetic and the corpus tests
+skip unless `INKDRILL_CORPUS` names a directory of rendered pages, or
+`INKDRILL_TYPE1` a directory of `.pfb` fonts.
 
 `-t .` is required: it sets the top-level directory to the repo root so the
 `inkdrill` package is importable from `tests/`.
@@ -76,7 +78,7 @@ is reported here:
 **Every measured figure is re-runnable.** `tools/premise/measure.py`
 carries one subcommand per claim — `neutrality colour throughput skew
 premise contraction rotation moments nesting banding stitchcost schedcost
-fonts residuals missed convexity classify`. If you quote a number, quote
+fonts outlines residuals missed convexity classify`. If you quote a number, quote
 the subcommand that produces it. If a measurement decides whether to
 build something, the harness must be committed *before* the decision is
 acted on — that rule exists because it was broken twice.
@@ -132,9 +134,16 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   no pool. Task key is `(page, axis)` — there is no band tier, and that
   is a measured decision, not an omission.
 - **`inkdrill/font.py`** — font inventory and glyph-weighted coverage.
-  `inventory`, `resolve`, `usability`, `coverage`. **Inventory half of U9
-  only** — rasterization is not built. Coverage is glyph-weighted on
-  purpose; per-document it reads ~17% and per-glyph ~95%.
+  `inventory`, `resolve`, `usability`, `coverage`. Coverage is
+  glyph-weighted on purpose; per-document it reads ~17% and per-glyph
+  ~95%.
+- **`inkdrill/type1.py`** — Type 1 font programs. `load`, `parse`,
+  `decrypt`, `encrypt`, `Type1Font`. Reads from a FILE, never searches
+  for one, and knows nothing about PDF — `measure.py outlines` showed
+  94.61% of maths glyph mass resolves to a `.pfb` in the TeX tree,
+  including everything a producer embedded as Type 1C. `first_ops()`
+  reports four classes, not a pass rate; see units.md for why that
+  distinction was load-bearing twice.
 - **`inkdrill/gold.py`** — pdfminer alignment. `page_transform`, `match`,
   `to_coco`. The four residual classes are the product, not the
   leftovers: only 66.9% of real assignments are 1:1. Matches on component
@@ -292,10 +301,13 @@ same file and neither is wrong.
 Three things are missing on purpose, each with the measurement that
 decided it. Do not "fix" them without re-taking that measurement.
 
-- **U9's rasterizer half.** No CFF/TrueType outline parsing, no scan
-  conversion. This is the **highest-value next step** — see
-  `docs/state.md` §5. It unblocks maths classification, which unblocks
-  U14's structure tree.
+- **U9's charstring interpreter and scan conversion.** `type1.py` now
+  gets from a font file to a glyph's charstring bytes; running that
+  charstring to contours and scan-converting them is not built. This is
+  the **highest-value next step** — see `docs/state.md` §5. It unblocks
+  maths classification, which unblocks U14's structure tree. Note the
+  route: outlines come from the TeX tree, NOT from the PDF, and CFF is
+  deliberately absent — `measure.py outlines` has the numbers.
 - **U14's structure tree, fences, big operators, LaTeX.** All need symbol
   identity for `∑ ∫ ( [`, and U13's measured population contained no
   maths symbols at all.
