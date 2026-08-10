@@ -1635,6 +1635,51 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### T1 steps 4-5 — rules and diagrams. 2026-08-10
+
+Tests T1-5, T1-6 passed on 2026-08-10: 11 more, 30 in the module.
+
+`ink.rules[]` now carries a measured `width_pt` and an orientation, and
+no name. `page_lines` composes a page: a region with a LATTICE is a
+`table`, a hollow one without is a `diagram`, a textured one is a
+`diagram` carrying `border_ground`, and a solid blob is nothing (G4).
+Rules attach to the innermost object containing them and are never
+lines of their own.
+
+**A rule is only found when it is a SEPARATE component**, and the
+acceptance fixture had to be rebuilt twice to see it:
+
+- A `|l|l|` table's rules **are** the frame — one connected component,
+  so no rule is a region and none is reported. The first fixture drew
+  exactly that and found zero rules. Booktabs draws disjoint rules, and
+  that is also the only place `\toprule` versus `\midrule` is a
+  question at all.
+- The second fixture drew disjoint rules 56 x 4 px — **14:1**, below
+  the 20:1 aspect test, correctly refused. A real booktabs rule at 400
+  dpi is nearer **250:1**. A toy fixture is not a small version of the
+  real case when a threshold is involved.
+
+Both are the same lesson as the auditor's tick finding: whether a rule
+is its own component is a property of the drawing program. Extracting
+rules from inside a connected frame means reading the run structure near
+the bbox edge, and is recorded as separate work rather than attempted.
+
+The acceptance criteria hold: two rule weights give `width_pt` in a 2:1
+ratio, and four plot frames emit as four `diagram` lines rather than as
+1x1 tables.
+
+**Mutation: 9 mutants, 8 killed, 1 equivalent** — and three of the kills
+needed fixtures rebuilt, all for the same reason. Every fixture had ONE
+parent and ONLY horizontal rules, so "attach every rule on the page"
+and "orientation is always h" were indistinguishable from the real
+thing. Two frames side by side with a rule in one, and a vertical rule,
+separate them. The degenerate-fixture family again, fifth instance.
+
+The equivalent one is the skip of rule regions in the composer: a rule
+has fill > 0.8 by definition, so it fails the diagram test and has too
+few holes for the table test, and emits nothing either way. Kept for
+intent, recorded so the next sweep does not re-raise it.
+
 ### T1 — `emit.py`, the `lines.json` writer. 2026-08-10
 
 Tests T1-1 to T1-4 passed on 2026-08-10: 19 hermetic.

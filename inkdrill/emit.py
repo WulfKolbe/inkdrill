@@ -61,14 +61,18 @@ G3  every `simple_cell` carries `cell_row` and `cell_column`, and the
 G4  no `lines` entry is a rule, a tick or a bare glyph component
 G5  the dict round-trips through `json.dumps`/`loads` unchanged
 G6  `text` is `""` on every line
+G7  `ink.rules[]` carries a MEASURED `width_pt`, never a rule name --
+    the `\\toprule` / `\\midrule` call is relative ranking within one
+    table and belongs to the side holding that context
 """
 
 from __future__ import annotations
 
 from .nest import Kind, nest
 
-__all__ = ["NoResolution", "lines_json", "page_record", "cell_grid",
-           "ink_regions", "rule_width_pt", "table_lines", "SOURCE"]
+__all__ = ["NoResolution", "lines_json", "page_record", "page_lines",
+           "cell_grid", "diagram_line", "ink_regions", "is_rule",
+           "rule_record", "rule_width_pt", "table_lines", "SOURCE"]
 
 SOURCE = "inkdrill"
 
@@ -202,6 +206,110 @@ def table_lines(mask, region_id=None, *, pt: float, tol: float = 0.0,
                          cell_row=r, cell_column=c,
                          cell_row_span=1, cell_col_span=1))
     return out
+
+
+def is_rule(region, *, min_fill: float = 0.8, min_aspect: float = 20.0):
+    """Is this region a drawn rule -- solid, and far longer than thick?
+
+    Two conditions, and both are needed. `fill` alone admits any solid
+    blob; aspect alone admits a hairline that is mostly gaps. A rule is
+    the conjunction: nearly all ink inside its box, and a long side at
+    least `min_aspect` times the short one.
+    """
+    w, h = region.x1 - region.x0 + 1, region.y1 - region.y0 + 1
+    if w <= 0 or h <= 0:
+        return False
+    if region.area / (w * h) <= min_fill:
+        return False
+    return max(w, h) >= min_aspect * max(1, min(w, h))
+
+
+def rule_record(region, pt: float) -> dict:
+    """One rule as a measurement (G7).
+
+    `width_pt` and an orientation, and deliberately NOT a name. Whether
+    this is a `\\toprule` or a `\\midrule` is decided by relative
+    ranking within one table plus position -- the absolute width runs
+    about 12% high from rasteriser coverage and the ratio is unstable
+    under pixel quantisation. Sending `"kind": "toprule"` would move
+    that call to the side with less context.
+    """
+    w = region.x1 - region.x0 + 1
+    h = region.y1 - region.y0 + 1
+    return {"x0": region.x0 * pt, "y0": region.y0 * pt,
+            "x1": (region.x1 + 1) * pt, "y1": (region.y1 + 1) * pt,
+            "width_pt": rule_width_pt(region.area, w, h, pt),
+            "orient": "h" if w >= h else "v"}
+
+
+def _contains(outer, inner) -> bool:
+    return (outer.x0 <= inner.x0 and outer.y0 <= inner.y0
+            and outer.x1 >= inner.x1 and outer.y1 >= inner.y1)
+
+
+def diagram_line(region, pt: float, *, ground: str | None = None) -> dict:
+    """A hollow rectangle that is not a table, or a textured region."""
+    ink = {"region_id": region.id,
+           "fill": region.area / max(
+               1, (region.x1 - region.x0 + 1) * (region.y1 - region.y0 + 1))}
+    if ground is not None:
+        ink["border_ground"] = ground
+    return _line("diagram", (region.x0, region.y0,
+                             region.x1 + 1, region.y1 + 1), pt,
+                 cell_row=None, cell_column=None, ink=ink)
+
+
+def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
+               max_fill: float = 0.35):
+    """Every emittable object on one page, with rules attached.
+
+    A region becomes a `table` when it encloses a LATTICE (>= 2 holes),
+    a `diagram` when it is hollow but not, and nothing when it is
+    neither -- a bare glyph is not a line (G4).
+
+    Rules are never lines of their own. Each is attached to the
+    innermost emitted object containing it, so a consumer reading
+    `lines` sees objects and reads geometry from `ink.rules` (G4).
+
+    **A rule is found only when it is a SEPARATE component.** In a
+    `|l|l|` table the rules ARE the frame -- one connected component --
+    so none of them is a region and none is reported. A booktabs table
+    draws disjoint rules and they are all found, which is also the only
+    place `\\toprule` versus `\\midrule` is a question. Extracting
+    rules from inside a connected frame means reading the run structure
+    near the bbox edge, and is separate work; it is the same shape as
+    ticks drawn as part of an axis path rather than as free objects.
+    """
+    n = nest(mask)
+    grounds = grounds or {}
+    inks = ink_regions(n)
+    rules = [r for r in inks if is_rule(r)]
+    rule_ids = {r.id for r in rules}
+
+    out = []
+    for region in sorted(inks, key=lambda r: -r.area):
+        # Provably redundant, and kept for intent: a rule has fill > 0.8
+        # by definition, so it fails the diagram test (< 0.35) and has
+        # too few holes for the table test, and emits nothing either
+        # way. No test can kill this line; none should be written to try.
+        if region.id in rule_ids:
+            continue
+        w = region.x1 - region.x0 + 1
+        h = region.y1 - region.y0 + 1
+        ground = grounds.get(region.id)
+        lines = table_lines(mask, region.id, pt=pt, tol=tol, nesting=n)
+        if lines:
+            out.append((region, lines))
+        elif ground == "textured" or region.area / max(1, w * h) < max_fill:
+            out.append((region, [diagram_line(region, pt, ground=ground)]))
+
+    for region, lines in out:
+        mine = [r for r in rules if _contains(region, r)]
+        if mine:
+            lines[0].setdefault("ink", {})["rules"] = [
+                rule_record(r, pt) for r in
+                sorted(mine, key=lambda r: (r.y0, r.x0))]
+    return [ln for _, lines in out for ln in lines]
 
 
 def page_record(*, page: int, width_px: int, height_px: int, dpi,
