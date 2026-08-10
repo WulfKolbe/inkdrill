@@ -224,6 +224,19 @@ class M2_4_Unresolved(unittest.TestCase):
         self.assertEqual(u.centre, (5.0, 5.0))
         self.assertFalse(u.resolved)
 
+    def test_a_resolved_symbol_returns_its_name(self):
+        """The other side of G7, and it was missing.
+
+        Every `.label` reference in this module sat inside an
+        `assertRaises`, so `label` could be made to raise
+        unconditionally and the whole suite still passed. The refusal
+        was tested and the non-refusal was not -- the same one-sided
+        shape as U4's rotation guard and U8's dispatch sort.
+        """
+        s = Symbol(box(0, 0), "summation")
+        self.assertTrue(s.resolved)
+        self.assertEqual(s.label, "summation")
+
     def test_reading_the_label_raises_rather_than_returning_a_sentinel(self):
         with self.assertRaises(Unresolved):
             Symbol(box(0, 0), reason="margin 0.02").label

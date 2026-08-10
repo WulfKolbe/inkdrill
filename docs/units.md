@@ -1612,6 +1612,29 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### Audit follow-up on M2.3 and M3 — 2026-08-10
+
+Two findings, both real, both one line.
+
+**`Symbol.label` could be made to raise unconditionally and all 700
+tests passed.** Every `.label` reference sat inside an `assertRaises`,
+so the REFUSAL was tested and the NON-refusal was not — the same
+one-sided shape as U4's rotation guard and U8's dispatch sort, in a
+guarantee two commits old. A resolved symbol returning its name is now
+asserted, and the mutant dies.
+
+**`confluent()` sampled the wrong permutations.** It took the first
+`trials` of `itertools.permutations`, which is lexicographic, so the
+leading positions are fixed: **at n=6 the first 24 permutations never
+relabel symbols 0 and 1 at all.** A graph whose ambiguity lives among
+them would be declared confluent without ever having been relabelled
+where it matters. Now a seeded random sample of the same size.
+
+The change is measurably stronger, not merely tidier: re-introducing
+the node-index ranking now fails **3** tests where it previously failed
+2. A checker that cannot reach the ambiguity it exists to find is worse
+than no checker, because it reports success.
+
 ### M3 — the rewriter, and confluence tested rather than asserted. 2026-08-10
 
 Tests M3-1 to M3-4 passed on 2026-08-10: 19 hermetic. `inkdrill/rewrite.py`.

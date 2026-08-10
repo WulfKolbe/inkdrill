@@ -75,7 +75,7 @@ G6  a node matching no production is returned as it stands, and two
 
 from __future__ import annotations
 
-import itertools
+import random
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -253,13 +253,21 @@ def confluent(symbols, relations, *, trials: int = 24) -> bool:
     Checked rather than asserted: the node list and edge dict are
     permuted `trials` ways and the reductions compared structurally.
     A caller with an unusual graph can ask instead of trusting.
+
+    The permutations are a SEEDED RANDOM SAMPLE, not the first `trials`
+    of `itertools.permutations`. That distinction is not cosmetic: the
+    lexicographic prefix fixes the leading positions, so at n=6 the
+    first 24 permutations never relabel symbols 0 and 1 at all, and a
+    graph whose ambiguity lives among them would be declared confluent
+    without ever having been relabelled where it matters. Seeded, so
+    two runs still agree.
     """
     base = None
     n = len(symbols)
-    for k, perm in enumerate(itertools.permutations(range(n))):
-        if k >= trials:
-            break
-        order = list(perm)
+    rng = random.Random(20260810 + n)
+    for _ in range(trials):
+        order = list(range(n))
+        rng.shuffle(order)
         syms = [symbols[i] for i in order]
         where = {old: new for new, old in enumerate(order)}
         rel = {(where[a], where[b]): r for (a, b), r in relations.items()}

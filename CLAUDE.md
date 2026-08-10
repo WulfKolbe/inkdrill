@@ -314,6 +314,18 @@ They are all findable the same way, in minutes:
 Do this per unit, before recording a status line — not at the final review,
 which is where these have been surfacing.
 
+**Test both sides of a refusal.** A guard that raises is usually tested
+only by `assertRaises`, which leaves the accepting path unasserted — so
+the guard can be made unconditional and the suite still passes.
+`Symbol.label`, U4's rotation guard and U8's dispatch sort were all
+this shape. Assert the negative AND the positive.
+
+**A checker samples; make sure it samples where the answer lives.**
+`confluent()` took the first 24 of `itertools.permutations`, which is
+lexicographic and fixes the leading positions — at n=6 it never
+relabelled symbols 0 and 1. A seeded random sample of the same size
+caught one more mutant.
+
 **A branch that survives in BOTH directions means the oracle is blind,
 not that the branch is dead.** `closepath` could be deleted or inverted
 with nothing failing, because every test watched how a charstring opened
