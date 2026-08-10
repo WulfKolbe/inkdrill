@@ -276,6 +276,22 @@ Two changes got there and neither was a model change: a verifier that is
 the deployment protocol rather than the open set. Both cost false
 rejection — ~14.4%, flat — which is the price and is stated with them.
 
+## 6c. The maths layer — M1.1 done, 2026-08-10
+
+The plan's one new measurement, taken before any graph exists.
+`measure.py spacing`. The spacing residual `x0(b) - (x0(a) + adv(a))`
+in em, against TeX's DEFINED math spaces.
+
+**Typography explains the geometry for exactly one space.** The thin
+space (3/18 em) is enriched **33x** in maths pairs over text pairs,
+11.22% against 0.34%. Medium, thick and quad are not distinguishable
+from the text distribution — so a relation graph gets one usable
+spacing feature, not four, and should be built expecting that.
+
+MI reads 0.059 efficiency and is the wrong summary: the classes are
+imbalanced 225:1, so a feature sharp on 0.44% of the data cannot move
+an aggregate. The likelihood ratio fits, and it is 33.
+
 ## 7. Not measured, and load-bearing
 
 - maths-symbol classification (§5)

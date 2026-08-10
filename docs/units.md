@@ -1612,6 +1612,52 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### M1.1 — does typography explain the geometry? Measured 2026-08-10
+
+The one new measurement of the maths-layer plan, taken before any graph
+is built. The residual is what a glyph's position is NOT explained by
+its predecessor's advance:
+
+    r(a, b) = x0(b) - (x0(a) + advance(a))          in em
+
+`x0` and `adv` are both already in pdfminer's output, so this needed no
+new extraction. **TeX's math spaces are DEFINED in em** -- thin 3/18,
+medium 4/18, thick 5/18, quad 1 -- so the modes are a prediction stated
+in advance, not clusters discovered in data.
+
+POPULATION: adjacent character pairs within one line, same font and
+size, over 12 documents. 3,218 maths-font pairs, 723,663 text-font.
+
+| within 0.02 em of | maths | text | ratio |
+|---|---|---|---|
+| none (0) | 55.03% | 74.04% | — |
+| **thin (3/18)** | **11.22%** | **0.34%** | **33x** |
+| medium (4/18) | 0.71% | 0.94% | 0.8x |
+| thick (5/18) | 2.30% | 3.11% | 0.7x |
+| quad (1) | 0.12% | 0.05% | 2.4x |
+
+**The answer is yes, but for exactly one space.** The thin space is
+enriched 33-fold in maths pairs and is a real, usable edge feature.
+Medium, thick and quad are not distinguishable from the text
+distribution in this sample, so a relation graph should not expect to
+read them.
+
+**Two traps in that table, both stated rather than left.** The text
+column's 3.11% near `thick` is the WORD SPACE, not TeX's: the space
+glyph is filtered out by `text.strip()` and its advance reappears as a
+gap at ~0.28 em. And the negative residuals -- 0.03% of maths pairs
+against 1.11% of text -- are KERNING, which this formula cannot
+separate from a typeset space without the font's kern table.
+
+**MI is the wrong summary here and the ceiling shows why.** Residual
+band against maths/text reads MI 0.0594 bits, efficiency 0.059 -- which
+looks like a dead feature. It is not: the classes are imbalanced 225:1,
+so almost all the entropy is in the majority and a feature that is
+sharp on 0.44% of the data cannot move the aggregate. **The likelihood
+ratio is the statistic that fits an imbalanced class, and it is 33.**
+This is U12's lesson arriving from a new direction: the ceiling did not
+cap the number, the class prior did.
+
 ### The deployment protocol — per-document candidate set, 2026-08-10
 
 647 classes is the open set. It is not the operating condition: at query

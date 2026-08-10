@@ -27,6 +27,7 @@ border       what the pixels just outside a component's runs say about
              the field it sits on -- 2 samples per run
 boxes        drawn frames and filled panels from ink, cross-checked
              against the rectangles the PDF itself declares
+spacing      M1.1: does typography explain the horizontal geometry?
 maths        THE measurement: maths-symbol classification, never done
 rasterisers  U9->U13 premise: template (scan) vs query (Ghostscript)
 charstrings  U9 interpreter premise: which Type 1 operators real fonts
@@ -1844,6 +1845,145 @@ def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
                 print(f"        {a}  read as  {b}   x{k}")
 
 
+# TeX's own math spacing, in em. These are DEFINITIONS from the
+# typesetter, not clusters found in data -- which is what makes them a
+# prediction the measurement can fail.
+TEX_SPACES = {"none": 0.0, "thin": 3 / 18, "medium": 4 / 18,
+              "thick": 5 / 18, "quad": 1.0}
+
+
+def m_spacing(root, n, rng, doc=None):
+    """M1.1: does typography explain the horizontal geometry?
+
+    The residual is what a glyph's position is NOT explained by the
+    previous glyph's advance:
+
+        r(a, b) = x0(b) - (x0(a) + advance(a))
+
+    pdfminer gives `x0` and `adv` per character, so this needs no new
+    extraction. Divided by the font size it is in em, and TeX's math
+    spaces are DEFINED in em -- thin 3/18, medium 4/18, thick 5/18,
+    quad 1 -- so the modes to look for are stated in advance rather
+    than discovered. A measurement that finds them is evidence; one
+    that finds a single blob says the spacing edges of a relation graph
+    were never going to work, which is the cheaper answer to get first.
+
+    POPULATION: adjacent character pairs within one pdfminer line, same
+    font and size, in reading order. Reported separately for MATHS
+    fonts and text fonts, because TeX applies math spacing only in math
+    mode and pooling them would let body text set the shape.
+
+    SPLIT: documents sampled without replacement; every qualifying pair
+    of a sampled document counts.
+
+    FILTER: pairs with a negative residual (the glyph starts before the
+    previous one ended) are counted and reported, not dropped -- they
+    are kerning, which is the one class this formula cannot separate
+    from a typesetting space without the font's kern table.
+    """
+    docs = [(cj.parent, cj) for cj in sorted(root.glob("*/*.chars.json"))]
+    if doc:
+        docs = [t for t in docs if t[0].name == doc]
+    else:
+        rng.shuffle(docs)
+    math_r, text_r = [], []
+    neg = 0
+    ndoc = 0
+    for d, cj in docs:
+        if ndoc >= n:
+            break
+        try:
+            data = json.load(cj.open())
+        except Exception:
+            continue
+        got = False
+        for page in data["pages"]:
+            chars = [c for c in page["chars"] if c.get("text", "").strip()]
+            chars.sort(key=lambda c: (round(c["top"], 1), c["x0"]))
+            for a, b in zip(chars, chars[1:]):
+                if a["fontname"] != b["fontname"]:
+                    continue
+                if abs(a["size"] - b["size"]) > 0.01 or a["size"] <= 0:
+                    continue
+                if abs(a["top"] - b["top"]) > 0.5:      # same line
+                    continue
+                r = (b["x0"] - (a["x0"] + a["adv"])) / a["size"]
+                if not -1.0 < r < 2.0:
+                    continue
+                if r < -0.005:
+                    neg += 1
+                (math_r if is_math_family(a["fontname"]) else text_r).append(r)
+                got = True
+        ndoc += got
+    if not math_r and not text_r:
+        print("  no qualifying adjacent pairs")
+        return
+    print(f"  {ndoc} documents;  maths pairs {len(math_r)}, "
+          f"text pairs {len(text_r)};  negative residuals {neg} "
+          f"(kerning -- this formula cannot separate it from a space)")
+
+    def report(label, vals):
+        if not vals:
+            return
+        vals = sorted(vals)
+        print(f"  {label} (n={len(vals)}):")
+        # Fixed bins, so two populations are directly comparable.
+        edges = [-0.05, 0.005, 0.05, 0.12, 0.20, 0.25, 0.31, 0.5, 0.8, 2.0]
+        hist = Counter()
+        for v in vals:
+            for e in edges:
+                if v < e:
+                    hist[e] += 1
+                    break
+        lo = None
+        for e in edges:
+            k = hist[e]
+            bar = "#" * int(60 * k / len(vals))
+            print(f"    {'' if lo is None else f'{lo:+.3f}':>7}"
+                  f" .. {e:+.3f}  {k:7} ({k/len(vals):6.2%}) {bar}")
+            lo = e
+        # How much mass sits within 0.02 em of a DEFINED TeX space?
+        for nm, target in TEX_SPACES.items():
+            near = sum(1 for v in vals if abs(v - target) <= 0.02)
+            print(f"      within 0.02 em of {nm:6} ({target:.4f}): "
+                  f"{near:7} ({near/len(vals):6.2%})")
+
+    report("MATHS fonts", math_r)
+    report("text fonts", text_r)
+
+    # M1.2. The class must not be a binning of the feature itself -- that
+    # would be circular. The honest question is whether the residual
+    # carries information about MODE, so the label is maths-font vs
+    # text-font, which is independent of the residual.
+    #
+    # And per U12: report the CEILING beside the MI. A feature with k
+    # values against a 2-class label cannot exceed H(label), so a
+    # continuous feature finely binned will always look better than a
+    # coarse one for reasons that have nothing to do with the data.
+    edges = [0.005, 0.05, 0.12, 0.20, 0.25, 0.31, 0.5, 0.8]
+
+    def band(v):
+        for i, e in enumerate(edges):
+            if v < e:
+                return i
+        return len(edges)
+
+    xs = [band(v) for v in math_r] + [band(v) for v in text_r]
+    ys = ["maths"] * len(math_r) + ["text"] * len(text_r)
+    mi = mutual_information(xs, ys)
+    ceil = mi_ceiling(xs, ys)
+    print(f"  residual band vs maths/text: MI {mi:.4f} bits, "
+          f"ceiling {ceil:.4f}, efficiency {efficiency(xs, ys):.3f}")
+    print(f"  the single most diagnostic band is the thin space: "
+          f"{sum(1 for v in math_r if abs(v - 3/18) <= 0.02)/max(len(math_r),1):.2%} "
+          f"of maths pairs against "
+          f"{sum(1 for v in text_r if abs(v - 3/18) <= 0.02)/max(len(text_r),1):.2%} "
+          f"of text pairs")
+    print("  CAUTION: the text peak near 0.28 em is the WORD SPACE -- the")
+    print("  space glyph is filtered out by `text.strip()`, so its advance")
+    print("  reappears as a gap. It is not TeX's thick space.")
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -2226,6 +2366,7 @@ MEASUREMENTS = {
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
+    "spacing": (m_spacing, 12),
     "maths": (m_maths, 0),
     "rasterisers": (m_rasterisers, 20),
     "white": (m_white, 8),
