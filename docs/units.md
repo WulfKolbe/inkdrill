@@ -1612,6 +1612,38 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### The deployment protocol — per-document candidate set, 2026-08-10
+
+647 classes is the open set. It is not the operating condition: at query
+time the answer is constrained by the glyphs the document's own fonts
+actually draw. Measured over **21 corpus documents carrying maths
+fonts** — median **7 maths fonts** and **53 distinct maths glyphs**,
+range 3–195, median 267 glyph instances. **53 is 8.2% of the open set.**
+
+With the conjunction verifier at `extents_tol 0.4`:
+
+| candidate set | correct | wrong, detected | **wrong, ACCEPTED** | correct, rejected |
+|---|---|---|---|---|
+| 647 — open set | 88.10% | 11.59% | 0.31% | 14.39% |
+| 195 — worst document seen | 91.50% | 8.35% | 0.15% | 14.36% |
+| **53 — corpus median** | **96.45%** | 3.40% | **0.15%** | 14.58% |
+
+**At the real operating condition: 96.45% correct and 1 wrong answer in
+667 that nothing flags.** The open-set number is the hard bound and the
+candidate-set number is the deployment figure; both are reported
+because they answer different questions.
+
+False rejection is flat at ~14.4% across all three, which is the
+expected shape — it is a property of the verifier, not of how many
+classes compete.
+
+**Stated limit on the model.** The candidate set is drawn uniformly
+over all five families, so it keeps cross-font confusability but loses
+the correlation of which glyphs actually co-occur in one paper. A real
+set is drawn from fewer families and is therefore likely **harder**
+than this models — so 96.45% is optimistic in a knowable direction,
+which is the honest way to leave it rather than claiming it either way.
+
 ### U13's signature figure does not reproduce — re-measured 2026-08-10
 
 `m_classify` carried the same four-field signature as the maths harness

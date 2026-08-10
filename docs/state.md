@@ -255,6 +255,22 @@ Reproduced in `measure.py boxes`; full record in `units.md`.
   white-background screenshot. A blind spot with a stateable trigger,
   and its own residual class for U11.
 
+## 6b. Maths classification, as of 2026-08-10
+
+The chain `type1 -> charstring -> scan -> templates` is built and the
+measurement it existed for is done.
+
+| protocol | correct | wrong and ACCEPTED |
+|---|---|---|
+| 647-class open set, signature-only verifier | 88.10% | 11.90% |
+| 647-class open set, `extents_tol 0.4` | 88.10% | 0.31% |
+| **53-class candidate set (corpus median), `extents_tol 0.4`** | **96.45%** | **0.15%** |
+
+Two changes got there and neither was a model change: a verifier that is
+*independent* of the classifier's failure mode rather than finer, and
+the deployment protocol rather than the open set. Both cost false
+rejection — ~14.4%, flat — which is the price and is stated with them.
+
 ## 7. Not measured, and load-bearing
 
 - maths-symbol classification (§5)

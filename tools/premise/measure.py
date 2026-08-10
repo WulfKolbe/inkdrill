@@ -1652,7 +1652,7 @@ def _template_of(mask, label):
                     (w / h, float(h), float(w), mo.elongation))
 
 
-def m_maths(root, n, rng, doc=None, extents_tol=None):
+def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0):
     """**The measurement this whole chain was built for.**
 
     Every accuracy figure in this repository is body text. U13's class
@@ -1748,6 +1748,21 @@ def m_maths(root, n, rng, doc=None, extents_tol=None):
     labels = {t.label for t in templates}
     print(f"  {len(templates)} templates, {len(queries)} queries, "
           f"{len(labels)} CLASSES (chance = {1/len(labels):.3%})")
+    # The deployment protocol. 647 classes is the open set; a real
+    # document constrains the answer to the glyphs its own fonts
+    # actually draw -- measured over 21 corpus documents with maths
+    # fonts, a MEDIAN OF 53 distinct maths glyphs, range 3-195, which
+    # is 8.2% of the open set.
+    #
+    # Modelled by drawing the candidate set per query: the true class
+    # plus `candidates - 1` others. STATED LIMIT: the sample is uniform
+    # over all five families, so it keeps cross-font confusability but
+    # loses the correlation of which glyphs actually co-occur in one
+    # paper. A real candidate set is drawn from fewer families and is
+    # therefore likely HARDER than this models, not easier.
+    if candidates:
+        print(f"  candidate set {candidates} per query (open set is "
+              f"{len(labels)}; corpus median is 53)")
     for name, ch in (("bitmap only", Channels(1.0, 0.0, 0.0)),
                      ("extents only", Channels(0.0, 0.0, 1.0)),
                      ("signature only", Channels(0.0, 1.0, 0.0)),
@@ -1757,21 +1772,36 @@ def m_maths(root, n, rng, doc=None, extents_tol=None):
             clf.add(t)
         right = detected = missed = false_reject = 0
         worst = Counter()
-        for q in queries:
-            pred = clf.classify(q)
+        by_label = defaultdict(list)
+        for t in templates:
+            by_label[t.label].append(t)
+        pool = sorted(by_label)
+        for qi, q in enumerate(queries):
+            if candidates and candidates < len(pool):
+                pick = random.Random(20260810 + qi).sample(
+                    [l for l in pool if l != q.label],
+                    min(candidates - 1, len(pool) - 1))
+                sub = Classifier(channels=ch)
+                for lab in pick + [q.label]:
+                    for t in by_label[lab]:
+                        sub.add(t)
+                clf_q = sub
+            else:
+                clf_q = clf
+            pred = clf_q.classify(q)
             if pred.label == q.label:
                 right += 1
                 # The other side of the ledger. A verifier that rejects
                 # everything scores a perfect "accepted" rate, so the
                 # rate at which it rejects CORRECT answers must be
                 # printed beside it or the number is meaningless.
-                if not clf.agrees(q, pred.label, extents_tol=extents_tol):
+                if not clf_q.agrees(q, pred.label, extents_tol=extents_tol):
                     false_reject += 1
             else:
                 # A wrong answer the signature REJECTS is a DETECTED
                 # error -- the product. One it accepts is the dangerous
                 # class.
-                if clf.agrees(q, pred.label, extents_tol=extents_tol):
+                if clf_q.agrees(q, pred.label, extents_tol=extents_tol):
                     missed += 1
                     worst[(q.label, pred.label)] += 1
                 else:
@@ -2208,6 +2238,10 @@ def main():
     ap.add_argument("--n", type=int, default=None,
                     help="sample size; each measurement has its own default")
     ap.add_argument("--seed", type=int, default=20260807)
+    ap.add_argument("--candidates", type=int, default=0,
+                    help="maths only: classes visible per query. 0 is the "
+                         "open set; 53 is the corpus median for one "
+                         "document's own maths fonts.")
     ap.add_argument("--extents-tol", type=float, default=None,
                     help="maths only: make the verifier a CONJUNCTION -- "
                          "signature AND extents within this distance. "
@@ -2248,7 +2282,7 @@ def main():
                min_len=args.min_len, doc=args.doc)
         elif name == "maths":
             fn(root, args.n or default_n, random.Random(args.seed),
-               extents_tol=args.extents_tol)
+               extents_tol=args.extents_tol, candidates=args.candidates)
         elif name == "border":
             fn(root, args.n or default_n, random.Random(args.seed),
                quantise=args.quantise, doc=args.doc)
