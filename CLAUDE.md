@@ -289,6 +289,13 @@ result. Quote both in the same sentence, and make the split rule an
 argument to the harness rather than a constant inside it — if it changes
 the answer, a reader must be able to change it.
 
+**In a two-class measurement, an empty class is the first thing to
+check.** `measure.py tables` reported 100% connected grids and zero
+booktabs, because its size filter required BOTH dimensions to be large
+and a booktabs rule is 2 px tall — the filter excluded the class it
+existed to compare against. A clean, quotable answer that the
+instrument could not have contradicted.
+
 **Filters are decisions too, and they hide in the same way.** U13's
 `if count >= 12` silently excluded every maths symbol, so a conclusion
 about "classification" was really about body text. The split rule and the

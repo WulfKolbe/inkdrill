@@ -1635,6 +1635,62 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### T1 step-1 premise — which table convention? 2026-08-10
+
+`measure.py tables`. `emit.page_lines` finds a rule only when it is a
+separate component, which serves booktabs and not a connected grid, so
+the question before building the extractor is what the corpus is.
+
+**20 documents, <=3 pages each: 49 connected grids, 19 disjoint-rule
+groups — connected grids are 72.1% of table objects found.**
+
+That is not a completeness item. **I1's rule coverage misses roughly
+seven tables in ten**, and the cells of every one of them are already
+being emitted without their rules.
+
+#### The first run said 100%, and the filter was why
+
+It reported 156 grids and **0** disjoint-rule groups. Zero booktabs
+across 20 documents including a pdfTeX one is not credible. The cause
+was one line of the harness:
+
+    if w < 40 or h < 20: continue
+
+It requires BOTH dimensions to be large, and **a booktabs rule is 2 px
+tall** — so every rule was dropped before `is_rule` saw one, and the
+disjoint count could only ever be zero. The filter excluded exactly the
+class it existed to compare against.
+
+This is U13's `count >= 12` verbatim, and it produced a clean, quotable,
+completely wrong headline that would have justified the work on evidence
+incapable of saying anything else. The second tell was ignored too: 126
+grids over 34 pages is four tables per page, which no page has — the
+grid test admitted any letter pair.
+
+Corrected: `max(w, h) >= 100` so a thin long object qualifies, and
+`holes >= 4` with `min(w, h) >= 40` for a grid. **Both classes non-empty
+is the sanity check the first run failed**, and it should be the first
+thing looked at in a two-class measurement.
+
+#### What the producer crosstab does and does not say
+
+|  | grids | booktabs | pages |
+|---|---|---|---|
+| unknown | 35 | 19 | 25 |
+| pdfTeX-1.40.21 | 7 | 0 | 3 |
+| macOS 12.0.1 | 6 | 0 | 2 |
+| Acrobat Distiller 7.0 | 1 | 0 | 1 |
+
+**The producer half of the question is not answered.** Most sampled
+documents carry no producer string in the sidecar, so `unknown` holds
+both classes and the named rows are three documents each.
+
+What it does suggest is a correction to the framing: pdfTeX shows 7
+grids and 0 booktabs, so the split is not "LaTeX versus Word" but
+**`booktabs` versus `\hline`** — and `\hline` is a LaTeX convention that
+draws a connected grid. The connected case is not a foreign-producer
+edge; plain LaTeX lands there too.
+
 ### T1 steps 4-5 — rules and diagrams. 2026-08-10
 
 Tests T1-5, T1-6 passed on 2026-08-10: 11 more, 30 in the module.

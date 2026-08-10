@@ -2195,7 +2195,15 @@ def m_tables(root, n, rng, doc=None):
             rules = []
             for root_id, m in mo.items():
                 w, h = m.width, m.height
-                if w < 40 or h < 20:
+                # SIZE FILTER, and the first one was wrong in a way that
+                # produced a clean-looking answer. `w < 40 or h < 20`
+                # requires BOTH dimensions to be large, and a booktabs
+                # rule is 2 px tall -- so every rule was dropped before
+                # `is_rule` saw one, and the measurement reported 0
+                # disjoint-rule groups and 100% connected grids. The
+                # filter has to admit a thin, long object, because that
+                # is precisely what half the population looks like.
+                if max(w, h) < 100:
                     continue
                 r = _R()
                 r.id, r.area = root_id, m.area
@@ -2203,7 +2211,11 @@ def m_tables(root, n, rng, doc=None):
                 if is_rule(r):
                     rules.append(r)
                 elif (m.area / max(1, w * h) < 0.35
-                      and holes.get(root_id, 0) >= 2):
+                      and holes.get(root_id, 0) >= 4
+                      and min(w, h) >= 40):
+                    # >= 4 holes and both sides substantial: 2 holes and
+                    # any extent admits a letter pair, and the first run
+                    # reported ~4 "grids" per page, which no page has.
                     grids += 1
             groups, used = 0, set()
             for i, a in enumerate(rules):

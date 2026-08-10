@@ -292,6 +292,18 @@ MI reads 0.059 efficiency and is the wrong summary: the classes are
 imbalanced 225:1, so a feature sharp on 0.44% of the data cannot move
 an aggregate. The likelihood ratio fits, and it is 33.
 
+### T1 rule coverage is the open gap
+
+`measure.py tables`: **72.1%** of table objects in a 20-document sample
+are CONNECTED GRIDS, whose rules `emit` cannot see — it finds a rule
+only when it is a separate component. Their cells are already emitted.
+Extracting rules from a connected frame means reading the run structure
+near the bbox edge; that is the next piece of work and it is the
+majority case, not a completeness item.
+
+The split is `booktabs` versus `\hline`, not LaTeX versus Word: pdfTeX
+documents show connected grids too.
+
 ### T1 done — the writer exists
 
 `inkdrill/emit.py` produces `lines.json` with `ocr.units = "pt"` from
