@@ -1635,6 +1635,51 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### T1 — `emit.py`, the `lines.json` writer. 2026-08-10
+
+Tests T1-1 to T1-4 passed on 2026-08-10: 19 hermetic.
+`inkdrill/emit.py`. Steps 1-3 of the spec; 4-5 follow.
+
+The first thing in this package that produces an interchange format,
+and the only one, so the format lives in one file. No I/O: `pngio` only
+reads and this only builds a dict.
+
+**Coordinates come from `pHYs` or the call raises.** Not a fallback to
+72, not a guess from the page size -- on `e12s39` the nominal-A4
+derivation is wrong by 0.071 pt, which was the size of the residual
+being measured at the time, and a file silently in the wrong space
+cannot be detected downstream.
+
+**Measurements, never classifications.** `ink.rules[].width_pt` is
+emitted; `"kind": "toprule"` is not. The absolute width runs ~12% high
+and the ratio is unstable under pixel quantisation, so the call needs
+the table's context, which is on the other side.
+
+#### The two-id-spaces trap, a second time
+
+The spec said `n.holes_of(component_id)`, and I built it that way. It
+returns **an empty hole list and an empty table** — no exception, just a
+silently missing lattice — because `nest` numbers regions in its own
+space and `moments_per_component` keys by `Component.root`. The two are
+unrelated.
+
+That is the same trap as `Component.root` versus `nodes[0]`, which cost
+1,293 of 1,310 components on a real page. Caught here only because the
+fixture had a known answer: 2x2 must give 4 cells and gave 0.
+
+`table_lines` now takes a **nest region id**, raises on a hole id, and
+`ink_regions` lists what may legitimately be passed. The signature makes
+the confusion unrepresentable rather than merely documented.
+
+#### One hole is a frame, not a 1x1 table
+
+Every hollow rectangle encloses its interior, so `holes >= 1` would make
+every plot frame a one-cell table — true, useless, and it hands a
+consumer a table where it expected a figure. **Two holes** is the
+smallest lattice that can carry a row or column index.
+
+Mutation: 10 mutants, 10 killed.
+
 ### M3 — the rewriter, and confluence tested rather than asserted. 2026-08-10
 
 Tests M3-1 to M3-4 passed on 2026-08-10: 19 hermetic. `inkdrill/rewrite.py`.

@@ -292,6 +292,14 @@ MI reads 0.059 efficiency and is the wrong summary: the classes are
 imbalanced 225:1, so a feature sharp on 0.44% of the data cannot move
 an aggregate. The likelihood ratio fits, and it is 33.
 
+### T1 done — the writer exists
+
+`inkdrill/emit.py` produces `lines.json` with `ocr.units = "pt"` from
+`pHYs`, `table` + `simple_cell` with `cell_row`/`cell_column` from the
+hole lattice, and `rule_width_pt` — which is what unblocks the rule
+weights on the consumer side. Steps 4-5 of the spec (`diagram`, the
+remaining `ink.*`) are open.
+
 ### M3 done (against synthetic graphs)
 
 `inkdrill/rewrite.py` — relation graph to symbol layout tree.
