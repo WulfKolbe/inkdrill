@@ -1612,6 +1612,47 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### M2.1 — candidate edges, measured then built. 2026-08-10
+
+Tests M2-1 to M2-3 passed on 2026-08-10: 17 hermetic. `inkdrill/relate.py`.
+
+The published 2NN / 6NN / COM / LOS comparison was made on a
+handwriting-heavy benchmark, so `measure.py edges` re-took it on this
+population — 608 maths lines, 17,473 symbols of printed arXiv maths:
+
+| strategy | reading-order recall | edges/node | occluded edges |
+|---|---|---|---|
+| 2NN | 98.07% | 1.09 | 2,525 |
+| 6NN | 99.83% | 3.29 | 40,706 |
+| **LOS** | **99.95%** | **0.96** | **0 by construction** |
+
+**LOS wins on all three axes at once**, which is not the usual shape of
+such a comparison — the best recall AND the fewest edges, 3.4x fewer
+than 6NN. There is no trade-off to tune, and the recommendation
+survives the change of population.
+
+**What the oracle cannot say.** With no relation gold on this side, the
+necessary condition is used instead: two characters adjacent in reading
+order must be connected. **A complete graph scores 100% on that**, so
+recall is meaningless alone and is reported beside edges-per-node —
+LOS's 0.96 is the interesting half of its result, not the 99.95%.
+Occlusion is the one claim needing no gold, and it is the reason LOS
+exists: 6NN connected 40,706 pairs with a third symbol between them,
+which around a fraction bar or a large operator is exactly the wrong
+edge.
+
+**Mutation: 8 mutants, 8 killed** — one only after a fix. The `_NEAR`
+endpoint tolerance survived, because every fixture that could have
+caught it passed no blocker at all. The case that pins it is a symbol
+whose box overlaps its neighbour's CENTRE by a hair — a tight kern, an
+accent, a subscript under a base — which clips the segment at t just
+above 0. Without the tolerance that reads as occlusion and disconnects
+two symbols that plainly see each other.
+
+Writing that test also produced a wrong expectation of mine that the
+code was right to refuse: in `[a, b, graze]` the edge `(1, 2)` is
+correctly ABSENT, because `a` genuinely lies between them.
+
 ### M1.1 — does typography explain the geometry? Measured 2026-08-10
 
 The one new measurement of the maths-layer plan, taken before any graph

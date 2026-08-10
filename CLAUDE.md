@@ -158,6 +158,11 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   U9's rasterizer.** Its oracle is that `charstring`'s contour count
   equals `sweep`'s components + holes — two computations sharing no
   code.
+- **`inkdrill/relate.py`** — candidate edges for a symbol relation
+  graph. `candidates`, `blocked`. Line-of-sight, chosen by measurement
+  on this corpus rather than on the published benchmark: 99.95% recall
+  at 0.96 edges/node against 6NN's 99.83% at 3.29. Produces candidates
+  and labels none of them.
 - **`inkdrill/gold.py`** — pdfminer alignment. `page_transform`, `match`,
   `to_coco`. The four residual classes are the product, not the
   leftovers: only 66.9% of real assignments are 1:1. Matches on component

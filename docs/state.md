@@ -292,6 +292,14 @@ MI reads 0.059 efficiency and is the wrong summary: the classes are
 imbalanced 225:1, so a feature sharp on 0.44% of the data cannot move
 an aggregate. The likelihood ratio fits, and it is 33.
 
+### M2.1 done
+
+`inkdrill/relate.py` — line-of-sight candidate edges. Measured on this
+corpus before building: **LOS 99.95% reading-order recall at 0.96
+edges/node**, against 6NN's 99.83% at 3.29 and 40,706 occluded pairs.
+Best recall and fewest edges at once. Relation LABELS (M2.2) are the
+other CLI's; `UNRESOLVED` (M2.3) waits on the abstention decision.
+
 ## 7. Not measured, and load-bearing
 
 - maths-symbol classification (§5)

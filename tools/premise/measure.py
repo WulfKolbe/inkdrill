@@ -27,6 +27,7 @@ border       what the pixels just outside a component's runs say about
              the field it sits on -- 2 samples per run
 boxes        drawn frames and filled panels from ink, cross-checked
              against the rectangles the PDF itself declares
+edges        M2.1: 2NN vs 6NN vs line-of-sight candidate edges
 spacing      M1.1: does typography explain the horizontal geometry?
 maths        THE measurement: maths-symbol classification, never done
 rasterisers  U9->U13 premise: template (scan) vs query (Ghostscript)
@@ -1984,6 +1985,145 @@ def m_spacing(root, n, rng, doc=None):
     print("  reappears as a gap. It is not TeX's thick space.")
 
 
+def _blocked(a, b, others):
+    """Is the centre-to-centre segment from `a` to `b` blocked?
+
+    The line-of-sight test, in its usual approximation: a third symbol
+    occludes the pair if its box crosses the segment. Boxes are
+    (x0, y0, x1, y1) with y increasing downward.
+    """
+    ax, ay = (a[0] + a[2]) / 2, (a[1] + a[3]) / 2
+    bx, by = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+    dx, dy = bx - ax, by - ay
+    for c in others:
+        # Liang-Barsky against the box; t restricted to the open segment
+        # so a box touching an endpoint does not count as blocking.
+        t0, t1 = 0.0, 1.0
+        ok = True
+        for p, q in ((-dx, ax - c[0]), (dx, c[2] - ax),
+                     (-dy, ay - c[1]), (dy, c[3] - ay)):
+            if p == 0:
+                if q < 0:
+                    ok = False
+                    break
+                continue
+            r = q / p
+            if p < 0:
+                if r > t1:
+                    ok = False
+                    break
+                t0 = max(t0, r)
+            else:
+                if r < t0:
+                    ok = False
+                    break
+                t1 = min(t1, r)
+        if ok and t1 > t0 and t1 > 0.02 and t0 < 0.98:
+            return True
+    return False
+
+
+def m_edges(root, n, rng, doc=None):
+    """M2.1: which candidate-edge rule should a relation graph use?
+
+    Three strategies from the lgap comparison -- 2NN, 6NN and
+    line-of-sight -- measured on this corpus rather than taken on
+    faith, because the published comparison was on a handwriting-heavy
+    benchmark and this population is printed arXiv maths.
+
+    ORACLE, and its limits. There is no relation gold set here yet (M0
+    is the other CLI's), so the necessary condition is used instead:
+    **two characters adjacent in pdfminer's reading order must be
+    connected**, or no relation between them is expressible at all.
+    That is a lower bound on what a candidate graph has to contain, not
+    a measure of whether its other edges are useful -- a complete graph
+    scores 100% on it. So recall is reported BESIDE edges-per-node, and
+    neither means anything alone.
+
+    The occlusion count is the claim being tested: LOS exists because
+    kNN connects symbols with a third between them, which is said to
+    fail around fractions and large operators. That is measurable here
+    directly, with no gold at all.
+
+    POPULATION: pdfminer lines of >= 3 characters containing at least
+    one maths-font glyph, so the graph is measured where it would run.
+    """
+    docs = [(cj.parent, cj) for cj in sorted(root.glob("*/*.chars.json"))]
+    if doc:
+        docs = [t for t in docs if t[0].name == doc]
+    else:
+        rng.shuffle(docs)
+    stats = {k: [0, 0, 0] for k in ("2NN", "6NN", "LOS")}   # hit, want, edges
+    occl = Counter()
+    nlines = nnodes = ndoc = 0
+    for d, cj in docs:
+        if ndoc >= n:
+            break
+        try:
+            data = json.load(cj.open())
+        except Exception:
+            continue
+        got = False
+        for page in data["pages"]:
+            rows = defaultdict(list)
+            for c in page["chars"]:
+                if c.get("text", "").strip():
+                    rows[round(c["top"], 0)].append(c)
+            for _, cs_ in rows.items():
+                if len(cs_) < 3 or not any(is_math_family(c["fontname"])
+                                           for c in cs_):
+                    continue
+                cs_.sort(key=lambda c: c["x0"])
+                if len(cs_) > 40:
+                    cs_ = cs_[:40]           # bound the O(n^3) LOS check
+                box = [(c["x0"], c["top"], c["x1"], c["bottom"]) for c in cs_]
+                cen = [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for b in box]
+                m = len(box)
+                nlines += 1
+                nnodes += m
+                need = {(i, i + 1) for i in range(m - 1)}
+                for name in stats:
+                    E = set()
+                    if name == "LOS":
+                        for i in range(m):
+                            for j in range(i + 1, m):
+                                others = [box[k] for k in range(m)
+                                          if k != i and k != j]
+                                if not _blocked(box[i], box[j], others):
+                                    E.add((i, j))
+                    else:
+                        k = 2 if name == "2NN" else 6
+                        for i in range(m):
+                            order = sorted(
+                                range(m),
+                                key=lambda j: ((cen[i][0] - cen[j][0]) ** 2 +
+                                               (cen[i][1] - cen[j][1]) ** 2))
+                            for j in order[1:k + 1]:
+                                E.add((min(i, j), max(i, j)))
+                        for i, j in E:
+                            others = [box[k] for k in range(m)
+                                      if k != i and k != j]
+                            if _blocked(box[i], box[j], others):
+                                occl[name] += 1
+                    stats[name][0] += len(need & E)
+                    stats[name][1] += len(need)
+                    stats[name][2] += len(E)
+                got = True
+        ndoc += got
+    if not nlines:
+        print("  no qualifying lines")
+        return
+    print(f"  {ndoc} documents, {nlines} maths lines, {nnodes} symbols "
+          f"({nnodes/nlines:.1f} per line)")
+    print(f"  {'strategy':10} {'reading-order recall':>21} "
+          f"{'edges/node':>11} {'occluded edges':>15}")
+    for name, (hit, want, ed) in stats.items():
+        print(f"  {name:10} {hit/want:20.2%} {ed/nnodes:11.2f} "
+              f"{(str(occl[name]) if name in occl else '0 by construction'):>15}")
+    print("  Recall alone is not a ranking: a complete graph scores 100%.")
+    print("  Read it against edges/node -- the cost of that recall.")
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -2366,6 +2506,7 @@ MEASUREMENTS = {
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
+    "edges": (m_edges, 8),
     "spacing": (m_spacing, 12),
     "maths": (m_maths, 0),
     "rasterisers": (m_rasterisers, 20),
