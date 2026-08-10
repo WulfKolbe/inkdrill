@@ -2093,8 +2093,15 @@ def m_classify(root, n, rng, split="document"):
                              if c.get("text") == hit[0][0]), "")
                 rows.append((doc.name, page["page_number"], font,
                              Template(hit[0][0], normalise(sub),
-                                      (s.cycles, s.births, s.merges,
-                                       s.splits),
+                                      # All SIX fields. The four-field
+                                      # version dropped `parts` and
+                                      # `closes`, and neither is inert
+                                      # even on a single-component crop:
+                                      # over 204 of them `parts` ranges
+                                      # 1..5 and `closes` 1..5, with a
+                                      # lone `a` giving closes=3.
+                                      (s.parts, s.cycles, s.births,
+                                       s.closes, s.merges, s.splits),
                                       (w / h, float(h), float(w),
                                        mo.elongation))))
             pages += 1

@@ -1612,6 +1612,40 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### U13's signature figure does not reproduce — re-measured 2026-08-10
+
+`m_classify` carried the same four-field signature as the maths harness
+and was fixed second. It was NOT inert there: over single-component
+crops `parts` ranges 1..5 and `closes` 1..5, and `closes` is a real
+shape feature — a lone `a` gives 3. So U13's signature figures were
+measured with two informative dimensions removed.
+
+Re-run with all six fields, `--split font`:
+
+| sample | bitmap | + extents | all three | signature's own gain |
+|---|---|---|---|---|
+| n=6 | 72.0% | 78.8% | 83.2% | **+4.4** |
+| n=20 (30,271 train / 600 test, 36 classes) | 85.5% | 95.7% | 96.0% | **+0.3** |
+
+**The recorded "+24.8 points across fonts (61.5% -> 86.3%)" is not
+reproduced at either size.** The channel stack gains 10–11 points over
+bitmap alone, not 24.8, and the SIGNATURE's own contribution over
+bitmap+extents is +4.4 at the small sample and **+0.3 at the large
+one** — which is the opposite of the prediction that restoring two
+dimensions would strengthen it.
+
+**Stated limit: this is a flag, not a replacement.** The original
+figure's `--n` and `--seed` were never recorded beside it, so the
+protocol cannot be reproduced exactly and the sample composition
+differs — bitmap-only alone moves 61.5% -> 72.0% -> 85.5% across the
+three runs, which is sample, not the fix. What can be said is that the
+figure justifying the signature channel is unverified, and that the two
+re-runs available do not support it.
+
+**The harness must record its own parameters beside its output.** That
+this cannot be settled is a defect in how the number was published, not
+in the number.
+
 ### Maths classification, corrected — 2026-08-09, `measure.py maths`
 
 The first figures below were substantially an INSTRUMENT error, found

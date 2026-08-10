@@ -43,6 +43,45 @@ happens in real fonts -- they do not, and even-odd punches a hole that
 should not be there. The direction of each crossing is therefore
 tracked, not just its position.
 
+A MEASURED MINIMUM SIZE -- read this before rendering a template
+----------------------------------------------------------------
+Centre sampling with no anti-aliasing drops a thin stroke entirely when
+it falls between two pixel centres, so below a size threshold a glyph's
+TOPOLOGY is wrong: an `O` renders as two components with no hole. That
+is not a rounding error, it is a different answer to the question the
+rest of this package asks.
+
+Measured over 16 glyphs of `cmmi10`, `cmsy10` and `cmr10` against their
+own topology at 256 px/em:
+
+    24 px/em    2 of 16 stable        (radical, element -- open strokes)
+    32 px/em    5 of 16
+    36 px/em    9 of 16
+    48 px/em   14 of 16
+    96 px/em   16 of 16               `cmmi10:g` needs this
+
+**And it is not monotone.** `cmmi10:g` is correct at 32 and wrong again
+at 48 and 64 before settling at 96; `cmr10:e` is right at 28, wrong at
+32 and 36. A stroke that lands between pixel centres at one scale can
+land on one at a smaller scale, so "big enough" is a tendency and not a
+guarantee at any single size.
+
+The rule this implies, and it is the caller's to apply:
+
+    **Render a template ONCE at a large fixed size -- 96 px/em or more
+    -- and let the extents channel carry the glyph's real scale.**
+
+Rendering a template at its DISPLAYED size is the trap. A 5 pt
+subscript at 400 dpi is 27.8 px/em and a 7 pt one at 300 dpi is
+29.2 px/em, both far below anything stable, so a script template
+rendered "to size" would have broken topology and the signature channel
+would be measuring noise for exactly the glyphs U14 needs most.
+
+`render` does NOT enforce a minimum: a caller rasterizing a page glyph
+at its true size is doing something legitimate, and refusing it would
+be wrong. The floor is a fact about the output, stated here so it is
+inherited rather than rediscovered.
+
 Guarantees
 ----------
 G1  pure -- contours in, `InkMask` out; no font access, no file access

@@ -219,6 +219,12 @@ Reproduced in `measure.py boxes`; full record in `units.md`.
   pitch to **0.0007 pt** over 348 intervals. The ink sweep finds **0**
   of those 24 panels and the white sweep finds all 24 identically.
   Pinned by `tests/test_source_truth_corpus.py`.
+- **U13's +24.8 signature figure is unverified and does not reproduce.**
+  `m_classify` used four of the signature's six fields. Fixed and
+  re-run by font, the signature adds **+4.4 points at n=6 and +0.3 at
+  n=20**, against a recorded +24.8. The original run's `--n`/`--seed`
+  were never published beside it, so it cannot be reproduced exactly —
+  which is itself the finding. Treat the figure as open.
 - **A non-LaTeX counterexample now stands on the record.** The Infineon
   handbook (Word 2016, 110 pages) sends U9's route B to **0 of 19
   fonts** — 100% TrueType, CambriaMath the only maths family — so the
