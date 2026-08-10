@@ -1652,7 +1652,8 @@ def _template_of(mask, label):
                     (w / h, float(h), float(w), mo.elongation))
 
 
-def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0):
+def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
+            candidate_families=0):
     """**The measurement this whole chain was built for.**
 
     Every accuracy figure in this repository is body text. U13's class
@@ -1778,9 +1779,22 @@ def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0):
         pool = sorted(by_label)
         for qi, q in enumerate(queries):
             if candidates and candidates < len(pool):
-                pick = random.Random(20260810 + qi).sample(
-                    [l for l in pool if l != q.label],
-                    min(candidates - 1, len(pool) - 1))
+                r = random.Random(20260810 + qi)
+                others = [l for l in pool if l != q.label]
+                if candidate_families:
+                    # A real document draws its maths glyphs from a few
+                    # families, not from all of them: measured over 40
+                    # corpus documents the median is 4 of these 5. Draw
+                    # the candidate set the same way, keeping the true
+                    # class's own family in, so within-family
+                    # confusability is preserved rather than diluted.
+                    fams = sorted({l.split(":")[0] for l in pool})
+                    own = q.label.split(":")[0]
+                    rest = [f for f in fams if f != own]
+                    keep = {own} | set(r.sample(
+                        rest, min(candidate_families - 1, len(rest))))
+                    others = [l for l in others if l.split(":")[0] in keep]
+                pick = r.sample(others, min(candidates - 1, len(others)))
                 sub = Classifier(channels=ch)
                 for lab in pick + [q.label]:
                     for t in by_label[lab]:
@@ -2242,6 +2256,10 @@ def main():
                     help="maths only: classes visible per query. 0 is the "
                          "open set; 53 is the corpus median for one "
                          "document's own maths fonts.")
+    ap.add_argument("--candidate-families", type=int, default=0,
+                    help="maths only: draw the candidate set from this many "
+                         "families rather than all of them. 4 is the corpus "
+                         "median per document; 1 is the hardest case.")
     ap.add_argument("--extents-tol", type=float, default=None,
                     help="maths only: make the verifier a CONJUNCTION -- "
                          "signature AND extents within this distance. "
@@ -2282,7 +2300,8 @@ def main():
                min_len=args.min_len, doc=args.doc)
         elif name == "maths":
             fn(root, args.n or default_n, random.Random(args.seed),
-               extents_tol=args.extents_tol, candidates=args.candidates)
+               extents_tol=args.extents_tol, candidates=args.candidates,
+               candidate_families=args.candidate_families)
         elif name == "border":
             fn(root, args.n or default_n, random.Random(args.seed),
                quantise=args.quantise, doc=args.doc)

@@ -1637,12 +1637,37 @@ False rejection is flat at ~14.4% across all three, which is the
 expected shape — it is a property of the verifier, not of how many
 classes compete.
 
-**Stated limit on the model.** The candidate set is drawn uniformly
-over all five families, so it keeps cross-font confusability but loses
-the correlation of which glyphs actually co-occur in one paper. A real
-set is drawn from fewer families and is therefore likely **harder**
-than this models — so 96.45% is optimistic in a knowable direction,
-which is the honest way to leave it rather than claiming it either way.
+#### The stated limit, then measured — and it was over-cautious
+
+The candidate set above is drawn uniformly over all five families, so it
+keeps cross-font confusability but loses the correlation of which glyphs
+co-occur in one paper. That was flagged as making 96.45% *optimistic in
+a knowable direction*. Measured rather than left as a caveat.
+
+Over 40 corpus documents, maths families per document: **median 4 of
+these 5** — 17 documents use exactly `cmex cmmi cmsy msbm`, and only 5
+use all five. So a real draw is barely narrower than a uniform one.
+
+Restricting the candidate set to that many families, 53 candidates
+throughout:
+
+| families drawn from | correct | wrong, ACCEPTED |
+|---|---|---|
+| all 5 (uniform) | 96.45% | 0.15% |
+| **4 — the corpus median** | **96.45%** | **0.15%** |
+| 2 | 95.98% | 0.31% |
+| 1 — the hardest case | 95.05% | 0.31% |
+
+**Identical at the operating point**, and even the degenerate
+single-family case costs 1.4 points. The correlation the model omitted
+is worth about nothing at 4 families and about a point at 1, so
+**96.45% stands without the hedge** — the concern was real, cheap to
+check, and did not survive.
+
+What still is not modelled: which glyphs a paper picks are the COMMON
+ones, and whether the common set is more or less confusable than a
+random draw of the same size needs the unicode-to-glyph-name mapping
+`chars.json` does not carry.
 
 ### U13's signature figure does not reproduce — re-measured 2026-08-10
 

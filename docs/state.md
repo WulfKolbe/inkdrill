@@ -266,6 +266,11 @@ measurement it existed for is done.
 | 647-class open set, `extents_tol 0.4` | 88.10% | 0.31% |
 | **53-class candidate set (corpus median), `extents_tol 0.4`** | **96.45%** | **0.15%** |
 
+The candidate-set model was checked against real co-occurrence rather
+than left hedged: documents use a **median 4 of the 5** maths families,
+and restricting the draw that way gives an **identical 96.45% / 0.15%**.
+Even a single-family draw costs 1.4 points.
+
 Two changes got there and neither was a model change: a verifier that is
 *independent* of the classifier's failure mode rather than finer, and
 the deployment protocol rather than the open set. Both cost false
