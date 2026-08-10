@@ -298,7 +298,13 @@ an aggregate. The likelihood ratio fits, and it is 33.
 corpus before building: **LOS 99.95% reading-order recall at 0.96
 edges/node**, against 6NN's 99.83% at 3.29 and 40,706 occluded pairs.
 Best recall and fewest edges at once. Relation LABELS (M2.2) are the
-other CLI's; `UNRESOLVED` (M2.3) waits on the abstention decision.
+other CLI's.
+
+**M2.3 decided**: an unresolved node keeps its geometry and its edges,
+and is refused only by rules keyed on symbol identity. `Symbol.label`
+raises rather than returning a sentinel — two unidentified glyphs must
+not compare equal — and carries the reason, because the 14.4%
+abstention is the QC surface, not a gap.
 
 ## 7. Not measured, and load-bearing
 

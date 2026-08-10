@@ -49,6 +49,33 @@ degrading -- a silently truncated graph would lose edges without saying
 which. A segment-bbox prefilter removes most blocker tests before the
 clipping arithmetic runs.
 
+UNRESOLVED nodes: geometry yes, rewriting no (M2.3)
+----------------------------------------------------
+The glyph classifier abstains. Measured, `agrees(extents_tol=0.4)`
+rejects **14.4%** of even its CORRECT answers -- the price of cutting
+silently-wrong from 11.90% to 0.31%. A relation graph therefore has to
+say what a node with no identity is.
+
+The decision, and it is a decision rather than a measurement:
+
+    an unresolved node KEEPS ITS GEOMETRY and takes part in relations;
+    it is refused only by rules keyed on WHAT SYMBOL IT IS.
+
+Both halves matter. Dropping the node would break the graph around it --
+its neighbours would see through a hole that is not there, and
+`candidates` would connect symbols that a real glyph separates, which
+is precisely the occlusion error line-of-sight exists to avoid. And
+treating it as a symbol would let `largeop + ABOVE + BELOW -> Limits`
+fire on something never identified as a large operator, producing a
+confident wrong tree from an admitted non-answer.
+
+So `Symbol.label` RAISES on an unresolved node instead of returning a
+placeholder. That follows `sweep.Component.area`, which raises rather
+than guessing at a value belonging to another unit: a caller that needs
+identity must handle its absence at the point of use, and cannot
+receive a plausible default by accident. A rule that only needs
+position never touches `label` and is unaffected.
+
 Guarantees
 ----------
 G1  pure -- boxes in, index pairs out; no I/O and no global state
@@ -62,11 +89,17 @@ G4  a box never occludes an edge it is an endpoint of, and touching a
 G5  degenerate input is answered, not raised: fewer than two boxes
     gives no edges
 G6  `max_symbols` is enforced with an exception, never by truncation
+G7  an UNRESOLVED symbol keeps its geometry and its edges; only
+    `label` is refused, and refusing raises rather than returning a
+    sentinel that could be compared against a real name
 """
 
 from __future__ import annotations
 
-__all__ = ["Box", "blocked", "candidates", "TooManySymbols"]
+from dataclasses import dataclass
+
+__all__ = ["Box", "Symbol", "Unresolved", "blocked", "candidates",
+           "needs_identity", "partition", "TooManySymbols"]
 
 # A box is (x0, y0, x1, y1) with y increasing DOWNWARD, matching the
 # page convention pdfminer and `raster` both use.
@@ -82,6 +115,71 @@ MAX_SYMBOLS = 400
 
 class TooManySymbols(ValueError):
     """More symbols than `candidates` will consider (G6)."""
+
+
+class Unresolved(LookupError):
+    """A symbol-keyed rule asked an unidentified node what it is (G7)."""
+
+
+@dataclass(frozen=True, slots=True)
+class Symbol:
+    """A node: geometry always, identity sometimes.
+
+    `reason` records WHY identity is absent -- the abstention is a
+    finding, not a gap, and a QC surface wants to show which glyphs a
+    human must adjudicate rather than merely how many.
+    """
+    box: Box
+    name: str | None = None
+    margin: float = 0.0
+    reason: str = ""
+
+    @property
+    def resolved(self) -> bool:
+        return self.name is not None
+
+    @property
+    def label(self) -> str:
+        """The symbol's identity, or `Unresolved` (G7).
+
+        Deliberately not a sentinel: `"UNKNOWN"` would compare equal to
+        itself, so two unidentified glyphs would look like the same
+        symbol and a rule keyed on equality would fire between them.
+        """
+        if self.name is None:
+            raise Unresolved(
+                f"symbol at {self.box} was not identified"
+                + (f" ({self.reason})" if self.reason else "")
+                + "; it keeps its geometry and its edges, but no rule "
+                  "keyed on symbol identity may fire on it")
+        return self.name
+
+    @property
+    def centre(self) -> tuple[float, float]:
+        return _centre(self.box)
+
+
+def needs_identity(symbols) -> bool:
+    """May a symbol-keyed production be attempted over these? (G7)
+
+    The guard a rewriter calls before matching a rule that reads
+    `label`. Returns False if ANY participant is unresolved, because a
+    production is a claim about the whole match.
+    """
+    return all(s.resolved for s in symbols)
+
+
+def partition(symbols):
+    """`(resolved, unresolved)`, as two lists.
+
+    The residual is the product here as everywhere: the unresolved list
+    is the QC surface -- exactly the glyphs a human must adjudicate --
+    and is returned rather than counted so a caller can show them.
+    """
+    keep, drop = [], []
+    for s in symbols:
+        (keep if s.resolved else drop).append(s)
+    return keep, drop
 
 
 def _centre(b: Box) -> tuple[float, float]:

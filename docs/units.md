@@ -1612,6 +1612,48 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### M2.3 — the UNRESOLVED policy. Decided 2026-08-10
+
+Tests M2-4 passed on 2026-08-10: 8 hermetic, in `relate.py`.
+
+The classifier abstains. `agrees(extents_tol=0.4)` rejects **14.4%** of
+even its CORRECT answers — the price of cutting silently-wrong from
+11.90% to 0.31%. A relation graph has to say what a node with no
+identity is, and this is a **decision**, not a measurement:
+
+> an unresolved node **keeps its geometry** and takes part in
+> relations; it is refused only by rules keyed on **what symbol it is**.
+
+Both halves are load-bearing, and each fails differently:
+
+- **Dropping the node breaks the graph around it.** Its neighbours
+  would see through a hole that is not there, and `candidates` would
+  connect symbols a real glyph separates — precisely the occlusion
+  error line-of-sight exists to avoid. An unresolved glyph is still an
+  occluder.
+- **Treating it as a symbol produces a confident wrong tree.**
+  `largeop + ABOVE + BELOW -> Limits` would fire on something never
+  identified as a large operator — a confident answer built from an
+  admitted non-answer, which is the failure this project exists to
+  prevent.
+
+`Symbol.label` therefore **raises** rather than returning a
+placeholder, following `sweep.Component.area`, which raises rather than
+guessing at a value belonging to another unit. A rule needing identity
+must handle its absence at the point of use; a rule needing only
+position never touches `label`.
+
+**Not a sentinel, deliberately.** `"UNKNOWN"` compares equal to itself,
+so two merely-unidentified glyphs would look like the same symbol and
+an equality-keyed rule would fire between them. The refusal also
+carries the *reason*, because the abstention is a finding: a QC surface
+wants the glyphs a human must adjudicate, not their count. `partition`
+returns the unresolved list rather than counting it, for the same
+reason.
+
+Mutation: 4 mutants, 4 killed — including the sentinel, which is the
+one a reviewer would most plausibly propose as a simplification.
+
 ### M2.1 — candidate edges, measured then built. 2026-08-10
 
 Tests M2-1 to M2-3 passed on 2026-08-10: 17 hermetic. `inkdrill/relate.py`.

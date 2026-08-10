@@ -7,8 +7,8 @@ than asserting a recorded edge list.
 
 import unittest
 
-from inkdrill.relate import (MAX_SYMBOLS, TooManySymbols, blocked,
-                             candidates)
+from inkdrill.relate import (MAX_SYMBOLS, Symbol, TooManySymbols, Unresolved,
+                             blocked, candidates, needs_identity, partition)
 
 
 def box(x, y, w=10.0, h=10.0):
@@ -134,6 +134,69 @@ class M2_3_Layouts(unittest.TestCase):
         6NN's 3.29. A row must not come back dense."""
         row = [box(i * 20.0, 0.0, 10.0, 10.0) for i in range(20)]
         self.assertLess(len(candidates(row)) / len(row), 1.2)
+
+
+class M2_4_Unresolved(unittest.TestCase):
+    """G7: geometry yes, symbol-keyed rewriting no.
+
+    The classifier abstains on 14.4% of even its correct answers. This
+    is the decision about what those nodes are, and both halves of it
+    are load-bearing.
+    """
+
+    def test_an_unresolved_symbol_still_has_geometry(self):
+        u = Symbol(box(0, 0))
+        self.assertEqual(u.centre, (5.0, 5.0))
+        self.assertFalse(u.resolved)
+
+    def test_reading_the_label_raises_rather_than_returning_a_sentinel(self):
+        with self.assertRaises(Unresolved):
+            Symbol(box(0, 0), reason="margin 0.02").label
+
+    def test_the_reason_travels_with_the_refusal(self):
+        """The abstention is a finding, not a gap: a QC surface needs to
+        show WHICH glyphs a human must adjudicate, and why."""
+        with self.assertRaises(Unresolved) as cm:
+            Symbol(box(0, 0), reason="margin 0.02").label
+        self.assertIn("margin 0.02", str(cm.exception))
+
+    def test_two_unresolved_symbols_are_not_the_same_symbol(self):
+        """Why a sentinel was refused. `"UNKNOWN"` compares equal to
+        itself, so a rule keyed on equality would fire between two
+        glyphs that were merely both unidentified."""
+        a, b = Symbol(box(0, 0)), Symbol(box(50, 0))
+        for s in (a, b):
+            with self.assertRaises(Unresolved):
+                s.label
+
+    def test_an_unresolved_node_is_still_an_occluder(self):
+        """The half that dropping the node would break: its neighbours
+        would see through a hole that is not there, and `candidates`
+        would connect symbols a real glyph separates."""
+        boxes = [box(0, 0), box(50, 0), box(100, 0)]
+        self.assertNotIn((0, 2), candidates(boxes))
+
+    def test_an_unresolved_node_still_takes_edges(self):
+        boxes = [s.box for s in (Symbol(box(0, 0), "x"),
+                                 Symbol(box(30, 0)),
+                                 Symbol(box(60, 0), "y"))]
+        e = candidates(boxes)
+        self.assertIn((0, 1), e)
+        self.assertIn((1, 2), e)
+
+    def test_a_symbol_keyed_rule_is_refused_when_any_participant_is_unknown(self):
+        known = Symbol(box(0, 0), "summation")
+        unknown = Symbol(box(0, 30))
+        self.assertTrue(needs_identity([known, Symbol(box(9, 9), "i")]))
+        self.assertFalse(needs_identity([known, unknown]))
+
+    def test_partition_returns_the_unresolved_rather_than_counting_them(self):
+        syms = [Symbol(box(0, 0), "a"), Symbol(box(20, 0)),
+                Symbol(box(40, 0), "b")]
+        keep, drop = partition(syms)
+        self.assertEqual([s.name for s in keep], ["a", "b"])
+        self.assertEqual(len(drop), 1)
+        self.assertEqual(drop[0].box, box(20, 0))
 
 
 if __name__ == "__main__":
