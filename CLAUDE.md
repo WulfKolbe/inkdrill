@@ -166,6 +166,11 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   and labels none of them. An UNRESOLVED symbol keeps its geometry and
   its edges; `Symbol.label` raises rather than yielding a sentinel two
   unidentified glyphs would compare equal on.
+- **`inkdrill/rewrite.py`** — relation graph → symbol layout tree.
+  `rewrite`, `confluent`, `PRODUCTIONS`. Confluence is tested by
+  permuting the graph, which is what caught ranking by node index —
+  deterministic for one labelling, not confluent. Matches are ranked by
+  the geometry of their leaves.
 - **`inkdrill/gold.py`** — pdfminer alignment. `page_transform`, `match`,
   `to_coco`. The four residual classes are the product, not the
   leftovers: only 66.9% of real assignments are 1:1. Matches on component

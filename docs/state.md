@@ -292,6 +292,16 @@ MI reads 0.059 efficiency and is the wrong summary: the classes are
 imbalanced 225:1, so a feature sharp on 0.44% of the data cannot move
 an aggregate. The likelihood ratio fits, and it is 33.
 
+### M3 done (against synthetic graphs)
+
+`inkdrill/rewrite.py` — relation graph to symbol layout tree.
+Productions for `SupSub`, `Limits`, `Fraction`, `Root`; a refused match
+becomes a `PLACEHOLDER` keeping its children, mirroring M2.3 one level
+up. **Confluence is tested by permutation, not asserted** — 60 random
+graphs at 24 orders each — and that test rejected the first
+implementation, which ranked matches by node index rather than by
+geometry. Scoring waits on M0's gold set.
+
 ### M2.1 done
 
 `inkdrill/relate.py` — line-of-sight candidate edges. Measured on this

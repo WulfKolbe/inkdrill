@@ -1612,6 +1612,66 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### M3 — the rewriter, and confluence tested rather than asserted. 2026-08-10
+
+Tests M3-1 to M3-4 passed on 2026-08-10: 19 hermetic. `inkdrill/rewrite.py`.
+
+Scored against no gold, deliberately: M0 is the other side of the
+interface. What can be established without it is the property the whole
+formalism rests on — **the answer does not depend on the order rules
+fired in** — and that is checked by running the reduction under many
+permutations, not claimed in a docstring. `confluent()` is exported so
+a caller can ask rather than trust, and the suite runs it over 60
+random graphs at 24 permutations each.
+
+#### Ranking by node index is not confluence
+
+The first implementation ranked competing matches by node index. That
+makes the reduction deterministic **for one labelling of the graph**,
+which is a strictly weaker property, and `confluent()` — which relabels
+— rejected it immediately. The rank is now the **bounding box of the
+match's leaves**: intrinsic to the page, so it survives relabelling
+because the page does.
+
+That is the whole value of testing confluence by permutation instead of
+asserting it. A determinism test on a fixed graph would have passed.
+
+#### Structure decides the match; identity decides only what it becomes
+
+The second error was gating the match on the identity predicate. An
+unresolved root then had **no match at all**, so no placeholder was
+ever built and M2.3's decision was silently not implemented — the code
+looked right and the guarantee was absent. Structure now decides
+whether a production fires; `needs_identity` decides whether it becomes
+`Limits` or `PLACEHOLDER`.
+
+This is also why `ABOVE + BELOW` needs the operator class: it is
+ambiguous between `Fraction` and `Limits`, and only the root symbol
+separates them. M2.3 had to be decided before this module could exist.
+
+#### Mutation: 9 mutants, 8 killed, 1 equivalent
+
+| mutation | result |
+|---|---|
+| rank by index rather than geometry | killed |
+| disjointness check removed | killed |
+| placeholder never / always used | killed (both) |
+| identity gate removed | killed |
+| children dropped | killed |
+| unique-members check removed | killed by a self-loop |
+| termination guard removed | **equivalent** |
+
+The unique-members guard looked equivalent — the edge dict is keyed by
+`(i, j)`, so one pair cannot carry two relations and duplicates seemed
+impossible. A **self-loop** `(i, i)` produces them, which a buggy
+labeller can emit, and without the guard the node is nilled from under
+itself and a symbol is lost.
+
+The termination guard is genuinely redundant: every firing step nils at
+least one node, so the count strictly decreases and the loop terminates
+without it. Kept as a defensive bound, recorded so the next sweep does
+not re-raise it.
+
 ### M2.1 follow-up — the clipping loop was unfalsifiable. 2026-08-10
 
 An audit could not kill six branches of `relate`'s Liang-Barsky loop
