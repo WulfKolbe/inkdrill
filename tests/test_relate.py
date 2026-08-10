@@ -8,7 +8,8 @@ than asserting a recorded edge list.
 import unittest
 
 from inkdrill.relate import (MAX_SYMBOLS, Symbol, TooManySymbols, Unresolved,
-                             blocked, candidates, needs_identity, partition)
+                             blocked, candidates, clip, needs_identity,
+                             partition)
 
 
 def box(x, y, w=10.0, h=10.0):
@@ -65,6 +66,80 @@ class M2_1_Occlusion(unittest.TestCase):
         a, b = (0.0, 0.0, 20.0, 20.0), (40.0, 0.0, 60.0, 20.0)
         mid = (24.0, 0.0, 30.0, 20.0)
         self.assertTrue(blocked(a, b, [mid]))
+
+
+class M2_5_Clip(unittest.TestCase):
+    """The interval itself, not the boolean downstream of it.
+
+    An audit found six branches of this loop unfalsifiable from outside:
+    `blocked` returns only True/False, so a wrong interval with the
+    right sign is indistinguishable from a right one. The cause is
+    geometric -- an AXIS-ALIGNED segment leaves one slab pair
+    degenerate, so `t0` and `t1` are each set by a single candidate and
+    the max/min refinements never compete. Only a DIAGONAL segment
+    makes them compete, and only asserting `(t0, t1)` shows which won.
+    """
+
+    def test_a_horizontal_segment_clips_on_x_alone(self):
+        # Ray (0,5) + t*(100,0); box spans x 20..40, y 0..10.
+        self.assertEqual(clip(0.0, 5.0, 100.0, 0.0, (20.0, 0.0, 40.0, 10.0)),
+                         (0.2, 0.4))
+
+    def test_a_box_the_parallel_segment_misses_returns_None(self):
+        """The `p == 0 and q < 0` branch: parallel to the y slabs and
+        outside them."""
+        self.assertIsNone(
+            clip(0.0, 5.0, 100.0, 0.0, (20.0, 50.0, 40.0, 60.0)))
+
+    def test_a_diagonal_segment_makes_BOTH_slabs_compete(self):
+        """t0 is the max of the two entry parameters and t1 the min of
+        the two exits. Here x gives (0.2, 0.4) and y gives (0.3, 0.5),
+        so the answer is (0.3, 0.4) -- a value neither slab produced
+        alone, which is what pins both refinements.
+        """
+        got = clip(0.0, 0.0, 100.0, 100.0, (20.0, 30.0, 40.0, 50.0))
+        self.assertIsNotNone(got)
+        self.assertAlmostEqual(got[0], 0.3)
+        self.assertAlmostEqual(got[1], 0.4)
+
+    def test_a_diagonal_segment_that_passes_the_corner_returns_None(self):
+        """x admits (0.6, 0.8) and y admits (0.1, 0.3): disjoint, so the
+        ray misses the box despite crossing both slabs. This is the
+        early-out, and a mutant that drops it returns an inverted
+        interval instead of None."""
+        self.assertIsNone(
+            clip(0.0, 0.0, 100.0, 100.0, (60.0, 10.0, 80.0, 30.0)))
+
+    def test_the_interval_is_clamped_to_the_segment(self):
+        """A box containing the whole ray gives exactly (0, 1) -- the
+        initial values survive when no slab tightens them."""
+        self.assertEqual(clip(10.0, 10.0, 5.0, 5.0, (0.0, 0.0, 100.0, 100.0)),
+                         (0.0, 1.0))
+
+    def test_a_box_entirely_behind_the_start_returns_None(self):
+        self.assertIsNone(clip(50.0, 5.0, 50.0, 0.0, (0.0, 0.0, 10.0, 10.0)))
+
+    def test_a_degenerate_box_touches_without_crossing(self):
+        """The final `t1 > t0` guard, and the only thing that reaches it.
+
+        A zero-width box gives both x slabs the same parameter, so
+        `t0 == t1` exactly: the ray touches without ever being inside.
+        The early-outs cannot catch it -- they only fire on an INVERTED
+        interval -- so without this guard a degenerate box occludes
+        everything behind it.
+        """
+        self.assertIsNone(clip(0.0, 5.0, 100.0, 0.0, (20.0, 0.0, 20.0, 10.0)))
+        a, b = (0.0, 0.0, 10.0, 10.0), (90.0, 0.0, 100.0, 10.0)
+        self.assertFalse(blocked(a, b, [(50.0, 0.0, 50.0, 10.0)]))
+
+    def test_a_negative_direction_clips_the_same_interval(self):
+        """`p < 0` is the mirror of `p > 0`; running the same box from
+        the far end must give the mirrored parameters."""
+        fwd = clip(0.0, 5.0, 100.0, 0.0, (20.0, 0.0, 40.0, 10.0))
+        rev = clip(100.0, 5.0, -100.0, 0.0, (20.0, 0.0, 40.0, 10.0))
+        self.assertEqual(fwd, (0.2, 0.4))
+        self.assertAlmostEqual(rev[0], 0.6)
+        self.assertAlmostEqual(rev[1], 0.8)
 
 
 class M2_2_Shape(unittest.TestCase):

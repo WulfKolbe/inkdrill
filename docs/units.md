@@ -1612,6 +1612,44 @@ sweep is only needed when hole *geometry* is wanted.
 `measure.py boxes` uses the two-sweep form directly, so the cost is
 already avoided where it was measured.
 
+### M2.1 follow-up — the clipping loop was unfalsifiable. 2026-08-10
+
+An audit could not kill six branches of `relate`'s Liang-Barsky loop
+from outside, and one survived in both directions. The cause was the
+I2 lesson again, one module later: **`blocked` returns only a boolean,
+so a wrong interval with the right sign is indistinguishable from a
+right one.** And the geometry hides it — an AXIS-ALIGNED segment
+leaves one slab pair degenerate, so `t0` and `t1` are each set by a
+single candidate and the max/min refinements never compete.
+
+`clip` is now a function returning `(t0, t1)`, asserted directly.
+The discriminating fixture is a **diagonal** segment where x admits
+(0.2, 0.4) and y admits (0.3, 0.5): the answer is (0.3, 0.4), a value
+neither slab produced alone.
+
+**Nine mutants, seven killed, two provably equivalent.**
+
+| branch | result |
+|---|---|
+| `p == 0` reject, both directions | killed |
+| `t0` refinement, both directions | killed |
+| `t1` refinement, both directions | killed |
+| final `t1 > t0` guard | killed |
+| the two `return None` early-outs | **equivalent** |
+
+The early-outs are an optimisation and nothing more: removing either
+lets `t0` and `t1` cross, and the final guard then rejects identically,
+because the refinements maintain `t0 <= t1` themselves. They save two
+divisions per blocker in a cubic loop. **No test can kill them and none
+should be written to try** — that is recorded so the next sweep does
+not re-raise them.
+
+The final guard is not equivalent, and reaching it needs a **zero-width
+box**: both x slabs then give the same parameter, `t0 == t1` exactly,
+and the ray touches without ever being inside. The early-outs cannot
+see that — they fire only on an inverted interval — so without the
+guard a degenerate box occludes everything behind it.
+
 ### M2.3 — the UNRESOLVED policy. Decided 2026-08-10
 
 Tests M2-4 passed on 2026-08-10: 8 hermetic, in `relate.py`.

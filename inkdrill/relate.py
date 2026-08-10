@@ -98,7 +98,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["Box", "Symbol", "Unresolved", "blocked", "candidates",
+__all__ = ["Box", "Symbol", "Unresolved", "blocked", "candidates", "clip",
            "needs_identity", "partition", "TooManySymbols"]
 
 # A box is (x0, y0, x1, y1) with y increasing DOWNWARD, matching the
@@ -186,6 +186,58 @@ def _centre(b: Box) -> tuple[float, float]:
     return ((b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0)
 
 
+def clip(ax: float, ay: float, dx: float, dy: float, c: Box):
+    """The parametric interval where the ray `(ax,ay) + t*(dx,dy)` is
+    inside box `c`, or None if it never is (Liang-Barsky).
+
+    Returned rather than folded into a boolean because it is the
+    computation M2.1's headline rests on -- the 40,706 occluded pairs
+    are what this produced -- and a caller that only sees `True/False`
+    cannot tell a correct interval from a wrong one that happens to
+    have the same sign. An audit found six branches here unfalsifiable
+    from outside for exactly that reason.
+
+    The interval is clamped to `[0, 1]`, so t=0 is the segment start
+    and t=1 its end.
+
+    **The two `return None` early-outs are provably equivalent to their
+    own absence** and are kept only as an optimisation. Removing either
+    lets `t0` and `t1` cross, and the final `t1 > t0` test then rejects
+    the interval identically -- the invariant `t0 <= t1` is maintained
+    by the refinements themselves, since `t0` is only raised after
+    checking it stays under `t1` and vice versa. They save two
+    divisions per blocker in an O(n^2 * n) loop, which is why they are
+    here; no test can kill them and none should be written to try.
+
+    The final guard is NOT equivalent, and reaching it needs a
+    degenerate box: a zero-width blocker gives both x slabs the same
+    parameter, so `t0 == t1` exactly and the ray touches without ever
+    being inside. The early-outs cannot see that -- they fire only on
+    an INVERTED interval -- so without the guard a zero-width box
+    occludes everything behind it.
+    """
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, ax - c[0]), (dx, c[2] - ax),
+                 (-dy, ay - c[1]), (dy, c[3] - ay)):
+        if p == 0.0:
+            # Parallel to this slab: inside it for all t, or for none.
+            if q < 0.0:
+                return None
+            continue
+        r = q / p
+        if p < 0.0:
+            if r > t1:
+                return None
+            if r > t0:
+                t0 = r
+        else:
+            if r < t0:
+                return None
+            if r < t1:
+                t1 = r
+    return (t0, t1) if t1 > t0 else None
+
+
 def blocked(a: Box, b: Box, others) -> bool:
     """Does any box in `others` cross the open segment `a`->`b` (G2)?
 
@@ -204,29 +256,11 @@ def blocked(a: Box, b: Box, others) -> bool:
         # division happens.
         if c[2] < lo_x or c[0] > hi_x or c[3] < lo_y or c[1] > hi_y:
             continue
-        t0, t1 = 0.0, 1.0
-        hit = True
-        for p, q in ((-dx, ax - c[0]), (dx, c[2] - ax),
-                     (-dy, ay - c[1]), (dy, c[3] - ay)):
-            if p == 0.0:
-                if q < 0.0:
-                    hit = False
-                    break
-                continue
-            r = q / p
-            if p < 0.0:
-                if r > t1:
-                    hit = False
-                    break
-                if r > t0:
-                    t0 = r
-            else:
-                if r < t0:
-                    hit = False
-                    break
-                if r < t1:
-                    t1 = r
-        if hit and t1 > t0 and t1 > _NEAR and t0 < 1.0 - _NEAR:
+        span = clip(ax, ay, dx, dy, c)
+        if span is None:
+            continue
+        t0, t1 = span
+        if t1 > _NEAR and t0 < 1.0 - _NEAR:
             return True
     return False
 
