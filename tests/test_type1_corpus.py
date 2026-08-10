@@ -26,6 +26,7 @@ and would have missed both corrections above.
 
 import os
 import pathlib
+from collections import Counter
 import random
 import unittest
 
@@ -88,20 +89,32 @@ class T9_8_RealFonts(unittest.TestCase):
                 offenders.append((p.name, wrong, len(f.charstrings)))
         self.assertEqual(offenders, [])
 
-    def test_the_sample_actually_contains_both_hard_cases(self):
-        """Guards the test above from passing on an easy sample.
+    def test_the_sample_actually_contains_something_to_check(self):
+        """Guards the tests above from passing on an empty sample.
 
-        Without this, a tree of nothing but plain cmr fonts would make
-        every assertion here vacuous, and the module would report
-        success while covering neither correction it exists for.
+        This asserted `lenIV=0` until an audit ran it on a TeX Live
+        tree where **no font has it** -- 400 of 400 at lenIV 4. This
+        machine's tree has 1,328, all cm-super, so the guard passed
+        here and failed there: it was testing which PACKAGES were
+        installed, which is exactly what `test_pngio_corpus` was
+        written to avoid.
+
+        `lenIV=0` is covered hermetically by
+        `T9_3_Private.test_a_lenIV_0_font_keeps_its_hsbw`, which builds
+        such a font in memory rather than hoping to find one. What is
+        asserted here is only what every Type 1 tree must have, and the
+        distribution is printed so a thin sample is visible rather than
+        silent.
         """
-        seen = set()
+        seen = Counter()
+        ivs = Counter()
         for _, f in self.parsed:
-            seen |= set(f.first_ops())
-            if f.len_iv == 0:
-                seen.add("lenIV0")
+            seen.update(f.first_ops())
+            ivs[f.len_iv] += 1
+        self.assertGreater(len(self.parsed), 10, "sample too small")
         self.assertIn("hsbw", seen)
-        self.assertIn("lenIV0", seen)
+        print(f"\n      sample: {len(self.parsed)} fonts, lenIV {dict(ivs)}, "
+              f"first-ops {dict(seen)}")
 
     def test_charstrings_and_encoding_are_populated(self):
         for p, f in self.parsed:

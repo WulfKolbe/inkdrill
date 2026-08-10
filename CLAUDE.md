@@ -301,6 +301,13 @@ They are all findable the same way, in minutes:
 Do this per unit, before recording a status line — not at the final review,
 which is where these have been surfacing.
 
+**A branch that survives in BOTH directions means the oracle is blind,
+not that the branch is dead.** `closepath` could be deleted or inverted
+with nothing failing, because every test watched how a charstring opened
+and none watched the geometry that came out. Assert the output exactly
+somewhere, or a whole class of behaviour is untested no matter how many
+tests exist.
+
 **A survivor is a lead, not a finding.** Confirm each by hand before
 writing a test. There are three ways a mutant survives without indicating a
 gap:

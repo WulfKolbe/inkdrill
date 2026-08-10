@@ -1607,6 +1607,20 @@ MATH_FONTS = ("cmmi10.pfb", "cmsy10.pfb", "cmex10.pfb",
               "msam10.pfb", "msbm10.pfb")
 
 
+def _feature_tuple(sig):
+    """The signature as a feature vector -- ONE definition.
+
+    Assembled inline at two call sites before this existed, and both
+    dropped `parts` and `closes`; the second inherited the defect by
+    copy and was fixed a commit later than the first. A tuple built at
+    each call site drifts, and this one drifted silently because the
+    missing fields made a channel look weak rather than making anything
+    fail.
+    """
+    return (sig.parts, sig.cycles, sig.births, sig.closes,
+            sig.merges, sig.splits)
+
+
 def _crop_ink(mask):
     """The whole inked area of a render, not its largest component.
 
@@ -1647,8 +1661,7 @@ def _template_of(mask, label):
     # what separates i/dotlessi and Theta/O. A verifier measured on a
     # crippled feature is measuring the harness.
     return Template(label, normalise(mask),
-                    (sig.parts, sig.cycles, sig.births, sig.closes,
-                     sig.merges, sig.splits),
+                    _feature_tuple(sig),
                     (w / h, float(h), float(w), mo.elongation))
 
 
@@ -2137,15 +2150,7 @@ def m_classify(root, n, rng, split="document"):
                              if c.get("text") == hit[0][0]), "")
                 rows.append((doc.name, page["page_number"], font,
                              Template(hit[0][0], normalise(sub),
-                                      # All SIX fields. The four-field
-                                      # version dropped `parts` and
-                                      # `closes`, and neither is inert
-                                      # even on a single-component crop:
-                                      # over 204 of them `parts` ranges
-                                      # 1..5 and `closes` 1..5, with a
-                                      # lone `a` giving closes=3.
-                                      (s.parts, s.cycles, s.births,
-                                       s.closes, s.merges, s.splits),
+                                      _feature_tuple(s),
                                       (w / h, float(h), float(w),
                                        mo.elongation))))
             pages += 1

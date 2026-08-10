@@ -1863,6 +1863,41 @@ and the argument from stroke-weight invariance does not reach it.
 Consequence for the classification harness: **do not dilate templates**,
 and do not weight away from the bitmap channel on this evidence.
 
+### Audit follow-up at `526bb53` — I1, I2, I3
+
+**I1, the corpus guard was testing which packages were installed.**
+`test_the_sample_actually_contains_both_hard_cases` required a
+`lenIV=0` font in the sample. This machine's tree has **1,328** of
+them, all cm-super; the auditor's TeX Live tree has **0 of 400**. So it
+passed here and failed there — exactly the machine dependence
+`test_pngio_corpus` was written to avoid. `lenIV=0` is covered
+hermetically by a font built in memory, so the corpus guard now asserts
+only what every Type 1 tree must have and PRINTS the distribution it
+found, rather than requiring a case that may not exist.
+
+**I2, the oracle could not see geometry.** Three branches survived
+mutation in BOTH directions — `closepath`, `setcurrentpoint`, and the
+trailing close of a charstring that ends without one. All three occur
+in real fonts. The cause was that every test observed how a charstring
+*opens* (`first_ops`) or how many contours it produced, never the point
+list. `T9_26_ExactGeometry` asserts contour points exactly, and two of
+its cases had to be constructed rather than guessed:
+
+- **`closepath`'s body is redundant whenever a moveto follows**, because
+  `_moveto` closes the open contour itself. Deleting it survives every
+  natural test. What distinguishes them is drawing straight on after a
+  closepath with no moveto between — then the body starts a fresh
+  contour and its absence extends one that was never emitted.
+- **the trailing close is dead after any `endchar`**, which every
+  fixture had. Only a charstring that simply runs out reaches it.
+
+All three branches now die in both directions.
+
+**I3, the feature tuple is one function.** `_feature_tuple` replaces two
+inline assemblies. Both had dropped `parts` and `closes`, and the second
+inherited the defect by copy and was fixed a commit later than the
+first — which is the drift the extraction prevents.
+
 ### U9 `scan.py` — the loop closes
 
 Tests T9-20 to T9-25 passed on 2026-08-09: 20 hermetic, 2 opt-in.

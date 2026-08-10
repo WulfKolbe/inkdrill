@@ -338,5 +338,110 @@ class T9_17_Bounds(unittest.TestCase):
             g.bounds()
 
 
+class T9_26_ExactGeometry(unittest.TestCase):
+    """What came OUT, not merely that something did.
+
+    Every other test here observes how a charstring OPENS or how many
+    contours it produced. A mutation sweep found three branches that
+    could be taken or skipped with no test noticing -- `closepath`,
+    `setcurrentpoint`, and the trailing close of a charstring that ends
+    without one. All three appear in real fonts, and all three are
+    invisible to an oracle that never looks at the point list.
+
+    These assert the contour point list EXACTLY.
+    """
+
+    def _pts(self, body, name="A"):
+        code = HSBW + body + ENDCHAR
+        g = run(font({name: code}), code)
+        return [[(s.x, s.y) for s in c] for c in g.contours]
+
+    def test_a_rectangle_yields_exactly_its_corners(self):
+        pts = self._pts(cs(0, 0, b"\x15", 100, 0, b"\x05",
+                           0, 50, b"\x05", -100, 0, b"\x05"))
+        self.assertEqual(pts, [[(0.0, 0.0), (100.0, 0.0), (100.0, 50.0),
+                                (0.0, 50.0), (0.0, 0.0)]])
+
+    def test_a_curve_yields_exact_control_and_end_points(self):
+        code = HSBW + cs(0, 0, b"\x15", 10, 20, 30, 40, 50, 60,
+                         b"\x08") + ENDCHAR
+        g = run(font({"A": code}), code)
+        seg = g.contours[0][1]
+        self.assertEqual((seg.c1, seg.c2, (seg.x, seg.y)),
+                         ((10.0, 20.0), (40.0, 60.0), (90.0, 120.0)))
+
+    def test_a_charstring_ending_without_closepath_is_still_closed(self):
+        """Legal, and common. The trailing close is what handles it."""
+        pts = self._pts(cs(0, 0, b"\x15", 60, 0, b"\x05", 0, 60, b"\x05"))
+        self.assertEqual(pts, [[(0.0, 0.0), (60.0, 0.0), (60.0, 60.0),
+                                (0.0, 0.0)]])
+
+    def test_closepath_emits_the_contour_and_keeps_the_pen(self):
+        """Type 1's closepath closes the path WITHOUT moving the point,
+        so the following rmoveto is relative to where drawing ended --
+        the exact geometry, not just the contour count."""
+        pts = self._pts(cs(0, 0, b"\x15", 40, 0, b"\x05", 0, 40, b"\x05",
+                           b"\x09", 10, 10, b"\x15", 20, 0, b"\x05"))
+        self.assertEqual(pts[0], [(0.0, 0.0), (40.0, 0.0), (40.0, 40.0),
+                                  (0.0, 0.0)])
+        # Second subpath starts at (40+10, 40+10), NOT at (10, 10).
+        self.assertEqual(pts[1], [(50.0, 50.0), (70.0, 50.0), (50.0, 50.0)])
+
+    def test_closepath_then_a_line_starts_a_NEW_contour(self):
+        """The only case where `closepath`'s body is not redundant.
+
+        `_moveto` closes the open contour itself, so whenever a moveto
+        follows, removing closepath's body changes nothing -- which is
+        why deleting it survived a mutation sweep. Drawing straight on
+        after a closepath, with no moveto between, is what distinguishes
+        them: with the body, the line begins a fresh contour from the
+        current point; without it, the line extends a contour that was
+        never emitted.
+        """
+        pts = self._pts(cs(0, 0, b"\x15", 40, 0, b"\x05", 0, 40, b"\x05",
+                           b"\x09", 30, 0, b"\x05"))
+        self.assertEqual(pts, [
+            [(0.0, 0.0), (40.0, 0.0), (40.0, 40.0), (0.0, 0.0)],
+            [(40.0, 40.0), (70.0, 40.0), (40.0, 40.0)],
+        ])
+
+    def test_a_charstring_with_no_endchar_still_returns_its_contour(self):
+        """The trailing close in `run`, which nothing else reaches.
+
+        `endchar` closes the path, so after one the trailing close is
+        dead. A charstring that simply runs out -- which happens, and
+        which the interpreter must not silently drop -- is the only
+        thing that exercises it.
+        """
+        code = HSBW + cs(0, 0, b"\x15", 25, 0, b"\x05", 0, 25, b"\x05")
+        g = run(font({"A": code + ENDCHAR}), code)
+        self.assertEqual([[(s.x, s.y) for s in c] for c in g.contours],
+                         [[(0.0, 0.0), (25.0, 0.0), (25.0, 25.0), (0.0, 0.0)]])
+
+    def test_setcurrentpoint_moves_the_pen_absolutely(self):
+        """`setcurrentpoint` takes ABSOLUTE coordinates and ends the
+        flex protocol; a following rmoveto is relative to it."""
+        pts = self._pts(cs(0, 0, b"\x15", 10, 0, b"\x05",
+                           700, 800, b"\x0c\x21",
+                           5, 5, b"\x15", 10, 0, b"\x05"))
+        self.assertEqual(pts[1], [(705.0, 805.0), (715.0, 805.0),
+                                  (705.0, 805.0)])
+
+    def test_a_flex_yields_exact_curve_control_points(self):
+        body = cs(0, 0, b"\x15") + cs(0, 1, b"\x0c\x10")
+        for dx, dy in ((10, 0), (10, 10), (10, 10), (10, 10),
+                       (10, -10), (10, -10), (10, 0)):
+            body += cs(dx, dy, b"\x15") + cs(0, 2, b"\x0c\x10")
+        body += cs(50, 50, 0, b"\x0c\x10") + b"\x0c\x11\x0c\x11"
+        code = HSBW + body + ENDCHAR
+        g = run(font({"A": code}), code)
+        curves = [s for s in g.contours[0] if s.is_curve]
+        self.assertEqual(len(curves), 2)
+        self.assertEqual(curves[0].c1, (20.0, 10.0))
+        self.assertEqual(curves[0].c2, (30.0, 20.0))
+        self.assertEqual((curves[0].x, curves[0].y), (40.0, 30.0))
+        self.assertEqual((curves[1].x, curves[1].y), (70.0, 10.0))
+
+
 if __name__ == "__main__":
     unittest.main()
