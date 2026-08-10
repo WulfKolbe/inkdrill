@@ -233,6 +233,11 @@ class T1_5_Rules(unittest.TestCase):
             id, area, x0, y0, x1, y1 = 0, 100, 0, 0, 9, 9
         self.assertFalse(is_rule(R))
 
+    def test_a_zero_extent_region_is_refused_rather_than_dividing_by_zero(self):
+        class R:
+            id, area, x0, y0, x1, y1 = 0, 0, 5, 5, 4, 4    # x1 < x0
+        self.assertFalse(is_rule(R))
+
     def test_a_long_but_sparse_component_is_not_a_rule(self):
         """Aspect alone admits a hairline that is mostly gaps; the fill
         condition is what excludes it."""
@@ -355,6 +360,31 @@ class T1_6_Diagrams(unittest.TestCase):
         buf = bytearray(b"\xff" * (20 * 20))
         self.assertEqual(page_lines(InkMask(bytes(buf), 20, 20),
                                     pt=PT, tol=1.0), [])
+
+    def test_a_blank_mask_returns_nothing_rather_than_raising(self):
+        """Guards `max(inks)` on an empty sequence -- a page with no ink
+        is a legitimate input and must not raise."""
+        blank = InkMask(bytes(20 * 20), 20, 20)
+        self.assertEqual(table_lines(blank, pt=PT), [])
+        self.assertEqual(page_lines(blank, pt=PT), [])
+
+    def test_a_diagram_without_a_ground_omits_the_key(self):
+        """Absent, not `None`. A key present with a null value says the
+        ground was measured and found to be nothing, which is not what
+        happened -- it was not measured."""
+        w, h = 40, 40
+        buf = bytearray(w * h)
+        frame(buf, w, 0, 0, 40, 40)
+        line = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0)[0]
+        self.assertNotIn("border_ground", line["ink"])
+
+    def test_an_object_with_no_rules_omits_the_array(self):
+        """Same rule one level up: no `rules` key rather than `[]`."""
+        w, h = 40, 40
+        buf = bytearray(w * h)
+        frame(buf, w, 0, 0, 40, 40)
+        line = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0)[0]
+        self.assertNotIn("rules", line["ink"])
 
     def test_a_lattice_still_wins_over_diagram(self):
         lines = page_lines(grid_mask(3, 3), pt=PT, tol=1.0)

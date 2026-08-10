@@ -28,6 +28,7 @@ border       what the pixels just outside a component's runs say about
 boxes        drawn frames and filled panels from ink, cross-checked
              against the rectangles the PDF itself declares
 edges        M2.1: 2NN vs 6NN vs line-of-sight candidate edges
+tables       T1 premise: connected grid or disjoint rules, by producer
 spacing      M1.1: does typography explain the horizontal geometry?
 maths        THE measurement: maths-symbol classification, never done
 rasterisers  U9->U13 premise: template (scan) vs query (Ghostscript)
@@ -2124,6 +2125,117 @@ def m_edges(root, n, rng, doc=None):
     print("  Read it against edges/node -- the cost of that recall.")
 
 
+def m_tables(root, n, rng, doc=None):
+    """T1 step-1 premise: which table CONVENTION does the corpus use?
+
+    `emit.page_lines` finds a rule only when it is a separate component.
+    That serves booktabs, which draws disjoint rules, and NOT a
+    connected grid, where the rules are the frame -- one component whose
+    lattice gives the cells but whose rules are invisible to the
+    detector. The cells of both are already emitted; the rules of one
+    are not.
+
+    So the question before building the extractor is what the split
+    actually is, crosstabbed by PRODUCER, because the conventions track
+    the authoring tool: LaTeX booktabs draws disjoint rules, Word and
+    InDesign draw connected grids.
+
+    POPULATION: rendered pages of corpus documents, one page per
+    document, restricted to pages carrying at least one candidate --
+    a page with no table says nothing about which convention is used.
+
+    CLASSIFICATION, and both halves are approximations stated as such:
+      connected grid  an ink region, fill < 0.35, with >= 2 holes
+      disjoint rules  >= 2 rule components sharing an x-extent and
+                      stacked vertically, which is booktabs' shape
+    A region can satisfy neither; those are counted, not dropped.
+    """
+    from inkdrill.emit import is_rule
+    docs = [d for d in sorted(root.iterdir())
+            if d.is_dir() and (d / "inspect" / "pages").is_dir()]
+    if doc:
+        docs = [d for d in docs if d.name == doc]
+    else:
+        rng.shuffle(docs)
+    by_producer = defaultdict(lambda: [0, 0, 0])     # grid, booktabs, pages
+    ndoc = 0
+
+    class _R:                    # a Moments with the fields is_rule wants
+        __slots__ = ("id", "area", "x0", "y0", "x1", "y1")
+
+    for d in docs:
+        if ndoc >= n:
+            break
+        drill = None
+        hits = list(d.glob("*.drill.json"))
+        if hits:
+            try:
+                drill = json.load(hits[0].open())
+            except Exception:
+                drill = None
+        prod = ((drill or {}).get("pdfinfo") or {}).get("producer") or "unknown"
+        prod = prod.split("(")[0].strip()[:28]
+        seen = {}
+        for p in sorted((d / "inspect" / "pages").glob("*.png")):
+            mt = re.fullmatch(r"p(?:age-)?0*(\d+)", p.stem)
+            if mt:
+                seen.setdefault(int(mt.group(1)), p)
+        found = False
+        for _, png in sorted(seen.items())[:3]:
+            try:
+                mask = load_mask(png, threshold=200)
+            except Exception:
+                continue
+            # The cycle rank gives the hole COUNT free, so `nest` -- 15x
+            # slower and only needed for hole GEOMETRY -- is not called.
+            res = sweep(mask, conn=8, capture=Capture.GRAPH)
+            mo = moments_per_component(res)
+            holes = {c.root: c.cycle_count for c in res.components}
+            grids = 0
+            rules = []
+            for root_id, m in mo.items():
+                w, h = m.width, m.height
+                if w < 40 or h < 20:
+                    continue
+                r = _R()
+                r.id, r.area = root_id, m.area
+                r.x0, r.y0, r.x1, r.y1 = m.x0, m.y0, m.x1, m.y1
+                if is_rule(r):
+                    rules.append(r)
+                elif (m.area / max(1, w * h) < 0.35
+                      and holes.get(root_id, 0) >= 2):
+                    grids += 1
+            groups, used = 0, set()
+            for i, a in enumerate(rules):
+                if i in used or (a.x1 - a.x0) < 100:
+                    continue
+                peers = [j for j, b in enumerate(rules)
+                         if j != i and j not in used
+                         and abs(b.x0 - a.x0) < 20 and abs(b.x1 - a.x1) < 20]
+                if peers:
+                    groups += 1
+                    used.update(peers + [i])
+            if grids or groups:
+                by_producer[prod][0] += grids
+                by_producer[prod][1] += groups
+                by_producer[prod][2] += 1
+                found = True
+        ndoc += found
+    if not by_producer:
+        print("  no page with a table candidate")
+        return
+    tg = sum(v[0] for v in by_producer.values())
+    tb = sum(v[1] for v in by_producer.values())
+    print(f"  {ndoc} documents with a candidate; "
+          f"{tg} connected grids, {tb} disjoint-rule groups")
+    print(f"  connected grids are {tg/max(1, tg+tb):.1%} of table objects")
+    print(f"  {'producer':30} {'grids':>7} {'booktabs':>9} {'pages':>6}")
+    for prod, (g, b, pg) in sorted(by_producer.items(),
+                                   key=lambda kv: -(kv[1][0] + kv[1][1])):
+        print(f"  {prod:30} {g:>7} {b:>9} {pg:>6}")
+    print("  A grid's CELLS are already emitted; only its RULES are not.")
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -2506,6 +2618,7 @@ MEASUREMENTS = {
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
+    "tables": (m_tables, 25),
     "edges": (m_edges, 8),
     "spacing": (m_spacing, 12),
     "maths": (m_maths, 0),
