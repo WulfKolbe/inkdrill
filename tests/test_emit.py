@@ -168,13 +168,54 @@ class T1_3_Cells(unittest.TestCase):
     def test_cell_grid_clusters_within_tolerance(self):
         boxes = [(0, 0, 5, 5), (10, 0, 15, 5), (0, 10, 5, 15), (10, 10, 15, 15)]
         self.assertEqual(cell_grid(boxes, tol=1.0),
-                         [(0, 0), (0, 1), (1, 0), (1, 1)])
+                         [(0, 0, 1, 1), (0, 1, 1, 1),
+                          (1, 0, 1, 1), (1, 1, 1, 1)])
+
+    def test_A_MERGED_CELL_REPORTS_ITS_SPAN(self):
+        """The defect this exists for, and G3 cannot see it.
+
+        A grid with an internal rule undrawn has a hole covering two
+        bands. Reporting only the index reduces the table to whatever
+        grid the holes happen to tile -- and that reduced grid is still
+        an exact rectangle, so G3 PASSES on the wrong shape.
+        """
+        # Three columns; the top-left two are merged into one hole.
+        boxes = [(0, 0, 21, 10),            # spans columns 0 and 1
+                 (22, 0, 32, 10),
+                 (0, 11, 10, 21), (11, 11, 21, 21), (22, 11, 32, 21)]
+        got = cell_grid(boxes, tol=1.0)
+        self.assertEqual(got[0], (0, 0, 1, 2), "merged cell lost its span")
+        self.assertEqual(got[1], (0, 2, 1, 1))
+        self.assertEqual(got[2:], [(1, 0, 1, 1), (1, 1, 1, 1), (1, 2, 1, 1)])
+
+    def test_a_row_span_is_reported_the_same_way(self):
+        boxes = [(0, 0, 10, 21),            # spans rows 0 and 1
+                 (11, 0, 21, 10), (11, 11, 21, 21)]
+        got = cell_grid(boxes, tol=1.0)
+        self.assertEqual(got[0], (0, 0, 2, 1))
+        self.assertEqual(got[1:], [(0, 1, 1, 1), (1, 1, 1, 1)])
+
+    def test_the_grid_extent_counts_spans_not_just_indices(self):
+        """`ink.rows` must be the table's real height, which a merged
+        cell in the last row would otherwise understate.
+
+        The left column supplies the evidence for two bands; the right
+        cell spans both. Without a second band START somewhere, a merely
+        TALLER hole is not a span -- there is nothing to say the table
+        has two rows -- and the first version of this test asserted a
+        span the lattice had no grounds for.
+        """
+        boxes = [(0, 0, 10, 10), (0, 11, 10, 21), (11, 0, 21, 21)]
+        got = cell_grid(boxes, tol=1.0)
+        self.assertEqual(got[2], (0, 1, 2, 1))
+        self.assertEqual(max(r + rs for r, _, rs, _ in got), 2)
 
     def test_a_tolerance_that_is_too_large_merges_columns(self):
         """The tolerance is a decision, so its failure mode is asserted:
         set it wider than the cell pitch and two columns become one."""
         boxes = [(0, 0, 5, 5), (10, 0, 15, 5)]
-        self.assertEqual(cell_grid(boxes, tol=99.0), [(0, 0), (0, 0)])
+        self.assertEqual(cell_grid(boxes, tol=99.0),
+                         [(0, 0, 1, 1), (0, 0, 1, 1)])
 
 
 class T1_4_Rules(unittest.TestCase):

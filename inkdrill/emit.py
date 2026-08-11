@@ -61,6 +61,11 @@ G3  every `simple_cell` carries `cell_row` and `cell_column`, and the
 G4  no `lines` entry is a rule, a tick or a bare glyph component
 G5  the dict round-trips through `json.dumps`/`loads` unchanged
 G6  `text` is `""` on every line
+G8  a hole covering more than one band reports `cell_row_span` /
+    `cell_col_span` accordingly -- a grid with an undrawn internal rule
+    must not be reduced to the smaller grid its holes happen to tile,
+    which G3 alone cannot detect because the reduction is still an
+    exact rectangle
 G7  `ink.rules[]` carries a MEASURED `width_pt`, never a rule name --
     the `\\toprule` / `\\midrule` call is relative ranking within one
     table and belongs to the side holding that context
@@ -105,29 +110,48 @@ def _line(kind: str, box, pt: float, **extra) -> dict:
 
 
 def cell_grid(holes, *, tol: float = 0.0):
-    """`(row, column)` per hole, from the lattice alone (G3).
+    """`(row, column, row_span, col_span)` per hole (G3, G8).
 
     A hole's cluster index IS its row or column: sort the bboxes on each
     axis and start a new cluster when the gap exceeds `tol`. Verified on
     a Word-produced handbook page -- one component, 52 holes, recovering
     13 rows x 4 columns.
 
+    **Spans are not optional.** A grid whose internal rules are not all
+    drawn -- `\\cline`, a partial border, any merged cell -- has holes
+    covering more than one band, and reporting only the index reduces
+    the table to whatever grid the holes happen to tile. That reduced
+    grid is still an exact rectangle, so G3 PASSES on it and the wrong
+    shape is emitted silently. A hole's span is the number of band
+    starts it covers, which is the information already in the lattice.
+
     `tol` defaults to 0 and should be set from the ink: cells of one
     table share an edge to within the rule's own thickness, so the
     natural tolerance is that thickness rather than a constant.
     """
-    def cluster(values):
-        index, order = {}, sorted(set(values))
+    def bands(values):
+        index, order, starts = {}, sorted(set(values)), []
         k = 0
         for i, v in enumerate(order):
             if i and v - order[i - 1] > tol:
                 k += 1
+                starts.append(v)
+            elif not i:
+                starts.append(v)
             index[v] = k
-        return index
+        return index, starts
 
-    rows = cluster([h[1] for h in holes])
-    cols = cluster([h[0] for h in holes])
-    return [(rows[h[1]], cols[h[0]]) for h in holes]
+    rows, row_starts = bands([h[1] for h in holes])
+    cols, col_starts = bands([h[0] for h in holes])
+
+    def span(starts, lo, hi):
+        # Bands whose START lies inside [lo, hi) -- the first is the
+        # hole's own, each further one is a band it swallowed.
+        return max(1, sum(1 for s in starts if lo <= s < hi))
+
+    return [(rows[h[1]], cols[h[0]],
+             span(row_starts, h[1], h[3]), span(col_starts, h[0], h[2]))
+            for h in holes]
 
 
 def rule_width_pt(area: int, width: int, height: int, pt: float) -> float:
@@ -194,17 +218,22 @@ def table_lines(mask, region_id=None, *, pt: float, tol: float = 0.0,
     moments = region
     boxes = [(h.x0, h.y0, h.x1 + 1, h.y1 + 1) for h in holes]
     grid = cell_grid(boxes, tol=tol)
-    rows = max(r for r, _ in grid) + 1
-    cols = max(c for _, c in grid) + 1
+    # `max(index) + 1` is provably the same number: bands are DEFINED
+    # by hole starts, so every band has a hole starting in it. Written
+    # with the span because that is what the quantity means, and a
+    # future band inference not derived from starts would break the
+    # equivalence silently.
+    rows = max(r + rs for r, _, rs, _ in grid)
+    cols = max(c + cs for _, c, _, cs in grid)
     out = [_line("table", (moments.x0, moments.y0,
                            moments.x1 + 1, moments.y1 + 1), pt,
                  cell_row=None, cell_column=None,
                  ink={"region_id": region_id,
                       "holes": len(holes), "rows": rows, "columns": cols})]
-    for box, (r, c) in zip(boxes, grid):
+    for box, (r, c, rs, cs) in zip(boxes, grid):
         out.append(_line("simple_cell", box, pt,
                          cell_row=r, cell_column=c,
-                         cell_row_span=1, cell_col_span=1))
+                         cell_row_span=rs, cell_col_span=cs))
     return out
 
 

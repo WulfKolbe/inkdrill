@@ -1635,6 +1635,44 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### T1 step 2 — spans, not rules. 2026-08-11
+
+An audit found a live defect in what already shipped, and it redirected
+the work.
+
+**A grid with an undrawn internal rule emits a confidently wrong
+shape, and G3 cannot catch it.** `\cline`, a partial border, any merged
+cell: the holes then tile a SMALLER grid, and that smaller grid is still
+an exact rectangle, so the guarantee passes on the wrong answer.
+
+Reproduced, and worse in this geometry than reported: removing the
+middle rule of a 2x2 merges the interior into ONE hole, so the region
+falls below the two-hole lattice threshold and **no table is emitted at
+all**. Reported shape or no shape, both are silent.
+
+**The fix is `cell_row_span` / `cell_col_span`, which the consumer
+already accepts.** A hole's span is the number of band starts it
+covers — information already in the lattice, previously consumed into a
+smaller grid instead of reported. `cells_from_mathpix` takes both
+fields; the spec deferred them only because merged cells had not been
+measured, and now they have: 72.1% of table objects are the class where
+they occur.
+
+**Rules-from-run-structure stays deferred.** For a connected grid every
+rule is drawn at one weight, so `\toprule` versus `\midrule` is not a
+question there — that is booktabs-only, which I1 already serves. What a
+connected grid's consumer needs is which borders are drawn, and that is
+what a span says.
+
+One correction found while testing: a merely TALLER hole is not a span.
+Without a second band START somewhere there is no evidence the table has
+another row, and the first version of that test asserted a span the
+lattice had no grounds for.
+
+Mutation: 3 mutants, 2 killed, 1 provably equivalent — `max(index) + 1`
+equals `max(index + span)` because bands are defined by hole starts, so
+every band has a hole starting in it.
+
 ### T1 step-1 premise — which table convention? 2026-08-10
 
 `measure.py tables`. `emit.page_lines` finds a rule only when it is a
