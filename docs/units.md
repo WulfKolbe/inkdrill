@@ -1669,6 +1669,22 @@ Without a second band START somewhere there is no evidence the table has
 another row, and the first version of that test asserted a span the
 lattice had no grounds for.
 
+**Spans fix the partial merge and NOT the total one**, tested end to
+end rather than at `cell_grid`:
+
+| fixture | before | after |
+|---|---|---|
+| 2x3, one interior vertical segment undrawn | 2x2 table, G3 passed on the wrong shape | **2x3 with a colspan of 2** |
+| 2x2, middle horizontal rule removed entirely | — | **no table emitted** |
+
+The second is the limit. Removing a whole internal rule makes the
+interior ONE connected region, so the lattice is destroyed rather than
+reduced and the two-hole threshold rejects it. That is a **missed**
+table rather than a wrong one, which is the failure this project
+prefers — nothing is asserted about a shape the ink cannot support.
+Recovering it needs the rules themselves, which is the deferred
+run-structure work, and it is the one argument for undeferring that.
+
 Mutation: 3 mutants, 2 killed, 1 provably equivalent — `max(index) + 1`
 equals `max(index + span)` because bands are defined by hole starts, so
 every band has a hole starting in it.

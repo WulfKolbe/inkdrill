@@ -126,6 +126,47 @@ class T1_3_Cells(unittest.TestCase):
                 self.assertEqual((l["cell_row_span"], l["cell_col_span"]),
                                  (1, 1))
 
+    def test_A_PARTIALLY_MERGED_GRID_REPORTS_THE_SPAN_END_TO_END(self):
+        """The `\\cline` case, through the real path and not `cell_grid`.
+
+        A 2x3 grid with ONE interior vertical segment undrawn: the
+        top-left two cells merge. Before spans this reported a 2x2 table
+        -- a valid exact rectangle, so G3 passed on the wrong shape.
+        """
+        m = grid_mask(2, 3)
+        w = m.width
+        buf = bytearray(m.data)
+        for y in range(1, 7):
+            buf[y * w + 7] = 0
+        lines = lines_for(InkMask(bytes(buf), w, m.height))
+        cells = [(l["cell_row"], l["cell_column"],
+                  l["cell_row_span"], l["cell_col_span"])
+                 for l in lines if l["type"] == "simple_cell"]
+        self.assertEqual(cells[0], (0, 0, 1, 2), "merged cell lost its span")
+        self.assertEqual(len(cells), 5)
+        self.assertEqual((lines[0]["ink"]["rows"],
+                          lines[0]["ink"]["columns"]), (2, 3))
+
+    def test_a_FULLY_merged_axis_emits_nothing_KNOWN_LIMIT(self):
+        """Where spans do NOT reach, recorded rather than claimed.
+
+        Remove a 2x2's middle horizontal rule entirely and the interior
+        becomes ONE connected region -- the lattice is destroyed, not
+        reduced -- so the two-hole threshold rejects it and no table is
+        emitted at all.
+
+        That is a MISSED table, not a wrong one, which is the failure
+        this project prefers: nothing is asserted about a shape the ink
+        cannot support. Spans fix the partial case (above); recovering
+        this one needs the rules themselves, which is the deferred
+        run-structure work.
+        """
+        m = grid_mask(2, 2)
+        w = m.width
+        buf = bytearray(m.data)
+        buf[7 * w + 1:7 * w + w - 1] = b"\x00" * (w - 2)
+        self.assertEqual(lines_for(InkMask(bytes(buf), w, m.height)), [])
+
     def test_a_single_hole_is_a_frame_and_not_a_1x1_table(self):
         """A hollow rectangle encloses its interior, so it always has
         ONE hole. Calling that a lattice would make every plot frame a
