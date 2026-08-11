@@ -115,6 +115,11 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
 
 - **`inkdrill/pngio.py`** — ghostscript `png16m` ingest. `read_png` → `PngImage`,
   `load_mask`. Reads only what that one device writes; anything else raises.
+- **`inkdrill/pnmio.py`** — ghostscript `pgmraw` ingest, U0's second
+  route. `read_pnm`, `load_mask`. **41x faster into a mask** than
+  `png16m`; same components and holes, ~6 pixels per million differ, so
+  moments are NOT equal. PNM cannot carry dpi, so it is required and
+  its absence raises.
 - **`inkdrill/space.py`** — affine algebra. `Affine`, `Decomposition`,
   `SpaceGraph`, `angle_deg_ccw`, `angle_deg_screen`.
 - **`inkdrill/raster.py`** — `InkMask`, `Run`, `Rect`, `binarize`, `iter_runs`.

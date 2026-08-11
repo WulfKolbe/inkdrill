@@ -1635,6 +1635,61 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### U0 second route — `pgmraw` ingest. 2026-08-11
+
+Tests T0-10 to T0-13 passed on 2026-08-11: 18 hermetic.
+`inkdrill/pnmio.py`. **44x on the pipeline's waiting time.**
+
+Measured here on `e12s39` at 400 dpi:
+
+| route | gs | into a mask | |
+|---|---|---|---|
+| `png16m` | 436 ms | **1,071 ms** | |
+| `pgmraw` | 161 ms | **26 ms** | **41x** |
+
+The cost was never Ghostscript. A PGM read is a header parse and a
+slice; there is no filtering, no deflate and no per-scanline predictor
+to undo.
+
+#### The two routes are NOT byte-identical, and cannot be
+
+The acceptance criterion was "produces the same components, holes and
+moments". Measured on a real page at thresholds 128, 200 and 240:
+
+| | png16m | pgmraw |
+|---|---|---|
+| components | 910 | **910** |
+| holes (cycle rank) | 1,011 | **1,011** |
+| mask pixels differing | — | **~6 per million** (0.0006%) |
+| `moments_of_mask` equal | — | **no** |
+
+**Topology is identical at every threshold; the pixel set is not.**
+`png16m` renders RGB and `pngio` reduces to luma with Rec.601 integer
+rounding; `pgmraw` has Ghostscript do the reduction internally. The two
+disagree on a handful of anti-aliased edge pixels, and `Moments` are
+exact integer sums, so any single differing pixel shows there.
+
+So the criterion holds in the form that matters and fails in its strict
+form, and **stating which is which is the result**: a caller may swap
+routes and expect the same components, holes, nesting and Reeb
+signature, and may not expect identical moments.
+
+#### The resolution problem is the whole risk
+
+**PNM has nowhere to record dpi.** `read_pnm` therefore requires it and
+raises `NoResolution` without it — no default of 72, no inference from a
+nominal page size, which is the mistake that cost 0.071 pt on `e12s39`.
+`pngio` gets this right for free because `pHYs` is in the file; here the
+caller must supply what it already knows, having just invoked `gs -r400`.
+
+P6 and P4 are refused loudly and say why: P6 needs the luma reduction
+`pngio` already performs, and P4 is one bit per pixel with byte-padded
+rows — a different unpacking, not a variant of P5.
+
+Mutation: 8 mutants, 8 killed. One further mutation was withdrawn as
+malformed rather than counted — `while raw[i:i+1] in _WS` loops forever
+because `b"" in _WS` is True, so it tested my patch and not the module.
+
 ### E1 — runs-per-area, measured on real pages. 2026-08-11
 
 The proposal: `cycle_count > TAU` is blind in highlights, because a
