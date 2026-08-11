@@ -28,6 +28,7 @@ border       what the pixels just outside a component's runs say about
 boxes        drawn frames and filled panels from ink, cross-checked
              against the rectangles the PDF itself declares
 edges        M2.1: 2NN vs 6NN vs line-of-sight candidate edges
+halftone     E1: is runs-per-area the halftone signal on real pages?
 tables       T1 premise: connected grid or disjoint rules, by producer
 spacing      M1.1: does typography explain the horizontal geometry?
 maths        THE measurement: maths-symbol classification, never done
@@ -2248,6 +2249,78 @@ def m_tables(root, n, rng, doc=None):
     print("  A grid's CELLS are already emitted; only its RULES are not.")
 
 
+def m_halftone(root, n, rng, doc=None):
+    """E1: is runs-per-area the halftone signal, on REAL pages?
+
+    The proposal is that `cycle_count > TAU` is blind in highlights --
+    a screen's mesh only exists at midtone and shadow, so below ~0.35
+    the dots are isolated, there are no holes at all, and a pale
+    screened area reports "not a halftone". Runs per unit area is
+    offered instead: an order of magnitude above text, and
+    tone-independent.
+
+    Those figures are SYNTHETIC. This measures the same two quantities
+    on real corpus pages, where the populations are whatever the corpus
+    contains rather than a generated screen, so the separation can be
+    checked against the numbers it will actually meet.
+
+    POPULATION: components of sampled pages, bucketed by what they are
+    -- a page's text is its small components, a raster region is a
+    large one with many runs. Both are approximations and are named as
+    such; the point is whether the two clouds overlap, not to label any
+    single blob correctly.
+
+    Reported per COMPONENT, not per page: a page mixing text and a
+    photo has one runs-per-area for the whole page and it means nothing.
+    """
+    pages_ = pages(root)
+    if doc:
+        pages_ = [p for p in pages_ if p.parent.parent.parent.name == doc]
+    if not pages_:
+        print("  no pages")
+        return
+    sample = rng.sample(pages_, min(n, len(pages_)))
+    buckets = defaultdict(list)
+    for png in sample:
+        try:
+            mask = load_mask(png, threshold=200)
+        except Exception:
+            continue
+        res = sweep(mask, conn=8, capture=Capture.GRAPH)
+        node = {nd.id: nd for nd in res.nodes}
+        for comp in res.components:
+            runs = len(comp.nodes)
+            rs = [node[i] for i in comp.nodes]
+            px = sum(r.hi - r.lo + 1 for r in rs)
+            x0 = min(r.lo for r in rs); x1 = max(r.hi for r in rs)
+            y0 = min(r.line for r in rs); y1 = max(r.line for r in rs)
+            area = (x1 - x0 + 1) * (y1 - y0 + 1)
+            if area < 400:
+                continue
+            kind = ("glyph" if area < 5000 else
+                    "large-sparse" if px / area < 0.15 else
+                    "large-dense")
+            buckets[kind].append((runs / area, px / max(1, runs),
+                                  comp.cycle_count))
+    if not buckets:
+        print("  no components above the size floor")
+        return
+    print(f"  {len(sample)} pages")
+    print(f"  {'class':14} {'n':>7} {'runs/area':>22} {'px/run':>16} "
+          f"{'holes=0':>8}")
+    for kind, vals in sorted(buckets.items(), key=lambda kv: -len(kv[1])):
+        ra = sorted(v[0] for v in vals)
+        pr = sorted(v[1] for v in vals)
+        zero = sum(1 for v in vals if v[2] == 0) / len(vals)
+        def q(a, f):
+            return a[min(len(a) - 1, int(f * len(a)))]
+        print(f"  {kind:14} {len(vals):>7} "
+              f"{q(ra,.1):.4f} {q(ra,.5):.4f} {q(ra,.9):.4f}   "
+              f"{q(pr,.1):5.1f} {q(pr,.5):5.1f} {q(pr,.9):5.1f}  {zero:7.1%}")
+    print("  columns are the 10th / 50th / 90th percentile.")
+    print("  `holes=0` is the share on which a cycle-count test is blind.")
+
+
 def m_residuals(root, n, rng):
     """units.md 3 "U10 premise check": the four residual classes.
 
@@ -2630,6 +2703,7 @@ MEASUREMENTS = {
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
+    "halftone": (m_halftone, 10),
     "tables": (m_tables, 25),
     "edges": (m_edges, 8),
     "spacing": (m_spacing, 12),

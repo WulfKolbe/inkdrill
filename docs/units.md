@@ -1635,6 +1635,44 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### E1 — runs-per-area, measured on real pages. 2026-08-11
+
+The proposal: `cycle_count > TAU` is blind in highlights, because a
+screen's mesh exists only at midtone and shadow, so runs-per-area should
+replace it — quoted as body text **0.0085**, photo 0.0097, halftone
+0.05–0.20. Those figures are synthetic. `measure.py halftone` measures
+the same two quantities on real corpus components.
+
+| class | n | runs/area (p10/p50/p90) | px/run | holes = 0 |
+|---|---|---|---|---|
+| glyph | 13,109 | 0.053 / **0.071** / 0.089 | 3.8 / 4.8 / 6.8 | 58.0% |
+| large-sparse | 7 | 0.024 | 5.9 | 100% |
+| large-dense | 6 | 0.0003 / 0.0004 / 0.0008 | 632 / 1667 / 2679 | 66.7% |
+
+**The denominator is the whole result.** Real glyph components read
+runs/area **0.071**, which sits *inside* the quoted halftone band of
+0.05–0.20 — eight times the quoted body-text figure. The two are not in
+conflict: 0.0085 is runs per PAGE area, where text is sparse, and 0.071
+is runs per COMPONENT bbox, where a glyph is dense. A threshold
+calibrated on one and applied to the other misclassifies every letter on
+the page as a halftone.
+
+So the signal may well be sound, and **the units must travel with it**.
+Which denominator a TAU is calibrated against is exactly the kind of
+thing this project has found moves an answer by more than the effect
+being measured.
+
+**What this cannot test, stated plainly:** the sample contains 13 large
+components in total, so it holds essentially no screened material and
+says nothing about whether the halftone band is real. Confirming that
+needs screened input, which the arXiv corpus does not have — the Heim
+scans would, and they are correctly deferred for another reason.
+
+One finding that does transfer: **58% of glyph components have zero
+holes**, so a cycle-count test is blind on most ordinary text as well as
+on highlights. That supports the case against cycles from a second
+direction.
+
 ### T1 step 2 — spans, not rules. 2026-08-11
 
 An audit found a live defect in what already shipped, and it redirected
