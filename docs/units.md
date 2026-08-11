@@ -1682,8 +1682,23 @@ interior ONE connected region, so the lattice is destroyed rather than
 reduced and the two-hole threshold rejects it. That is a **missed**
 table rather than a wrong one, which is the failure this project
 prefers — nothing is asserted about a shape the ink cannot support.
-Recovering it needs the rules themselves, which is the deferred
-run-structure work, and it is the one argument for undeferring that.
+**It is bounded by construction, not pending work.** Removing a whole
+internal rule does not damage a lattice — **the boundary was never
+drawn, so there is no ink there**, and no run-structure analysis
+recovers a line that does not exist. The work would not fix the case it
+was briefly being justified by.
+
+The common real form is a table ruled horizontally and not vertically.
+The interior becomes horizontal bands, one hole per band spanning every
+column, and **spans already report that** as *n* rows x 1 column. The
+column boundaries are genuinely absent from the ink: they are a
+**text-alignment** fact, which `pdfplumber` supplies on the other side.
+
+So this is not an inkdrill gap but the boundary between the two tools,
+and `crosscheck_tables` is what spans it: **ink supplies the rules that
+were drawn, text alignment the boundaries that were not.** A table where
+ink says 4x1 and text says 4x3 is not a conflict; it is the two halves
+of one answer.
 
 Mutation: 3 mutants, 2 killed, 1 provably equivalent — `max(index) + 1`
 equals `max(index + span)` because bands are defined by hole starts, so

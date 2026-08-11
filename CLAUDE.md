@@ -289,12 +289,30 @@ result. Quote both in the same sentence, and make the split rule an
 argument to the harness rather than a constant inside it — if it changes
 the answer, a reader must be able to change it.
 
-**In a two-class measurement, an empty class is the first thing to
-check.** `measure.py tables` reported 100% connected grids and zero
+**Derive fixture dimensions from a measured real value; never choose
+them.** Two failures this week were the same shape at different levels.
+*Right level, wrong magnitude*: a 56x4 px booktabs fixture is 14:1 where
+a real rule at 400 dpi is 250:1, so the aspect test correctly refused
+it and the measurement read zero. *Right magnitude, wrong level*: spans
+tested at `cell_grid` with synthetic boxes and never through
+`table_lines`, so the end-to-end behaviour was unasserted. You do not
+need real pages in the suite; you need real NUMBERS in the fixtures, and
+a fixture whose dimensions came from nowhere is the tell.
+
+**Mutate the ENTRY function, not the inner one.** If the inner
+function's branches die and the entry function's survive, the tests are
+one level too deep — the same tool answering a different question, and
+it flags a level mistake before a fixture does.
+
+**In a two-class measurement, an empty class in a comparison you built
+to make that comparison is the first thing to check.** `measure.py tables` reported 100% connected grids and zero
 booktabs, because its size filter required BOTH dimensions to be large
 and a booktabs rule is 2 px tall — the filter excluded the class it
 existed to compare against. A clean, quotable answer that the
-instrument could not have contradicted.
+instrument could not have contradicted. The more transferable tell was
+the RATE: 126 grids over 34 pages is four tables per page, which is
+implausible without knowing the right answer, where an implausible
+proportion is not.
 
 **Filters are decisions too, and they hide in the same way.** U13's
 `if count >= 12` silently excluded every maths symbol, so a conclusion
