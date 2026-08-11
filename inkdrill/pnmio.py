@@ -30,6 +30,26 @@ are silently in the wrong space cannot be detected downstream.
 Here the caller must supply it -- it knows, it just invoked `gs -r400`.
 The failure mode is identical either way, which is the point.
 
+The two routes are not byte-identical
+-------------------------------------
+Measured on `e12s39` at 400 dpi: **259 of 15,465,468 samples differ,
+16.7 per million**, and topology is identical at every threshold from
+100 to 240 -- 910 components and 1,011 holes both ways.
+
+**Every one of those 259 differs by exactly 255.** Not a rounding
+difference and not an anti-aliasing one: both of those would leave
+intermediate greys and would move as the threshold moves. A pixel that
+is 0 in one route and 255 in the other is a **scan-conversion**
+disagreement -- whether a pixel centre falls inside the shape -- which
+is why the count is the same 259 at every threshold and why it will not
+grow if the threshold changes.
+
+The consequence for a caller: components, holes, nesting and the Reeb
+signature are route-invariant; `Moments` are not, because they are exact
+integer sums and 259 pixels show. The recorded `e12s39` geometry is
+route-invariant too -- the authored 175.248 pt reads 175.320 through
+both, residual 0.072 pt, identical to three decimals.
+
 Scope, and why it is narrow
 ---------------------------
 **P5 only** -- binary greyscale, which is what `pgmraw` writes. P2
@@ -52,8 +72,9 @@ G4  exactly one whitespace byte separates the maxval from binary data,
     and a second one is DATA -- not skipped
 G5  `dpi` is required and has no default; omitting it raises
     `NoResolution` rather than assuming one
-G6  the mask produced for a page equals the one `pngio` produces for the
-    same page rendered by `png16m` -- asserted against real output
+G6  a page's TOPOLOGY is route-invariant -- same components, holes,
+    nesting and signature as `png16m`. The pixel sets are NOT equal and
+    cannot be, so `Moments` differ; see above
 G7  a truncated or over-long raster raises rather than padding or
     silently cropping
 """

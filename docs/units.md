@@ -1664,10 +1664,22 @@ moments". Measured on a real page at thresholds 128, 200 and 240:
 | `moments_of_mask` equal | — | **no** |
 
 **Topology is identical at every threshold; the pixel set is not.**
-`png16m` renders RGB and `pngio` reduces to luma with Rec.601 integer
-rounding; `pgmraw` has Ghostscript do the reduction internally. The two
-disagree on a handful of anti-aliased edge pixels, and `Moments` are
-exact integer sums, so any single differing pixel shows there.
+259 of 15,465,468 samples differ — 16.7 per million — and the count is
+**the same 259 at thresholds 100, 128, 160, 200 and 240.**
+
+**Every one of them differs by exactly 255.** That rules out both first
+explanations: a rounding difference and an anti-aliasing difference
+would each leave intermediate greys, and both would move as the
+threshold moves. A pixel that is 0 in one route and 255 in the other is
+a **scan-conversion** disagreement — whether a pixel centre falls inside
+the shape — which is why the count is threshold-invariant and why it
+will not grow if the threshold changes.
+
+`Moments` differ because they are exact integer sums and 259 pixels
+show. **The recorded measurements do not.** The `e12s39` authored
+175.248 pt reads 175.320 through both routes, residual 0.072 pt,
+identical to three decimals including the one 169.38 outlier panel — so
+the route change moves no figure this project has published.
 
 So the criterion holds in the form that matters and fails in its strict
 form, and **stating which is which is the result**: a caller may swap

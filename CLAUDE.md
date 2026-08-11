@@ -382,6 +382,11 @@ gap:
   already implied by a later one is another. These cannot be filtered
   mechanically and must be reasoned about one at a time.
 - **Misapplied** — the patch hit a different occurrence than intended.
+- **Non-terminating** — the mutant loops forever, so the sweep stalls
+  and reads as a hung suite rather than a result. `while raw[i:i+1] in
+  _WS: i += 1` is one: `b"" in _WS` is True, so it never leaves the end
+  of the buffer. **Run every case under a per-mutant timeout**, or one
+  malformed patch costs the whole sweep.
 
 Over `font.py` the sweep reported eight survivors: six real, two
 misfiring — one of which fails 18 tests when mutated correctly. Over
