@@ -336,6 +336,15 @@ raises rather than returning a sentinel — two unidentified glyphs must
 not compare equal — and carries the reason, because the 14.4%
 abstention is the QC surface, not a gap.
 
+### Open defect: spans are not raster-route-invariant
+
+`emit`'s `cell_row_span` moves under a 16.7-per-million pixel
+difference between the `png16m` and `pgmraw` routes — 254 of 761 lines
+on `e12s39`. Band starts are exact hole `y0` values clustered at `tol`,
+so a one-pixel shift can cross the tolerance and move every span past
+it. Topology and the authored geometry are unaffected. Pinned by
+`T11_3`; the invariance boundary is unmeasured.
+
 ## 7. Not measured, and load-bearing
 
 - maths-symbol classification (§5)

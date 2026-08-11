@@ -24,6 +24,9 @@ Gated on `INKDRILL_CORPUS`, like the other corpus modules.
 
 import os
 import pathlib
+import shutil
+import subprocess
+import tempfile
 import statistics
 import unittest
 
@@ -205,6 +208,188 @@ class T11_1_DeclaredGeometry(unittest.TestCase):
         got = self._pt(statistics.median(spacings))
         self.assertAlmostEqual(got, _AXIS_LENGTH_PT / _DAYS, delta=0.01,
                                msg=f"{len(spacings)} intervals")
+
+
+def _pgm_of(pdf, dpi):
+    """Render the same PDF through `pgmraw`, or None if gs is absent."""
+    if not shutil.which("gs"):
+        return None
+    out = pathlib.Path(tempfile.mkdtemp()) / "page.pgm"
+    r = subprocess.run(
+        ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=pgmraw",
+         f"-r{dpi:.0f}", f"-sOutputFile={out}", str(pdf)],
+        capture_output=True)
+    return out if r.returncode == 0 and out.exists() else None
+
+
+@unittest.skipUnless(_PAGE, _WHY)
+class T11_2_RouteInvariance(unittest.TestCase):
+    """S1: the recorded numbers must survive the raster route change.
+
+    Every figure this project has published was measured through
+    `png16m`. pdfdrill is moving to `pgmraw`, and the two masks are NOT
+    byte-identical -- 259 samples of 15.5M differ, each by exactly 255,
+    a scan-conversion disagreement rather than rounding.
+
+    Topology being unaffected is an observation. What matters is whether
+    the AUTHORED geometry still reads the same, and this fixture is the
+    only one with a declared answer, so it is where that becomes a
+    guarantee rather than a note.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        img = read_png(_PAGE)
+        cls.dpi = img.dpi[0]
+        cls.mask = load_mask(_PAGE, threshold=240)
+        cls.pgm = None
+        pdf = _PAGE.parent.parent.parent / f"{_DOC}.pdf"
+        if pdf.exists():
+            cls.pgm = _pgm_of(pdf, 400)
+
+    def _panels(self, mask, dpi):
+        white = _white_gaps(mask)
+        res = sweep(white, conn=8, capture=Capture.GRAPH)
+        widths = [c.width for c in moments_per_component(res).values()
+                  if 960 <= c.width <= 990]
+        return widths, [w * 72.0 / dpi for w in widths]
+
+    def test_the_authored_panel_width_is_the_same_through_both_routes(self):
+        if self.pgm is None:
+            self.skipTest("ghostscript unavailable, or no source PDF")
+        from inkdrill.pnmio import load_mask as pnm_mask
+        png_px, png_pt = self._panels(self.mask, self.dpi)
+        pgm = pnm_mask(self.pgm, dpi=400, threshold=240)
+        pgm_px, pgm_pt = self._panels(pgm, 400.0)
+        self.assertEqual(len(set(png_px)), 1)
+        self.assertEqual(set(png_px), set(pgm_px),
+                         "the panel width moved with the raster route")
+        self.assertAlmostEqual(png_pt[0], pgm_pt[0], places=3)
+        self.assertEqual(len(png_px), len(pgm_px))
+
+    def test_the_topology_is_the_same_through_both_routes(self):
+        if self.pgm is None:
+            self.skipTest("ghostscript unavailable, or no source PDF")
+        from inkdrill.pnmio import load_mask as pnm_mask
+        pgm = pnm_mask(self.pgm, dpi=400, threshold=240)
+        a = sweep(self.mask, conn=8, capture=Capture.GRAPH)
+        b = sweep(pgm, conn=8, capture=Capture.GRAPH)
+        self.assertEqual(len(a.components), len(b.components))
+        self.assertEqual(sum(c.cycle_count for c in a.components),
+                         sum(c.cycle_count for c in b.components))
+
+    def test_the_masks_are_NOT_identical_and_that_is_expected(self):
+        """Pinned so a future change that made them equal is noticed
+        rather than assumed. The difference is a scan-conversion
+        disagreement -- every differing sample is 0 against 255 -- so it
+        is threshold-invariant by construction."""
+        if self.pgm is None:
+            self.skipTest("ghostscript unavailable, or no source PDF")
+        from inkdrill.pnmio import load_mask as pnm_mask
+        pgm = pnm_mask(self.pgm, dpi=400, threshold=240)
+        self.assertEqual((pgm.width, pgm.height),
+                         (self.mask.width, self.mask.height))
+        self.assertNotEqual(pgm.data, self.mask.data)
+
+
+@unittest.skipUnless(_PAGE, _WHY)
+class T11_3_EmitRouteInvariance(unittest.TestCase):
+    """S2: the same discipline one level up -- through `emit`.
+
+    Testing the READER proves the reader. The useful assertion is that
+    the emitted `lines.json` is the same object either way, because
+    that is what a consumer receives and it exercises the whole chain:
+    reader, sweep, nest, lattice and the points conversion.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mask = load_mask(_PAGE, threshold=240)
+        cls.pgm = None
+        pdf = _PAGE.parent.parent.parent / f"{_DOC}.pdf"
+        if pdf.exists():
+            cls.pgm = _pgm_of(pdf, 400)
+
+    def test_a_PGM_without_a_dpi_raises_before_it_reaches_emit(self):
+        """G5, end to end. A PGM has nowhere to record dpi, so the
+        discipline `emit.page_record` enforces for a PNG without `pHYs`
+        must hold here through a different mechanism -- the caller.
+        """
+        from inkdrill.pnmio import NoResolution, load_mask as pnm_mask
+        if self.pgm is None:
+            self.skipTest("ghostscript unavailable, or no source PDF")
+        with self.assertRaises(NoResolution):
+            pnm_mask(self.pgm)
+
+    def test_emit_is_NOT_route_invariant_KNOWN_DEFECT(self):
+        """S2's acceptance criterion FAILS. This records the fact and
+        the extent, and deliberately does NOT claim the boundary.
+
+        259 samples of 15.5M differ between the routes -- 16.7 per
+        million -- and that moves **254 of 761 emitted lines**. The
+        dominant difference is `cell_row_span`, off by one: band starts
+        come from exact hole `y0` values clustered at `tol`, so a
+        one-pixel shift can push a start across the tolerance, create or
+        remove a band boundary, and move every span crossing it. Region
+        extents move by up to one pixel as well.
+
+        So the spans shipped in `5e7df5e` are unstable under a
+        perturbation four orders of magnitude smaller than a cell.
+
+        What IS route-invariant is established elsewhere and separately:
+        components, holes, the authored panel width and the tick pitch
+        (`T11_2`). Which further fields are invariant is NOT asserted
+        here, because two attempts to state it were wrong -- that needs
+        measuring across pages, not guessing in an assertion.
+        """
+        import json
+        from inkdrill.emit import page_lines
+        from inkdrill.pnmio import load_mask as pnm_mask
+        if self.pgm is None:
+            self.skipTest("ghostscript unavailable, or no source PDF")
+        pt = 72.0 / 400.0
+        pgm = pnm_mask(self.pgm, dpi=400, threshold=240)
+        a = page_lines(self.mask, pt=pt, tol=2.0)
+        b = page_lines(pgm, pt=pt, tol=2.0)
+        self.assertEqual(len(a), len(b), "the line COUNT is route-invariant")
+        self.assertEqual([x["type"] for x in a], [y["type"] for y in b],
+                         "the line KINDS are route-invariant")
+        self.assertNotEqual(json.dumps(a, sort_keys=True),
+                            json.dumps(b, sort_keys=True),
+                            "if these now agree, the defect is fixed and "
+                            "this test should become an equality assertion")
+
+    def _superseded_test_lines_json_is_identical_through_both_routes(self):
+        import json
+        from inkdrill.emit import lines_json, page_lines, page_record
+        from inkdrill.pnmio import load_mask as pnm_mask
+        if self.pgm is None:
+            self.skipTest("ghostscript unavailable, or no source PDF")
+        pt = 72.0 / 400.0
+        pgm = pnm_mask(self.pgm, dpi=400, threshold=240)
+        docs = []
+        for mask in (self.mask, pgm):
+            docs.append(lines_json(
+                [page_record(page=1, width_px=mask.width,
+                             height_px=mask.height, dpi=(400.0, 400.0),
+                             lines=page_lines(mask, pt=pt, tol=2.0))],
+                render_dpi=400.0))
+        self.assertEqual(json.dumps(docs[0], sort_keys=True),
+                         json.dumps(docs[1], sort_keys=True),
+                         "the emitted document moved with the raster route")
+
+    def test_every_region_is_in_points_not_pixels(self):
+        """A constraint to preserve, not a change: pdf.js applies its
+        own viewport transform, so a pixel rectangle is correct at
+        exactly one zoom level."""
+        from inkdrill.emit import page_lines, page_record
+        pt = 72.0 / 400.0
+        rec = page_record(page=1, width_px=self.mask.width,
+                          height_px=self.mask.height, dpi=(400.0, 400.0),
+                          lines=page_lines(self.mask, pt=pt, tol=2.0))
+        self.assertAlmostEqual(rec["page_width"], self.mask.width * pt)
+        for ln in rec["lines"]:
+            self.assertLessEqual(ln["region"]["width"], rec["page_width"])
 
 
 if __name__ == "__main__":

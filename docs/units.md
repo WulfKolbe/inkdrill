@@ -1635,6 +1635,38 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### S1/S2 — do the recorded numbers survive the route change? 2026-08-11
+
+**S1: yes. S2: no, and that found a defect.**
+
+**S1 — the authored geometry is route-invariant.**
+`test_source_truth_corpus` now runs `e12s39` through both routes. The
+authored 175.248 pt panel reads 175.320 pt through `png16m` and through
+`pgmraw`, identical to three decimals; components 910 and holes 1,011
+both ways. The masks are asserted NOT equal, so a future change that
+made them equal is noticed rather than assumed.
+
+**S2 — `emit` is NOT route-invariant, and that is a real defect.**
+259 samples of 15,465,468 differ — 16.7 per million — and that moves
+**254 of 761 emitted lines**. The dominant difference is
+`cell_row_span`, off by one; region extents move by up to one pixel too.
+
+The mechanism is in the span computation shipped in `5e7df5e`: band
+starts come from exact hole `y0` values clustered at `tol`, so a
+one-pixel shift can push a start across the tolerance, create or remove
+a band boundary, and move every span that crosses it. **The spans are
+unstable under a perturbation four orders of magnitude smaller than a
+cell.**
+
+This is exactly the failure testing the READER could not have found, and
+it is why the audit's "test one level up" was the right instruction.
+
+**What is NOT claimed.** The line count and the line kinds are
+route-invariant. Which further fields are is *not* asserted, because two
+attempts to state the boundary were both wrong — regions move as well as
+spans. That needs measuring across pages rather than guessing in an
+assertion, and it is open work.
+
 ### U0 second route — `pgmraw` ingest. 2026-08-11
 
 Tests T0-10 to T0-13 passed on 2026-08-11: 18 hermetic.
