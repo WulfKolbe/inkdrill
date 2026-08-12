@@ -626,6 +626,32 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### F1 fixed — a cell is bigger than the text inside it
+
+`page_lines` now requires a cell to clear the page's OWN median ink
+height (`text_scale`), scaled by `cell_scale`, default 3.0.
+
+| cell_scale | figure page, no tables | real 13x4 grid |
+|---|---|---|
+| 1.0 | 73 tables, 284 cells | 1 table, **52 cells** |
+| 2.0 | 21, 57 | 1, **52** |
+| **3.0** | **2, 4** | 1, **52** |
+
+**The real grid is completely insensitive across a 3x range while the
+false positives collapse 70-fold.** That is a separation, not a tuned
+threshold — any value in the range is safe for the true positive, so
+the strictest is free. Both halves of the agreed acceptance hold: 52
+kept on Infineon p19, near-zero on 2409.18839 p6.
+
+The earlier argument against a size floor was about RECTANGLES (hollow,
+`fill < 0.35`) and remains right for those — a real depth-2 box can be
+smaller than body text. A cell is the opposite object, a hole that
+CONTAINS content, so it is bounded below by the text inside it.
+Different object, opposite bound.
+
+And the floor is RELATIVE to the page, so a dpi change cannot silently
+retune it.
+
 ## 7. Not measured, and load-bearing
 
 - maths-symbol classification (§5)

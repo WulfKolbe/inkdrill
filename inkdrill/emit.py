@@ -76,6 +76,7 @@ from __future__ import annotations
 from .nest import Kind, nest
 
 __all__ = ["NoResolution", "lines_json", "page_record", "page_lines",
+           "text_scale",
            "cell_grid", "diagram_line", "ink_regions", "is_rule",
            "rule_record", "rule_width_pt", "table_lines", "SOURCE"]
 
@@ -184,8 +185,19 @@ def ink_regions(nesting):
     return [r for r in nesting.regions.values() if r.kind is Kind.INK]
 
 
+def text_scale(nesting) -> float:
+    """The page's own text height, as the median ink-region height.
+
+    A page is mostly letters, so the median component is a letter. This
+    is what a cell has to be bigger than -- and it is RELATIVE, so a
+    dpi change cannot silently retune it, unlike a floor in points.
+    """
+    hs = sorted(r.y1 - r.y0 + 1 for r in ink_regions(nesting))
+    return float(hs[len(hs) // 2]) if hs else 0.0
+
+
 def table_lines(mask, region_id=None, *, pt: float, tol: float = 0.0,
-                nesting=None):
+                nesting=None, min_cell: float = 0.0):
     """A `table` and its `simple_cell`s from one ink region's holes (G3).
 
     `region_id` is a **`nest` region id**, not a sweep component id --
@@ -208,6 +220,21 @@ def table_lines(mask, region_id=None, *, pt: float, tol: float = 0.0,
             f"`table_lines` takes a nest region id, not a sweep "
             f"component id -- see `ink_regions`")
     holes = [n.regions[h] for h in n.holes_of(region_id)]
+    # A CELL IS BIGGER THAN THE TEXT IT CONTAINS; a glyph counter is
+    # smaller than the glyph around it. Without this, every `a`, `e` and
+    # `o` on a page emits a `simple_cell` -- 1,161 of 1,611 on one real
+    # figure page, at 0.18 pt each, one pixel at 400 dpi -- and every
+    # `B`, `8` and `%` emits a two-cell `table`.
+    #
+    # The earlier argument against a size floor was about RECTANGLES
+    # (hollow, fill < 0.35) and was right for those: a real depth-2 box
+    # can be smaller than body text. A cell is the opposite object -- a
+    # hole that CONTAINS content -- so it is bounded below by the text
+    # inside it. Different object, opposite bound.
+    if min_cell > 0.0:
+        holes = [h for h in holes
+                 if (h.x1 - h.x0 + 1) >= min_cell
+                 and (h.y1 - h.y0 + 1) >= min_cell]
     # A LATTICE, not merely a hole. Every hollow rectangle encloses its
     # interior, so `holes >= 1` would make a plot frame a 1x1 table --
     # which is true and useless, and would hand the consumer a table
@@ -289,7 +316,7 @@ def diagram_line(region, pt: float, *, ground: str | None = None) -> dict:
 
 
 def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
-               max_fill: float = 0.35):
+               max_fill: float = 0.35, cell_scale: float = 3.0):
     """Every emittable object on one page, with rules attached.
 
     A region becomes a `table` when it encloses a LATTICE (>= 2 holes),
@@ -312,6 +339,20 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
     n = nest(mask)
     grounds = grounds or {}
     inks = ink_regions(n)
+    # `cell_scale` multiplies the page's own text height. The default
+    # is 3.0, and it is chosen by an INVARIANCE rather than by fit:
+    #
+    #   cell_scale   figure page (no tables)   real 13x4 grid
+    #          1.0     73 tables, 284 cells      1 table, 52 cells
+    #          1.5     54, 195                   1, 52
+    #          2.0     21,  57                   1, 52
+    #          3.0      2,   4                   1, 52
+    #
+    # The real grid is COMPLETELY INSENSITIVE across a 3x range while
+    # the false positives collapse by 70x. That is the signature of a
+    # separation rather than a tuned threshold: any value in the range
+    # is safe for the true positive, so the highest one is free.
+    min_cell = text_scale(n) * cell_scale
     rules = [r for r in inks if is_rule(r)]
     rule_ids = {r.id for r in rules}
 
@@ -326,7 +367,8 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
         w = region.x1 - region.x0 + 1
         h = region.y1 - region.y0 + 1
         ground = grounds.get(region.id)
-        lines = table_lines(mask, region.id, pt=pt, tol=tol, nesting=n)
+        lines = table_lines(mask, region.id, pt=pt, tol=tol, nesting=n,
+                            min_cell=min_cell)
         if lines:
             out.append((region, lines))
         elif ground == "textured" or region.area / max(1, w * h) < max_fill:

@@ -469,8 +469,22 @@ class T1_6_Diagrams(unittest.TestCase):
         self.assertNotIn("rules", line["ink"])
 
     def test_a_lattice_still_wins_over_diagram(self):
-        lines = page_lines(grid_mask(3, 3), pt=PT, tol=1.0)
+        """`cell_scale` is relative to the page's own text, and this
+        fixture has no text -- its median ink region IS the frame, so a
+        6 px cell cannot clear 3x it. Passing 0 disables the floor,
+        which is what a fixture with nothing to measure against needs.
+        A real page supplies its own scale."""
+        lines = page_lines(grid_mask(3, 3), pt=PT, tol=1.0, cell_scale=0.0)
         self.assertEqual(lines[0]["type"], "table")
+
+    def test_the_cell_floor_is_RELATIVE_to_the_page_text(self):
+        """A glyph counter is smaller than its glyph; a table cell is
+        larger than the text inside it. Measured on real pages, a
+        figure page falls from 284 false cells to 4 while a real 13x4
+        grid holds at exactly 52 across a 3x range of the parameter."""
+        m = grid_mask(3, 3)
+        self.assertGreater(len(page_lines(m, pt=PT, tol=1.0, cell_scale=0.0)),
+                           len(page_lines(m, pt=PT, tol=1.0, cell_scale=9.0)))
 
 
 if __name__ == "__main__":
