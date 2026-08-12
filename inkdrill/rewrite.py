@@ -81,7 +81,8 @@ from enum import Enum
 
 from .relate import Symbol, needs_identity
 
-__all__ = ["Relation", "Kind", "Node", "rewrite", "confluent", "PRODUCTIONS"]
+__all__ = ["Relation", "Kind", "Node", "rewrite", "confluent", "chained",
+           "PRODUCTIONS"]
 
 
 class Relation(Enum):
@@ -245,6 +246,44 @@ def rewrite(symbols, relations):
             break
         guard -= 1
     return [n for n in nodes if n is not None]
+
+
+def chained(relations):
+    """Same-root scripts rewritten as a CHAIN, for gold comparison.
+
+    Two conventions describe one page and they disagree about what a
+    superscript hangs from:
+
+        same-root   x -> 2 (Sup),  x -> i (Sub)      inkdrill
+        chained     x -> i (Sub),  i -> 2 (Sup)      pdfdrill's SLT
+
+    Inkdrill produces same-root because that is what the GEOMETRY says:
+    `relate.candidates` sees both scripts beside the same base, and
+    neither script occludes the other. The chained form is closer to
+    LaTeX's own parse, where `x_i^2` binds the scripts in sequence.
+
+    Neither is wrong, and scoring one against the other without
+    converting reports EVERY sub-and-superscript pair as an error for a
+    reason unconnected to the labeller. The conversion lives here rather
+    than in the gold because the gold is the fixed point: it is easier to
+    move what this package emits than what 21,240 recorded SLTs say.
+
+    A base carrying BOTH scripts is rewritten; one carrying a single
+    script is already identical in the two conventions and is left
+    alone.
+    """
+    out = dict(relations)
+    subs = {a: b for (a, b), r in relations.items()
+            if r is Relation.SUBSCRIPT}
+    sups = {a: b for (a, b), r in relations.items()
+            if r is Relation.SUPERSCRIPT}
+    for base, sub in subs.items():
+        sup = sups.get(base)
+        if sup is None or sup == sub:
+            continue
+        del out[(base, sup)]
+        out[(sub, sup)] = Relation.SUPERSCRIPT
+    return out
 
 
 def confluent(symbols, relations, *, trials: int = 24) -> bool:

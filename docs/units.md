@@ -1635,6 +1635,29 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### The script-attachment mismatch, converted. 2026-08-12
+
+Reading `mathgold` showed the two conventions disagree about what a
+superscript hangs from:
+
+    same-root   x -> 2 (Sup),  x -> i (Sub)      inkdrill
+    chained     x -> i (Sub),  i -> 2 (Sup)      pdfdrill's SLT
+
+Inkdrill produces same-root because that is what the GEOMETRY says:
+`relate.candidates` sees both scripts beside the same base and neither
+occludes the other. Chained is closer to LaTeX's own parse, where
+`x_i^2` binds in sequence. **Neither is wrong**, and scoring one against
+the other unconverted reports every sub-and-superscript pair as an error
+for a reason unconnected to the labeller.
+
+`rewrite.chained()` converts. It lives on this side because **the gold
+is the fixed point** — easier to move what one package emits than what
+21,240 recorded SLTs say. A base with only one script is identical in
+both conventions and is left alone, which is asserted rather than
+assumed: touching it would be a difference invented by the converter.
+
+Mutation: 4 mutants, 4 killed.
+
 ### A3 — the curved-gutter seam. 2026-08-12
 
 Tests A3-1 to A3-4 passed on 2026-08-12: 23 hermetic.

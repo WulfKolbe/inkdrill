@@ -11,7 +11,8 @@ import random
 import unittest
 
 from inkdrill.relate import Symbol
-from inkdrill.rewrite import Kind, Node, Relation, confluent, rewrite
+from inkdrill.rewrite import (Kind, Node, Relation, chained, confluent,
+                              rewrite)
 
 
 def sym(name, x=0.0, y=0.0):
@@ -198,6 +199,52 @@ class M3_4_Invariants(unittest.TestCase):
 
     def test_an_empty_graph_reduces_to_nothing(self):
         self.assertEqual(rewrite([], {}), [])
+
+
+class M3_5_GoldConvention(unittest.TestCase):
+    """The attachment mismatch, converted rather than argued about."""
+
+    def test_both_scripts_on_one_base_become_a_chain(self):
+        rel = {(0, 1): Relation.SUBSCRIPT, (0, 2): Relation.SUPERSCRIPT}
+        self.assertEqual(chained(rel), {(0, 1): Relation.SUBSCRIPT,
+                                        (1, 2): Relation.SUPERSCRIPT})
+
+    def test_a_lone_subscript_is_unchanged(self):
+        rel = {(0, 1): Relation.SUBSCRIPT}
+        self.assertEqual(chained(rel), rel)
+
+    def test_a_lone_superscript_is_unchanged(self):
+        """Identical in both conventions, so touching it would be a
+        difference invented by the converter."""
+        rel = {(0, 2): Relation.SUPERSCRIPT}
+        self.assertEqual(chained(rel), rel)
+
+    def test_other_relations_pass_through(self):
+        rel = {(0, 1): Relation.HORIZONTAL, (2, 3): Relation.ABOVE}
+        self.assertEqual(chained(rel), rel)
+
+    def test_two_independent_bases_are_each_chained(self):
+        rel = {(0, 1): Relation.SUBSCRIPT, (0, 2): Relation.SUPERSCRIPT,
+               (5, 6): Relation.SUBSCRIPT, (5, 7): Relation.SUPERSCRIPT}
+        got = chained(rel)
+        self.assertEqual(got[(1, 2)], Relation.SUPERSCRIPT)
+        self.assertEqual(got[(6, 7)], Relation.SUPERSCRIPT)
+        self.assertNotIn((0, 2), got)
+        self.assertNotIn((5, 7), got)
+
+    def test_the_input_is_not_mutated(self):
+        rel = {(0, 1): Relation.SUBSCRIPT, (0, 2): Relation.SUPERSCRIPT}
+        before = dict(rel)
+        chained(rel)
+        self.assertEqual(rel, before)
+
+    def test_the_chained_form_still_reduces(self):
+        """It must remain something `rewrite` can consume, or the
+        conversion has traded one mismatch for another."""
+        s = [sym("x"), sym("i", 12, 12), sym("2", 20, -6)]
+        out = rewrite(s, chained({(0, 1): Relation.SUBSCRIPT,
+                                  (0, 2): Relation.SUPERSCRIPT}))
+        self.assertEqual(len([lf for n in out for lf in n.leaves]), 3)
 
 
 if __name__ == "__main__":
