@@ -345,6 +345,49 @@ so a one-pixel shift can cross the tolerance and move every span past
 it. Topology and the authored geometry are unaffected. Pinned by
 `T11_3`; the invariance boundary is unmeasured.
 
+### Unit 12 — the segmentation conventions already align
+
+Answered without downloading anything, without the Infty licence and
+without spending a page of credit: `mathgold` is on this machine, so
+pdfdrill's own SLT convention can be read directly.
+
+`parse_latex_slt` on four expressions:
+
+```
+x_i^2          nodes x, i, 2            edges  i->2 Sup,  x->i Sub
+rac{a}{b}    nodes rac, a, b        edges  rac->a Above, ->b Below
+\sqrt{x+1}     nodes \sqrt, x, +, 1     edges  x->+ Right, +->1 Right,
+                                               \sqrt->x Inside
+```
+
+**Segmentation matches.** One node per symbol, and `rac` and `\sqrt`
+are nodes in their own right — a rule and a radical are ink, so
+`relate.py`'s components map to them one for one.
+
+**The relation vocabulary is 1:1**, six against six:
+
+| mathgold | `rewrite.Relation` |
+|---|---|
+| Right | HORIZONTAL |
+| Sup | SUPERSCRIPT |
+| Sub | SUBSCRIPT |
+| Above | ABOVE |
+| Below | BELOW |
+| Inside | CONTAINS |
+
+**One real mismatch, and it is in the attachment, not the vocabulary.**
+For `x_i^2` mathgold CHAINS: `x -> i` (Sub) then `i -> 2` (Sup), so the
+superscript hangs off the subscript. `rewrite.py`'s `SupSub` production
+expects both scripts on the SAME root — `x -> 2` and `x -> i`. Scoring
+against this gold without reconciling that would report every
+sub-and-superscript pair as wrong for a reason that has nothing to do
+with the labeller.
+
+That is exactly the trade the audit warned about — an alignment problem
+swapped for a different one — found here for the price of reading a
+file. It is a small fix in one direction or the other, and it has to be
+made before any number is quoted.
+
 ### Unit 12 coordination — inkdrill must NOT write `.lg`
 
 The proposed deliverable was "both sides emit and consume the same `.lg`
