@@ -33,8 +33,8 @@ def main(argv=None) -> int:
     ap.add_argument("-o", "--out", type=pathlib.Path,
                     help="output file; stdout if omitted")
     ap.add_argument("--dpi", type=float, default=None,
-                    help="required for PGM, which cannot carry it; "
-                         "refused for PNG, which can")
+                    help="required for a PGM, and for a PNG with no pHYs; "
+                         "refused for a PNG that declares one")
     ap.add_argument("--threshold", type=int, default=200,
                     help="ink threshold, 0-255 (default 200)")
     ap.add_argument("--page-number", type=int, default=1)
@@ -58,17 +58,26 @@ def main(argv=None) -> int:
         mask = load_mask(args.page, dpi=args.dpi, threshold=args.threshold)
         dpi = (args.dpi, args.dpi)
     elif suffix == ".png":
-        if args.dpi is not None:
-            ap.error("--dpi is refused for a PNG: the file declares its "
-                     "own pHYs and a supplied value could silently "
-                     "disagree with it")
         from .pngio import load_mask, read_png
         img = read_png(args.page)
-        if not img.dpi or not img.dpi[0]:
-            ap.error(f"{args.page} declares no pHYs resolution; points "
-                     f"cannot be derived from it")
+        declared = bool(img.dpi and img.dpi[0])
+        # The rule is NEVER GUESS, not never accept. A PNG that declares
+        # `pHYs` is authoritative and a supplied value could silently
+        # disagree with it, so `--dpi` is refused there. A PNG WITHOUT
+        # `pHYs` -- which real scanner output often is -- has nothing to
+        # disagree with, so `--dpi` is required and accepted, exactly as
+        # for a PGM.
+        if declared and args.dpi is not None:
+            ap.error(f"{args.page.name} declares {img.dpi[0]:.0f} dpi in its "
+                     f"pHYs chunk; --dpi is refused because a supplied "
+                     f"value could silently disagree with it")
+        if not declared and args.dpi is None:
+            ap.error(f"{args.page.name} declares no pHYs resolution, so "
+                     f"--dpi is required. Guessing 72, or deriving it from "
+                     f"a nominal page size, is wrong by 0.071 pt on the "
+                     f"e12s39 fixture")
         mask = load_mask(args.page, threshold=args.threshold)
-        dpi = img.dpi
+        dpi = img.dpi if declared else (args.dpi, args.dpi)
     else:
         ap.error(f"unsupported input {suffix!r}; this reads .png (png16m) "
                  f"and .pgm (pgmraw)")

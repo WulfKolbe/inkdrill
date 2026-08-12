@@ -626,7 +626,32 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
-### F1 fixed — a cell is bigger than the text inside it
+### F1 has a twin in the `diagram` class — NOT fixed
+
+The Heim scans run through the CLI now. `BH1-000229.png`, a scanned
+German physics page at 400 dpi, emits **305 lines, every one a
+`diagram`** — on a page that is body text and equations.
+
+Their sizes say what they are:
+
+```
+page text_scale (median ink height)   44 px = 7.9 pt
+diagram width  pt   min 2.70   median  8.64   max 76.32
+diagram height pt   min 7.56   median 11.52   max 42.12
+```
+
+**A median diagram is 8.6 x 11.5 pt — one letter.** A hollow glyph with
+`fill < 0.35` and fewer than two holes falls straight through the table
+branch into the diagram branch, which has **no size floor at all**.
+
+So F1's fix covered `table` and `simple_cell` and left the third class
+untouched. The same rule applies and for the same reason — a figure is
+not letter-sized — but it needs its own acceptance pair before it
+ships: a page with real plot frames kept, and this page near zero.
+2409.18839 p6 emitted 648 diagrams under the same rule and is the
+obvious first half.
+
+### F1 fixed for tables — a cell is bigger than the text inside it
 
 `page_lines` now requires a cell to clear the page's OWN median ink
 height (`text_scale`), scaled by `cell_scale`, default 3.0.
