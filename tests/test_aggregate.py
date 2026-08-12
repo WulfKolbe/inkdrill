@@ -357,5 +357,46 @@ class T5_7_ComponentIdentityIsRootNotFirstNode(unittest.TestCase):
         self.assertEqual(firsts, sorted(firsts))
 
 
+class T5_8_Shear(unittest.TestCase):
+    """A named, scale-free lean -- what a warp model consumes."""
+
+    def test_an_axis_symmetric_shape_has_zero_shear(self):
+        m = InkMask.from_rows(["####", "####", "####"])
+        self.assertAlmostEqual(moments_of_mask(m).shear, 0.0, places=9)
+
+    def test_a_diagonal_shape_leans(self):
+        m = InkMask.from_rows(["#...", ".#..", "..#.", "...#"])
+        self.assertGreater(abs(moments_of_mask(m).shear), 0.9)
+
+    def test_the_two_diagonals_lean_oppositely(self):
+        a = moments_of_mask(InkMask.from_rows(["#...", ".#..", "..#.", "...#"]))
+        b = moments_of_mask(InkMask.from_rows(["...#", "..#.", ".#..", "#..."]))
+        self.assertAlmostEqual(a.shear, -b.shear, places=9)
+
+    def test_shear_is_bounded_where_the_raw_moment_is_not(self):
+        """Why a named accessor: `central[2]` grows without bound with
+        size, so two components of different sizes cannot be compared on
+        it. `shear` is confined to [-1, 1] and can be.
+
+        NOT a scale-invariance claim. Block-replicating a discrete shape
+        is not a similarity transform -- the pixel grid changes the shape
+        -- so a 2x block copy of a one-pixel diagonal reads 0.8 against
+        1.0. Shear is scale-free in the continuous limit only, and
+        asserting otherwise was the first version of this test.
+        """
+        small = moments_of_mask(InkMask.from_rows(["#.", ".#"]))
+        big = moments_of_mask(InkMask.from_rows(["##..", "##..",
+                                                 "..##", "..##"]))
+        self.assertLessEqual(abs(small.shear), 1.0)
+        self.assertLessEqual(abs(big.shear), 1.0)
+        self.assertGreater(abs(big.central[2]), abs(small.central[2]))
+
+    def test_shear_stays_within_plus_or_minus_one(self):
+        for rows in (["#"], ["##"], ["#.", ".#"], ["#..", ".#.", "..#"]):
+            with self.subTest(rows=rows):
+                self.assertLessEqual(abs(moments_of_mask(
+                    InkMask.from_rows(rows)).shear), 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

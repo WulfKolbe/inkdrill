@@ -173,6 +173,26 @@ class Moments:
                 self.sxy / a - mx * my)
 
     @property
+    def shear(self) -> float:
+        """Normalised off-diagonal covariance, `mu11 / sqrt(mu20*mu02)`.
+
+        The correlation between x and y about the centroid: 0 for a
+        shape symmetric in the axes, +/-1 in the degenerate limit. A
+        NAMED accessor because `central[2]` is scale-dependent and the
+        raw number invites comparison between components of different
+        sizes; this one does not.
+
+        Distinct from `principal_axis`, which says which way the shape
+        points. Shear says how far it leans, and a warp model consumes
+        the lean rather than the direction.
+        """
+        mu20, mu02, mu11 = self.central
+        denom = math.sqrt(mu20 * mu02)
+        if denom <= 0.0:
+            return 0.0
+        return max(-1.0, min(1.0, mu11 / denom))
+
+    @property
     def eigenvalues(self) -> tuple[float, float]:
         """(lambda1, lambda2) with lambda1 >= lambda2, lambda2 floored at
         PIXEL_VARIANCE (G6)."""

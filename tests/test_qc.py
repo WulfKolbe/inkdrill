@@ -107,6 +107,45 @@ class QC_1_TheHighlightBlindSpot(unittest.TestCase):
         self.assertGreater(ph.px_per_run, 100.0)
 
 
+class QC_1b_RunLengthCV(unittest.TestCase):
+    """The third channel -- reported, and NOT a separator here.
+
+    The proposal was that a screen is a regular lattice so its run
+    lengths are near-constant, against CV 8.4-9.5 for real text: a 21x
+    separation on the pair the other channels overlap.
+
+    **It does not reproduce on this definition.** CV over every run of a
+    page reads 0.566-0.576 for a light synthetic screen and a MINIMUM of
+    0.603 over real corpus pages, median 0.753 -- a 6% gap, not 21x.
+    The published figures are presumably a different denominator (per
+    component, or over a selected run set); on this one there is no
+    separation to use.
+
+    So the value is computed and reported and nothing is asserted about
+    its discriminative power. These tests hold only what is mechanically
+    true.
+    """
+
+    def test_a_uniform_lattice_gives_zero(self):
+        m = InkMask(bytes([0xFF, 0xFF, 0, 0] * 16), 8, 8)
+        self.assertEqual(screen_signals(m).run_length_cv, 0.0)
+
+    def test_no_runs_gives_zero_rather_than_raising(self):
+        self.assertEqual(screen_signals(InkMask(bytes(64), 8, 8)
+                                        ).run_length_cv, 0.0)
+
+    def test_varied_run_lengths_give_a_positive_CV(self):
+        m = InkMask.from_rows(["#.....", "##....", "####..", "######"])
+        self.assertGreater(screen_signals(m).run_length_cv, 0.0)
+
+    def test_a_denser_screen_has_MORE_varied_runs_not_less(self):
+        """The direction is the opposite of the proposal's intuition:
+        as dots merge, run lengths spread rather than tighten."""
+        light = screen_signals(screen(240, 240, 8, 1)).run_length_cv
+        dark = screen_signals(screen(240, 240, 8, 4)).run_length_cv
+        self.assertGreater(dark, light)
+
+
 class QC_2_Signals(unittest.TestCase):
     """G1, G3: measurements, and no verdict."""
 

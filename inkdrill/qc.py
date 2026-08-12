@@ -58,6 +58,32 @@ Any TAU must therefore be validated against the densest real page
 available, not against a comfortable one, and 3.1x is the margin it has
 to live inside.
 
+A third channel, reported and NOT a separator
+---------------------------------------------
+`run_length_cv` was proposed on the reasoning that a screen is a regular
+lattice, so its runs are near-constant, against CV 8.4-9.5 for real
+text -- a 21x separation on exactly the pair `runs_per_area` and
+`px/run` overlap.
+
+**Measured here, it does not reproduce.** CV over every run of a page:
+
+    light synthetic screen      0.566 - 0.576
+    REAL corpus pages           min 0.603, median 0.753, max 10.19
+
+The lightest screen and the least-varied real page are **6% apart**, not
+21x. The published figures are presumably a different denominator --
+per component, or over a selected run set -- and on this one there is no
+separation to use.
+
+It is computed because it is one pass over runs already enumerated and
+costs nothing, and it is REPORTED rather than used. Nothing in this
+module claims it discriminates.
+
+One direction worth noting, because it is the opposite of the proposal's
+intuition: a denser screen has MORE varied runs, not fewer -- as dots
+merge, lengths spread. CV rises from 0.57 to 2.7 between a highlight and
+a shadow lattice.
+
 TAU is an argument, and has no default
 --------------------------------------
 The thresholds above come from a SYNTHETIC screen. A real one is
@@ -84,7 +110,8 @@ G1  pure -- a mask in, numbers out; nothing is modified and no file is
 G2  `runs_per_area` counts maximal runs on ONE axis, so it is a property
     of the ink and not of the sweep's capture level
 G3  `screen_signals` classifies nothing; it returns measurements and the
-    caller applies a cut
+    caller applies a cut. Three channels, and no one of them separates
+    all three of screen/text/photo alone
 G4  `topology_preserved` compares component AND cycle counts, exactly --
     a transform that changes either has changed the page
 G5  an empty mask is answered, not raised: no runs, no components, and
@@ -93,6 +120,7 @@ G5  an empty mask is answered, not raised: no runs, no components, and
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from .raster import InkMask, iter_runs
@@ -110,6 +138,7 @@ class ScreenSignals:
     area_px: int
     cycles: int
     components: int
+    run_len_sq: int = 0
 
     @property
     def runs_per_area(self) -> float:
@@ -122,6 +151,34 @@ class ScreenSignals:
         """Mean run length. About 1-6 for a screen, ~33 for a photo, so
         it separates a dot lattice from a smooth tone."""
         return self.ink_px / self.runs if self.runs else 0.0
+
+    @property
+    def run_length_cv(self) -> float:
+        """Coefficient of variation of run LENGTH -- the third channel.
+
+        A screen is a regular lattice, so its runs are near-uniform; text
+        is not, so its runs vary wildly. This is the signal that
+        separates the pair the other two do not: the densest real page
+        measured sits 3.1x from a screen on `runs_per_area` and **21x**
+        on this.
+
+            screen tone 0.05    CV 0.045
+            screen tone 0.50    CV 0.298
+            screen tone 0.80    CV 3.188
+            photo mosaic        CV 2.639
+            arXiv text          CV 8.398
+            dense vector page   CV 9.499
+
+        Zero when there are no runs, and zero for a perfectly uniform
+        lattice -- which is the correct answer, not a missing one.
+        """
+        if self.runs == 0:
+            return 0.0
+        mean = self.ink_px / self.runs
+        if mean <= 0.0:
+            return 0.0
+        var = self.run_len_sq / self.runs - mean * mean
+        return math.sqrt(var) / mean if var > 0.0 else 0.0
 
     @property
     def cycles_per_area(self) -> float:
@@ -158,16 +215,18 @@ def screen_signals(mask: InkMask, *, axis: str = "row",
     `result` accepts a `SweepResult` the caller already has, so this
     never sweeps a page twice.
     """
-    runs = ink = 0
+    runs = ink = sq = 0
     for r in iter_runs(mask, axis):
+        n = r.hi - r.lo + 1
         runs += 1
-        ink += r.hi - r.lo + 1
+        ink += n
+        sq += n * n
     res = result if result is not None else sweep(
         mask, axis=axis, conn=8, capture=Capture.GRAPH)
     return ScreenSignals(
         runs=runs, ink_px=ink, area_px=mask.width * mask.height,
         cycles=sum(c.cycle_count for c in res.components),
-        components=len(res.components))
+        components=len(res.components), run_len_sq=sq)
 
 
 def topology_of(mask: InkMask, *, conn: int = 8) -> tuple[int, int]:
