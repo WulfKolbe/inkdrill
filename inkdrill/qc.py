@@ -32,9 +32,31 @@ sweep runs:
     photo mosaic                  0.0097
     halftone, tone 0.05-0.80      0.05 - 0.20
 
+    real corpus pages, 40 of them, threshold 200:
+    min 0.0000   median 0.0067   MAX 0.0153
+
 `cycle_count` is kept as a SECOND channel because it is genuine evidence
 at midtone and above, and a conjunction of two independent signals is
 the shape that has worked elsewhere here. It must not be the gate.
+
+The margin is 3x, not 10x, and px/run does not close it
+-------------------------------------------------------
+The bands above are synthetic. Measured over 40 real corpus pages at
+threshold 200, runs-per-area spans **0.0000 to 0.0153**, median 0.0067,
+the densest being a page of dense typeset mathematics. Against the
+lightest synthetic screen at 0.0469 that is **3.1x of headroom** -- not
+the order of magnitude the synthetic figures suggest.
+
+And **`px/run` overlaps**. Real pages span 4.1 to 217.4, and the five
+densest sit at **4.1 to 5.3** -- inside a screen's 1.0-6.2. So px/run
+separates a screen from a PHOTOGRAPH (217 against 6) and does NOT
+separate a screen from dense text. Quoting it as a second discriminator
+without that qualifier overstates it; the conjunction that works is
+runs-per-area with cycles, and px/run only excludes smooth tone.
+
+Any TAU must therefore be validated against the densest real page
+available, not against a comfortable one, and 3.1x is the margin it has
+to live inside.
 
 TAU is an argument, and has no default
 --------------------------------------
