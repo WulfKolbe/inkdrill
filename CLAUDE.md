@@ -137,6 +137,12 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
 - **`inkdrill/band.py`** — band splitting and seam stitching. `split`,
   `sweep_bands`, `stitch`, `sweep_banded`. Output is indistinguishable
   from one sweep at any K. Band arrival order must never matter.
+- **`inkdrill/seam.py`** — least-ink path down a page, for CURVED
+  gutters only. `find_seam`, `cost_grid`, plus the line helpers. A flat
+  gutter is already solved by white-run gaps; this is for a bent one.
+  Runs on a coarse block grid because the pixel version is ~17 s/seam.
+  `budget=0` must reduce to the rigid stripe — that is the test that the
+  recurrence is right.
 - **`inkdrill/sched.py`** — deterministic priority scheduler. `Task`,
   `run`, `RunReport`. Same answer at any worker count; `workers=1` uses
   no pool. Task key is `(page, axis)` — there is no band tier, and that

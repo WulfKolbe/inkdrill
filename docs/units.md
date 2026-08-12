@@ -1635,6 +1635,43 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### A3 — the curved-gutter seam. 2026-08-12
+
+Tests A3-1 to A3-4 passed on 2026-08-12: 23 hermetic.
+`inkdrill/seam.py`. New work — `band.py`'s "seams" are band STITCHING
+and are unrelated.
+
+**Scoped to curved gutters, and the scope is the finding.** A flat
+gutter does not need this: `measure.py white` recovers a two-column
+gutter as a single white blob, 8.1 pt x 601 pt exactly, with no dynamic
+programming, because on a flat page the gutter IS a straight run of
+background. A seam earns its place only where the boundary bends and no
+straight stripe fits inside it. That is in the docstring so it is not
+re-derived, and it is asserted: on a straight gutter, `budget=0` and
+`budget=2` find the same seam at the same cost.
+
+**Coarse grid, because the pixel version is not viable.** A pure-Python
+pass over 15.5M cells scanning `2*budget+1` predecessors each
+extrapolates to ~17 s per seam. The cost grid is blocks of ink counts —
+240k cells at 8x8 — and the seam's precision requirement is "between two
+columns", tens of pixels, not one. `Seam` carries its own `block` so a
+caller cannot mix resolutions.
+
+**The convergence property is the real test.** `budget=0` must reduce to
+the rigid stripe *and* pick the column of least ink. A wrong recurrence
+still returns a path; only the degenerate case exposes it. Same shape as
+`band.stitch` being indistinguishable from one sweep at any K.
+
+Also lands the four line helpers — `approximate_line`,
+`is_horizontal_line`, `is_border_line`, `resample_line`. Two notes:
+`approximate_line` fits on whichever axis spans further, because fitting
+a near-vertical line y-on-x divides by a near-zero spread; and
+`is_border_line` is the same rule as the ink-bounded white-run filter,
+arrived at from the other direction, which is mild corroboration that
+the rule is right.
+
+Mutation: 7 mutants, 7 killed.
+
 ### `qc.py` — screen signals and the topology gate. 2026-08-12
 
 Items 1 and 2 of the audit's order. 17 hermetic tests.
