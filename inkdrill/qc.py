@@ -113,7 +113,9 @@ G3  `screen_signals` classifies nothing; it returns measurements and the
     caller applies a cut. Three channels, and no one of them separates
     all three of screen/text/photo alone
 G4  `topology_preserved` compares component AND cycle counts, exactly --
-    a transform that changes either has changed the page
+    a transform that changes either has changed the page.
+    `topology_within` is the same check at a stated tolerance, for
+    inputs where exact equality cannot hold; its `tol` has no default
 G5  an empty mask is answered, not raised: no runs, no components, and
     two empty masks are trivially topology-preserving
 """
@@ -127,7 +129,7 @@ from .raster import InkMask, iter_runs
 from .sweep import Capture, sweep
 
 __all__ = ["ScreenSignals", "runs_per_area", "px_per_run", "screen_signals",
-           "topology_preserved", "topology_of"]
+           "topology_preserved", "topology_of", "topology_within"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +236,49 @@ def topology_of(mask: InkMask, *, conn: int = 8) -> tuple[int, int]:
     res = sweep(mask, conn=conn, capture=Capture.GRAPH)
     return (len(res.components),
             sum(c.cycle_count for c in res.components))
+
+
+def topology_within(before: InkMask, after: InkMask, *, tol: float,
+                    conn: int = 8) -> bool:
+    """A TOLERANCE gate, for inputs where exact equality cannot hold.
+
+    `topology_preserved` demands exact counts, which works on rendered
+    pages -- 0% drift across thresholds 128 to 240 -- and fails on every
+    scan tried, because a scan's greys are continuous and a nudge moves
+    boundary pixels.
+
+    Measured on DocReal flatbed scans, both counts as a relative change:
+
+        baseline, same page at threshold +/-2    median 6.0%, MAX 11.9%
+        floor, distorted page with no dewarp     median 95.6%, max 1158%
+
+    **16x apart**, so a tolerance separates them where equality cannot.
+
+    `tol` has no default, deliberately. It is the whole content of the
+    gate, it must be justified against the WORST page rather than the
+    median -- 11.9% against 6.0% on that sample, and half the pages
+    violate the median -- and it must be declared before a dewarp result
+    is seen or it gets fitted to one.
+
+    Caveat, and it may shrink these numbers: those figures come from
+    binarising at 128, which is NOT in the histogram valley. Measured,
+    DocReal's scans peak at ink ~70 and paper 255 with the valley at
+    **165-186**, so 128 sits on the ink-side shoulder where mass is
+    still falling. A gate calibrated at the valley would see less drift.
+    """
+    if tol < 0.0:
+        raise ValueError(f"tol must be non-negative, got {tol}")
+    a = topology_of(before, conn=conn)
+    b = topology_of(after, conn=conn)
+    for x, y in zip(a, b):
+        # Provably redundant: with both zero the test reads 0 > 0, which
+        # is already False. Kept for intent -- "no counts, nothing to
+        # compare" -- and recorded so a sweep does not re-raise it.
+        if x == 0 and y == 0:
+            continue
+        if abs(x - y) > tol * max(abs(x), abs(y)):
+            return False
+    return True
 
 
 def topology_preserved(before: InkMask, after: InkMask, *,

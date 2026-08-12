@@ -450,6 +450,18 @@ binarisation exists**, which is a separate unit and does not exist. The
 alternatives are rendered warps with a known field, or a gate that does
 not rest on raw counts.
 
+**The histogram answers it in one pass, and overturns my explanation.**
+DocReal's scans are **not** valley-filled: ink peaks at 68–71, paper at
+255, and the valley sits at **165–186**. I binarised at **128** — on the
+ink-side shoulder, where mass is still falling. 0.05–0.09% of samples
+lie in the 126–130 band I nudged, which on a 34 Mpx page is tens of
+thousands of pixels, quite enough to move 6% of components.
+
+So the drift below is partly an artefact of **my threshold choice**, not
+of the scans. Re-measuring at the valley is the obvious next check and
+would likely shrink it. One histogram per page explains *why*, which no
+number of sweeps does.
+
 **Re-run at ±2 — the conclusion was right about equality and wrong
 about the bench.**
 

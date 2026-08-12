@@ -8,7 +8,8 @@ and a single dark fixture cannot show that.
 import unittest
 
 from inkdrill.qc import (ScreenSignals, px_per_run, runs_per_area,
-                         screen_signals, topology_of, topology_preserved)
+                         screen_signals, topology_of, topology_preserved,
+                         topology_within)
 from inkdrill.raster import InkMask
 
 
@@ -227,6 +228,89 @@ class QC_3_TopologyGate(unittest.TestCase):
         m = InkMask(bytes(64), 8, 8)
         self.assertTrue(topology_preserved(m, m))
         self.assertEqual(topology_of(m), (0, 0))
+
+
+class QC_4_ToleranceGate(unittest.TestCase):
+    """G4's second form, for inputs where equality cannot hold."""
+
+    def _blobs(self, n, w=80, h=20):
+        buf = bytearray(w * h)
+        for i in range(n):
+            x = 2 + i * 3
+            if x < w - 1:
+                for y in range(4, 10):
+                    buf[y * w + x] = 0xFF
+        return InkMask(bytes(buf), w, h)
+
+    def test_identical_masks_pass_at_any_tolerance(self):
+        m = self._blobs(10)
+        self.assertTrue(topology_within(m, m, tol=0.0))
+
+    def test_a_small_change_passes_a_generous_tolerance(self):
+        a, b = self._blobs(20), self._blobs(19)      # 5% fewer
+        self.assertTrue(topology_within(a, b, tol=0.10))
+
+    def test_the_same_change_FAILS_a_tight_one(self):
+        a, b = self._blobs(20), self._blobs(19)
+        self.assertFalse(topology_within(a, b, tol=0.01))
+
+    def test_tol_zero_reduces_to_exact_equality(self):
+        """The convergence property: the tolerance gate must BE the
+        exact gate at zero, or it is a different check wearing the
+        same name."""
+        for n, k in ((10, 10), (10, 9), (10, 4)):
+            a, b = self._blobs(n), self._blobs(k)
+            with self.subTest(n=n, k=k):
+                self.assertEqual(topology_within(a, b, tol=0.0),
+                                 topology_preserved(a, b))
+
+    def test_the_CYCLE_channel_is_compared_too(self):
+        """Every other fixture here has zero cycles, so comparing only
+        components passed them all. A ring pair with identical component
+        counts and different hole counts is what separates them."""
+        def rings(n, w=90, h=24):
+            buf = bytearray(w * h)
+            for i in range(n):
+                ox = 2 + i * 12
+                for x in range(ox, ox + 9):
+                    buf[4 * w + x] = 0xFF
+                    buf[19 * w + x] = 0xFF
+                for y in range(4, 20):
+                    buf[y * w + ox] = 0xFF
+                    buf[y * w + ox + 8] = 0xFF
+            return InkMask(bytes(buf), w, h)
+
+        def bars(n, w=90, h=24):
+            buf = bytearray(w * h)
+            for i in range(n):
+                ox = 2 + i * 12
+                for y in range(4, 20):
+                    for x in range(ox, ox + 9):
+                        buf[y * w + x] = 0xFF
+            return InkMask(bytes(buf), w, h)
+
+        a, b = rings(6), bars(6)
+        self.assertEqual(topology_of(a)[0], topology_of(b)[0])
+        self.assertNotEqual(topology_of(a)[1], topology_of(b)[1])
+        self.assertFalse(topology_within(a, b, tol=0.10))
+
+    def test_a_negative_tolerance_raises(self):
+        m = self._blobs(4)
+        with self.assertRaises(ValueError):
+            topology_within(m, m, tol=-0.1)
+
+    def test_two_empty_masks_pass(self):
+        m = InkMask(bytes(64), 8, 8)
+        self.assertTrue(topology_within(m, m, tol=0.0))
+
+    def test_the_tolerance_is_RELATIVE_not_absolute(self):
+        """1 component of 4 is a 25% change; 1 of 40 is 2.5%. An
+        absolute gate would treat them alike and a page-size change
+        would silently retune it -- the normalisation rule again."""
+        self.assertFalse(topology_within(self._blobs(4), self._blobs(3),
+                                         tol=0.10))
+        self.assertTrue(topology_within(self._blobs(40), self._blobs(39),
+                                        tol=0.10))
 
 
 if __name__ == "__main__":
