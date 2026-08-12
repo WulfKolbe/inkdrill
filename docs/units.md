@@ -1635,6 +1635,57 @@ the node-index ranking now fails **3** tests where it previously failed
 2. A checker that cannot reach the ambiguity it exists to find is worse
 than no checker, because it reports success.
 
+### `qc.py` — screen signals and the topology gate. 2026-08-12
+
+Items 1 and 2 of the audit's order. 17 hermetic tests.
+
+**Unit 1, rebuilt on runs-per-area.** A `cycle_count` gate is blind in
+highlights: below about half tone the dots do not touch, so there is no
+mesh and no cycle, and a pale screened region reports "not a halftone".
+Reproduced here on generated lattices, and the separation holds across
+the tone range:
+
+| fixture | runs/area | px/run | cycles |
+|---|---|---|---|
+| body text | 0.0053 | 14.0 | 0 |
+| screen, highlight | 0.0469 | 1.7 | **0** |
+| screen, shadow | 0.1097 | 6.7 | 2,401 |
+| photo | 0.0013 | 380.0 | 0 |
+
+The two screens differ in cycles by 2,401 and agree on runs-per-area to
+within a factor of two. `cycles` is kept as a **second channel** and is
+not the gate.
+
+**`screen_signals` classifies nothing.** It returns the measurements and
+the caller supplies the cut, because the bands above come from
+*synthetic* lattices — a real screen is resampled and JPEG'd and its
+lattice smeared. No TAU is frozen into the module before it has been
+checked on printed pages, and the corpus has no screened material to
+check it with.
+
+**The denominator is part of the number**, and both are offered by name:
+runs-per-area over a PAGE and over one COMPONENT differ by about 8x, and
+a cut calibrated on one and applied to the other calls every letter a
+halftone.
+
+**Unit 4 shipped as written.** `topology_preserved` compares component
+and cycle counts exactly. Measured, that is tight enough to catch
+resampling damage and loose enough to ignore what does not matter: the
+same page through `png16m` and `pgmraw` passes despite 259 differing
+pixels, as does a threshold nudge.
+
+#### The text fixture was ten times too dense, in the same turn
+
+The first `textish` fixture read **0.089 runs/px** — denser than the
+screen it existed to be distinguished from, so the separation assertion
+was backwards. Rebuilt from real numbers rather than chosen: a 10 pt
+line at 400 dpi is ~56 px of leading and ~25 px of advance at ~9 runs
+per glyph, giving 9/(25x56) = 0.0064, against 0.0085 measured on real
+pages. It now reads 0.0053.
+
+That is the audit's own caution — *derive fixture dimensions from a
+measured real value* — failed one turn after it was recorded.
+
 ### S1/S2 — do the recorded numbers survive the route change? 2026-08-11
 
 **S1: yes. S2: no, and that found a defect.**

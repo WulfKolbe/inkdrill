@@ -182,6 +182,11 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   writes no files. Points come from `pHYs` or it raises. Emits measured
   stroke widths, never `\toprule`/`\midrule` — that call needs the
   table's context and belongs to the consumer.
+- **`inkdrill/qc.py`** — what a mask says about how it was made.
+  `screen_signals`, `runs_per_area`, `px_per_run`, `topology_preserved`.
+  Runs-per-area is the halftone channel because a cycle count is blind
+  in highlights; cycles is a second channel, never the gate. Classifies
+  nothing — the caller supplies the cut, since the bands are synthetic.
 - **`inkdrill/gold.py`** — pdfminer alignment. `page_transform`, `match`,
   `to_coco`. The four residual classes are the product, not the
   leftovers: only 66.9% of real assignments are 1:1. Matches on component
