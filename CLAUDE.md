@@ -410,6 +410,28 @@ looks like a logic bug in whatever you touched last.
 sweeps that cover different constructs will report different totals for the
 same file and neither is wrong.
 
+## Define every threshold in a normalised box, never in page pixels
+
+A guard whose constant is expressed in page pixels is silently retuned by
+a dpi change. DocMatcher's fold guard clamps a gradient at `0.0025` —
+but it normalises to 512x512 first, and applying that number at page
+scale is wrong by the scale ratio:
+
+| space | size | vs 512 | equivalent clamp |
+|---|---|---|---|
+| normalised box | 512 x 512 | 1.00x | 0.002500 |
+| real page @400 dpi | 3307 x 4677 | **9.13x** | **0.000274** |
+| @150 dpi | 1240 x 1754 | 3.43x | 0.000730 |
+
+A clamp 9x too loose never fires, so **the guard passes folds while
+appearing to be present** — the same failure as a filter that excludes
+the class it exists to compare against, and just as invisible.
+
+The rule: normalise to a fixed box before measuring, and **put the
+normalisation in the same function as the constant** so the two cannot
+be separated by a later edit. This applies to every angle and gradient
+threshold in the warp work, before either unit exists.
+
 ## Where the deliberate gaps are
 
 Three things are missing on purpose, each with the measurement that
