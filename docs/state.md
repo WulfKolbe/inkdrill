@@ -407,10 +407,39 @@ binarisation exists**, which is a separate unit and does not exist. The
 alternatives are rendered warps with a known field, or a gate that does
 not rest on raw counts.
 
-**One weakness in my own row, stated:** the baseline nudge was 128 → 160,
-32 levels, where the rendered-page precedent used ±2. A smaller nudge
-would be a fairer test of the gate. It would not rescue the FLOOR row,
-whose 95.6% median drift is independent of it.
+**One weakness in my own row, and the data says it is the whole
+story.** The baseline nudge was 128 → 160, 32 levels, where the
+rendered-page precedent used ±2.
+
+The proposed explanation was that the `scanned` references are
+photographs and carry illumination structure of their own. **Measured,
+they do not**: quadrant grey means on three references are
+248/245/246/252, 243/248/247/252 and 249/250/249/252 — a spread of
+**3 to 9 levels out of 255**. They are clean flatbed scans, essentially
+flat.
+
+So the baseline failure is the 32-level nudge moving anti-aliased stroke
+edges, not illumination on the reference side. **That row must be
+re-run at ±2 before the answer-key version is called blocked.** The
+FLOOR row's 95.6% drift stands regardless — that is the distorted side,
+which is photographed.
+
+**Data as found, both claims checked:** 50 originals, **200** distorted
+PNGs, exactly 4 per original, no orphans in either direction. The
+"201st file" is a non-PNG entry, not a stray variant.
+
+#### The self-referential bench can run without the original
+
+The thesis is transport versus resample, and neither path involves the
+reference: both operate on the same distorted variant at the same
+threshold, so **binarisation instability cancels**. The instability
+makes the absolute count arbitrary; it does not make the COMPARISON
+arbitrary.
+
+The measurable claim weakens accordingly — not "the count is preserved"
+but **"the ordering is stable"**: transport nearer the pre-transform
+topology than resample, at every threshold. That is what this data can
+support, and it needs a transport implementation, which does not exist.
 
 ## 7. Not measured, and load-bearing
 
