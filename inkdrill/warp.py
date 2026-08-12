@@ -39,6 +39,34 @@ the same crude phi. Separating "our warp model is accurate" from "any
 warp is safer applied to ink than to pixels" is the whole reason a
 crude phi is sufficient here, and the second is the claim.
 
+KNOWN DEFECT: `transport` hatches solid regions
+-----------------------------------------------
+Measured on real DocReal ink, 900x900 crops at the valley threshold,
+7 degree rotation:
+
+    id   source        transport       resample
+     1   (436, 180)    (408, 2238)     (337, 188)
+     3   (317, 1878)   (311, 22674)    (276, 2174)
+     6   (1640, 7239)  (1319, 36964)   (1264, 6386)
+
+**Transport loses 0 of 6**, and the cycle counts say why: it multiplies
+holes by an order of magnitude while the control tracks the source.
+
+The cause is in `transport` and not in the thesis. Each run is drawn as
+an INDEPENDENT line, so two runs that were adjacent before the rotation
+land as two 1-pixel lines that no longer touch. A solid region becomes a
+**hatched** one, and every gap between neighbouring lines is a new hole.
+
+G2 is still true and was never enough: connectivity ALONG a run is
+preserved, and connectivity BETWEEN runs is what a solid region is made
+of. The synthetic fixtures hid it because a thin ring has almost no
+adjacent runs; real text is nearly all adjacent runs.
+
+Fixing it means transporting the run as an area -- a quadrilateral
+between consecutive scan positions -- rather than as a centre line. The
+thesis is untested until then; this measurement says nothing about
+resampling and everything about this module.
+
 Guarantees
 ----------
 G1  pure -- a mask and a transform in, masks out; no file access

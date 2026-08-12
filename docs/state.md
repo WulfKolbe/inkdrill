@@ -546,7 +546,35 @@ but **"the ordering is stable"**: transport nearer the pre-transform
 topology than resample, at every threshold. That is what this data can
 support, and it needs a transport implementation, which does not exist.
 
-### S4 self-referential bench — built, thesis NOT demonstrated
+### S4 on real ink — transport loses 0/6, and it is my bug
+
+```
+id   source        transport        resample
+ 1   (436, 180)    (408, 2238)      (337, 188)
+ 3   (317, 1878)   (311, 22674)     (276, 2174)
+ 6   (1640, 7239)  (1319, 36964)    (1264, 6386)
+```
+
+**Transport multiplies holes by an order of magnitude** while the
+control tracks the source. That is a defect in `warp.transport`, not
+evidence about resampling.
+
+Each run is drawn as an **independent line**, so two runs adjacent
+before the rotation land as two 1-pixel lines that no longer touch. A
+solid region becomes hatched and every gap is a new hole. G2 —
+connectivity ALONG a run — is true and was never sufficient;
+connectivity BETWEEN runs is what a solid region is.
+
+**The synthetic fixtures hid it precisely because they were thin
+rings** — almost no adjacent runs. Real text is nearly all adjacent
+runs. So the fixture I declined to tune was also the fixture that
+concealed the bug, and only real ink exposed it.
+
+The fix is to transport a run as an AREA — a quadrilateral between
+consecutive scan positions — rather than as a centre line. Until then
+the thesis is untested.
+
+### S4 self-referential bench — synthetic fixtures do not separate
 
 `inkdrill/warp.py`: `transport` (map each run's endpoints, redraw the
 run), `resample` (the control — bilinear then threshold), `compare`, and
