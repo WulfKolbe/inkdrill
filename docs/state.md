@@ -546,6 +546,33 @@ but **"the ordering is stable"**: transport nearer the pre-transform
 topology than resample, at every threshold. That is what this data can
 support, and it needs a transport implementation, which does not exist.
 
+### S4 self-referential bench — built, thesis NOT demonstrated
+
+`inkdrill/warp.py`: `transport` (map each run's endpoints, redraw the
+run), `resample` (the control — bilinear then threshold), `compare`, and
+`corner_affine` as the crude phi. Neither path touches an undistorted
+reference, so a threshold wrong for the page is wrong for both
+identically — which is what makes it runnable where the absolute count
+is unstable.
+
+**On synthetic fixtures the two paths do not differ:**
+
+```
+1 px rings, rotated      deg 0   transported (4,4)   resampled (4,4)
+                         deg 3   transported (4,4)   resampled (4,4)
+                         deg 7   transported (4,3)   resampled (4,3)
+```
+
+Where topology is lost at 7 degrees, **both lose the same hole** — to
+the page edge, not to sampling. So the ordering claim is untested and
+the machinery ships with the question open.
+
+A fixture could be shaped until it showed a difference. That would be
+choosing the answer, which is the failure this project has now found six
+times, so it was not done. **The real bench is DocReal at a valley
+threshold**, where the ink is real and thin strokes are not a fixture
+parameter.
+
 ## 7. Not measured, and load-bearing
 
 - maths-symbol classification (§5)

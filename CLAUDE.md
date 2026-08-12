@@ -193,6 +193,10 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   Runs-per-area is the halftone channel because a cycle count is blind
   in highlights; cycles is a second channel, never the gate. Classifies
   nothing — the caller supplies the cut, since the bands are synthetic.
+- **`inkdrill/warp.py`** — transport against resample, on one input.
+  `transport`, `resample`, `compare`, `corner_affine`. Built; the
+  thesis is NOT demonstrated on synthetic fixtures, which agree at
+  every angle tried. Do not tune the fixture until it separates them.
 - **`inkdrill/gold.py`** — pdfminer alignment. `page_transform`, `match`,
   `to_coco`. The four residual classes are the product, not the
   leftovers: only 66.9% of real assignments are 1:1. Matches on component
