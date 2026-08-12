@@ -546,7 +546,32 @@ but **"the ordering is stable"**: transport nearer the pre-transform
 topology than resample, at every threshold. That is what this data can
 support, and it needs a transport implementation, which does not exist.
 
-### S4 on real ink — transport loses 0/6, and it is my bug
+### S4 on real ink — the hatching is fixed, the result is mixed
+
+`transport` now moves a run as its pixel AREA — the quadrilateral
+`[lo, hi+1) x [line, line+1)` mapped and scanline-filled — so
+neighbouring runs still touch after the map. Re-run on the same crops:
+
+```
+       source        transport (was)        transport (now)   resample
+  1   (436, 180)     (408, 2238)            (401, 213)        (337, 188)
+  3   (317, 1878)    (311, 22674)           (308, 2532)       (276, 2174)
+```
+
+Cycles fall from 22,674 to 2,532 — the hatching is gone.
+
+**The result is now genuinely mixed, 1 of 3.** And the pattern is
+consistent across all three: **transport preserves COMPONENTS better,
+resample preserves CYCLES better.** 401 against 337 for a source of 436;
+213 against 188 for a source of 180.
+
+`transport_is_nearer` takes the max of both drifts, so cycles decide it.
+Whether that is the right summary is now the open question, and it is a
+better question than the one this started with — the thesis is not
+simply true or false, it is **channel-dependent**, and which channel
+matters depends on what the dewarp feeds.
+
+### S4 on real ink — the earlier run, transport lost 0/6 to a bug
 
 ```
 id   source        transport        resample

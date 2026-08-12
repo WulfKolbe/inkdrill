@@ -384,6 +384,20 @@ and none watched the geometry that came out. Assert the output exactly
 somewhere, or a whole class of behaviour is untested no matter how many
 tests exist.
 
+**A guarantee can be true and still not imply what it was written to
+imply.** `warp.transport`'s G2 promised connectivity ALONG a run and
+delivered it — and a solid region is made of connectivity BETWEEN runs,
+so real ink came back hatched with ten times the holes. Not an unguarded
+guarantee and not a degenerate fixture: a guarantee that holds and does
+not cover the claim it exists for. When writing one, state the property
+the THESIS needs, then check the wording covers it.
+
+**Use real data as the fixture, not just as the check.** Thin synthetic
+rings hid the hatching because they have almost no adjacent runs, and a
+synthetic table grid classified every `B` on a real page as a table
+because a grid has no letters in it. Refusing to tune a fixture is
+right; starting from real ink is stronger, and would have caught both.
+
 **A survivor is a lead, not a finding.** Confirm each by hand before
 writing a test. There are three ways a mutant survives without indicating a
 gap:

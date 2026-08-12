@@ -39,7 +39,7 @@ the same crude phi. Separating "our warp model is accurate" from "any
 warp is safer applied to ink than to pixels" is the whole reason a
 crude phi is sufficient here, and the second is the claim.
 
-KNOWN DEFECT: `transport` hatches solid regions
+FIXED: `transport` used to hatch solid regions
 -----------------------------------------------
 Measured on real DocReal ink, 900x900 crops at the valley threshold,
 7 degree rotation:
@@ -62,17 +62,18 @@ preserved, and connectivity BETWEEN runs is what a solid region is made
 of. The synthetic fixtures hid it because a thin ring has almost no
 adjacent runs; real text is nearly all adjacent runs.
 
-Fixing it means transporting the run as an area -- a quadrilateral
-between consecutive scan positions -- rather than as a centre line. The
-thesis is untested until then; this measurement says nothing about
-resampling and everything about this module.
+The fix is here: a run is transported as its pixel AREA -- the
+quadrilateral `[lo, hi+1) x [line, line+1)` mapped and scanline-filled
+-- rather than as a centre line. Neighbouring runs then still touch
+after the map.
 
 Guarantees
 ----------
 G1  pure -- a mask and a transform in, masks out; no file access
-G2  `transport` moves runs, so a run of length n maps to a drawn line
-    and never to n independent samples; connectivity along a run cannot
-    be lost to sampling
+G2  `transport` moves each run as an AREA, so connectivity BETWEEN
+    adjacent runs survives the map as well as connectivity along one.
+    The weaker form -- along a run only -- was true, insufficient, and
+    the reason solid regions came back hatched
 G3  `resample` is the control and is deliberately the naive thing a
     resampling pipeline does -- sample the source, then threshold
 G4  both paths receive the SAME transform and the same output extent,
@@ -127,26 +128,33 @@ def _apply(m, x, y):
     return (a * x + b * y + e, c * x + d * y + f)
 
 
-def _draw(buf, w, h, x0, y0, x1, y1):
-    """Bresenham-ish line, so a transported run stays connected (G2)."""
-    x0i, y0i, x1i, y1i = round(x0), round(y0), round(x1), round(y1)
-    dx = abs(x1i - x0i)
-    dy = abs(y1i - y0i)
-    sx = 1 if x0i < x1i else -1
-    sy = 1 if y0i < y1i else -1
-    err = dx - dy
-    while True:
-        if 0 <= x0i < w and 0 <= y0i < h:
-            buf[y0i * w + x0i] = INK
-        if x0i == x1i and y0i == y1i:
-            return
-        e2 = 2 * err
-        if e2 > -dy:
-            err -= dy
-            x0i += sx
-        if e2 < dx:
-            err += dx
-            y0i += sy
+def _fill_quad(buf, w, h, pts):
+    """Scanline-fill a convex quadrilateral (G2).
+
+    A run is an AREA -- the pixels `[lo, hi+1) x [line, line+1)` -- and
+    transporting it as a centre line is what hatched solid regions and
+    multiplied holes by an order of magnitude on real ink. Filling the
+    mapped quadrilateral keeps neighbouring runs touching, which is
+    what a solid region is made of.
+    """
+    ys = [p[1] for p in pts]
+    y0 = max(0, int(min(ys)))
+    y1 = min(h - 1, int(max(ys)) + 1)
+    n = len(pts)
+    for y in range(y0, y1 + 1):
+        yc = y + 0.5
+        xs = []
+        for i in range(n):
+            (ax, ay), (bx, by) = pts[i], pts[(i + 1) % n]
+            if (ay <= yc < by) or (by <= yc < ay):
+                xs.append(ax + (yc - ay) * (bx - ax) / (by - ay))
+        if len(xs) < 2:
+            continue
+        lo, hi = min(xs), max(xs)
+        a = max(0, int(lo + 0.5))
+        b = min(w, int(hi + 0.5))
+        if b > a:
+            buf[y * w + a:y * w + b] = b"\xff" * (b - a)
 
 
 def transport(mask: InkMask, m, *, width=None, height=None,
@@ -161,13 +169,15 @@ def transport(mask: InkMask, m, *, width=None, height=None,
     h = mask.height if height is None else height
     buf = bytearray(w * h)
     for r in iter_runs(mask, axis):
+        # The run's PIXEL AREA, not its centre line: a row run covers
+        # [lo, hi+1) x [line, line+1).
         if axis == "row":
-            p0, p1 = (r.lo, r.line), (r.hi, r.line)
+            box = ((r.lo, r.line), (r.hi + 1, r.line),
+                   (r.hi + 1, r.line + 1), (r.lo, r.line + 1))
         else:
-            p0, p1 = (r.line, r.lo), (r.line, r.hi)
-        a = _apply(m, p0[0], p0[1])
-        b = _apply(m, p1[0], p1[1])
-        _draw(buf, w, h, a[0], a[1], b[0], b[1])
+            box = ((r.line, r.lo), (r.line + 1, r.lo),
+                   (r.line + 1, r.hi + 1), (r.line, r.hi + 1))
+        _fill_quad(buf, w, h, [_apply(m, x, y) for x, y in box])
     return InkMask(bytes(buf), w, h)
 
 
