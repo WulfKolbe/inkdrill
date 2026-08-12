@@ -450,9 +450,35 @@ binarisation exists**, which is a separate unit and does not exist. The
 alternatives are rendered warps with a known field, or a gate that does
 not rest on raw counts.
 
-**One weakness in my own row, and the data says it is the whole
-story.** The baseline nudge was 128 → 160, 32 levels, where the
-rendered-page precedent used ±2.
+**Re-run at ±2 — the conclusion was right about equality and wrong
+about the bench.**
+
+```
+BASELINE at +/-2: exact agreement 0/8
+  component-count drift: median 6.04%, max 11.89%
+FLOOR (distorted, no dewarp):
+  component-count drift: median 95.6%, max 1158%
+```
+
+Exact equality still fails on every page, so `topology_preserved` as
+written cannot gate this input — that part of the original conclusion
+stands, and it is not the nudge's fault.
+
+**But baseline noise and floor drift are 16x apart**, 6% against 95.6%,
+and that is the finding the 32-level nudge hid. A gate on *equality*
+cannot run here; a gate on a **tolerance** has an order of magnitude of
+headroom. So "the bench cannot ask the question" was too strong: it
+cannot ask it with an exact-match instrument, and the instrument is the
+part that has to change.
+
+Two pages are nearly stable across ±2 — id 2 reads 1092/1095/1094 and
+id 5 reads 262/262/262 — while id 1 moves 1902 → 1598. **The
+instability is per-page, not uniform**, so any tolerance must be
+justified against the worst page rather than the median, and 11.89% is
+that number for this sample.
+
+**The original weakness, for the record.** The baseline nudge was
+128 → 160, 32 levels, where the rendered-page precedent used ±2.
 
 The proposed explanation was that the `scanned` references are
 photographs and carry illumination structure of their own. **Measured,
