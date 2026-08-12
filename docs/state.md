@@ -379,6 +379,39 @@ sentence. What it does still need, and what is NOT settled here:
   produces. If it does not, the alignment problem has been traded for a
   different one rather than removed.
 
+### S4 — the DocReal bench cannot run as specified
+
+Rows 1 and 2 only; no warp model was involved and none was needed.
+Selection fixed before any result: first 8 originals by numeric id.
+
+```
+BASELINE  same original, threshold 128 vs 160 agree:  0/8
+FLOOR     distorted vs original, no dewarp:           0/8
+          component-count drift: median 95.6%, max 1158%
+```
+
+**The baseline fails, so the bench measures binarisation and not
+transport.** The same page at two thresholds gives (1758, 391) against
+(1016, 555) — the topology gate is not stable on these inputs at all,
+and a transport-versus-resample comparison run on top of it would be
+comparing noise.
+
+The cause is the input class, not the gate. `topology_preserved` is
+stable on RENDERED pages — 910/1011 across the `png16m` and `pgmraw`
+routes despite 259 differing pixels. DocReal is **photographs of
+paper**: uneven illumination, so a single global threshold moves
+component counts by a factor of two.
+
+**Consequence: A6/A7 cannot be validated on DocReal until a local
+binarisation exists**, which is a separate unit and does not exist. The
+alternatives are rendered warps with a known field, or a gate that does
+not rest on raw counts.
+
+**One weakness in my own row, stated:** the baseline nudge was 128 → 160,
+32 levels, where the rendered-page precedent used ±2. A smaller nudge
+would be a fairer test of the gate. It would not rescue the FLOOR row,
+whose 95.6% median drift is independent of it.
+
 ## 7. Not measured, and load-bearing
 
 - maths-symbol classification (§5)
