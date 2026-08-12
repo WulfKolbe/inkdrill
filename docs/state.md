@@ -345,6 +345,40 @@ so a one-pixel shift can cross the tolerance and move every span past
 it. Topology and the authored geometry are unaffected. Pinned by
 `T11_3`; the invariance boundary is unmeasured.
 
+### Unit 12 coordination — inkdrill must NOT write `.lg`
+
+The proposed deliverable was "both sides emit and consume the same `.lg`
+representation, through `mathgold.slt.slt_to_lg`". `mathgold` is pure
+stdlib, so importing it breaks no dependency rule — but it lives in
+**pdfdrill's `src/`**, and inkdrill is standalone: no installer, no
+build step, no sibling repo on the path.
+
+The three options, and only one is good:
+
+| | |
+|---|---|
+| inkdrill imports pdfdrill's `src/` | cross-repo coupling; breaks standalone |
+| vendor `mathgold` into inkdrill | **two writers** — the exact trap this was meant to avoid |
+| **inkdrill never writes `.lg`** | one writer, no coupling |
+
+**inkdrill emits relations as `ink.*` additive keys in `lines.json`;
+pdfdrill is the only `.lg` writer.** That preserves the one-writer
+property *better* than the original proposal, because inkdrill then has
+no `.lg` code path that could drift at all — and it needs no new
+interface, since `lines.json` with namespaced additive keys is the
+contract already agreed for tables and rules.
+
+Unblocking Unit 12 therefore needs no coordination artefact beyond that
+sentence. What it does still need, and what is NOT settled here:
+
+- **Infty's licence**, checked directly rather than through the AGPL
+  wrapper that fetches it. The dataset is not on this machine (only
+  InftyReader, a different and commercial product), so this is
+  unanswered.
+- **Whether Infty's segmentation convention matches** what `relate.py`
+  produces. If it does not, the alignment problem has been traded for a
+  different one rather than removed.
+
 ## 7. Not measured, and load-bearing
 
 - maths-symbol classification (§5)
