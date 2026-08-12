@@ -457,10 +457,34 @@ ink-side shoulder, where mass is still falling. 0.05–0.09% of samples
 lie in the 126–130 band I nudged, which on a 34 Mpx page is tens of
 thousands of pixels, quite enough to move 6% of components.
 
-So the drift below is partly an artefact of **my threshold choice**, not
-of the scans. Re-measuring at the valley is the obvious next check and
-would likely shrink it. One histogram per page explains *why*, which no
-number of sweeps does.
+So the drift was mostly an artefact of **my threshold choice**, not of
+the scans — and re-measuring at the valley confirms it:
+
+| binarised at | exact | component drift median | max |
+|---|---|---|---|
+| 128, the ink-side shoulder | 0/8 | 6.04% | 11.89% |
+| **175, the valley** | 1/8 | **0.38%** | **1.19%** |
+| floor: distorted, no dewarp | 0/8 | 95.6% | 1158% |
+
+**Ten times better, and the headroom against the floor goes from 8x to
+80x.** A tolerance of 2% sits clear above the worst baseline page
+(1.19%) and two orders below the floor, so `topology_within(tol=0.02)`
+separates them on this sample where `topology_preserved` cannot —
+exact agreement is still only 1/8.
+
+**The answer-key bench is therefore available**, and local binarisation
+is needed only for the distorted side. That is the opposite of the
+conclusion drawn from the shoulder measurement, and the difference was
+one badly chosen threshold.
+
+One caveat that survives the good result: **the valley position varies
+by page** — 165, 186 and 181 across three samples — so a global 175 is
+itself a compromise and part of the 0.38% is 175 happening to suit these
+eight. The honest form is a per-page valley, which is most of the way to
+the local binarisation the floor row needs anyway.
+
+One histogram per page found this; twenty-four sweeps only counted
+failures.
 
 **Re-run at ±2 — the conclusion was right about equality and wrong
 about the bench.**
