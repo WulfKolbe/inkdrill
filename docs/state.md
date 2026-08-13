@@ -626,6 +626,95 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### S1 — merging lifts the white-run route to 8/14, still not enough
+
+The fragmentation was the whole result, so the hypothesis was that it
+is a GROUPING problem: seven fragments of one figure are adjacent gap
+blobs that should have merged. `_merge_boxes` unions boxes whose
+rectangles touch within a tolerance, to a fixed point, **before** the
+size filter — dropping sub-`min_block` pieces first would discard
+exactly the fragments that need joining.
+
+**The first run looked like a clean refutation and was an ordering
+bug.** 285 boxes collapsed to 12 at a tolerance of *one pixel*, and all
+14 figures came back `missed`. The cause: the page-spanning block was
+excluded *after* merging, and it touches every other box, so it
+swallowed the page. Excluding it before merging fixed it. A refuted
+hypothesis and an order-of-operations bug read identically from the
+output.
+
+| `merge_tol` | matched | fragmented | missed | spurious |
+|---|---|---|---|---|
+| 0 (baseline) | 6 | 7 | 1 | 0 |
+| **4 – 30** | **8** | **5** | 1 | 3 |
+| 60 | 8 | 5 | 1 | 5 |
+| 120 | 9 | 4 | 1 | 8 |
+
+Stable across 4–30 px, which is an invariance rather than a tuned
+value. But it lifted **2 of 7** fragmented cases, not the half the
+acceptance criterion asked for, and it introduced 3 spurious blocks
+while the worst matched side error rose from 195 px to 681 px. Beyond
+30 px, matched climbs 8 → 9 while spurious climbs 3 → 8: no clean
+operating point.
+
+**Decision unchanged: NOT wired into `page_lines`.** 8 of 14 with 5
+still fragmented would emit multiple lines per figure plus three
+objects that are not there.
+
+### S2 — F2 is not a filtering problem, it is `nest()`
+
+Re-measured on comparable pages after F1 and the containment change:
+
+| page | `load_mask` | `nest` | `page_lines` | lines |
+|---|---|---|---|---|
+| Heim scan p229 | 1.24 s | 21.19 s | **21.80 s** | 0 |
+| Infineon p7 (figures) | 10.74 s | 18.12 s | **18.02 s** | 99 |
+| Infineon p19 (table) | 7.83 s | 17.69 s | **17.93 s** | 53 |
+| 1408.0838 p8 | 8.35 s | 17.96 s | **17.72 s** | 3 |
+
+It fell from 31.7 s to ~18–22 s, so removing the spurious lines helped.
+But **`page_lines` ≈ `nest()` + 0.6 s** — 97% of it is `nest`, which is
+the already-recorded defect: `nest()` is 15.0x slower than the two
+sweeps it is equivalent to, because it flood-fills per pixel.
+
+**F2 does not close, and no amount of further filtering will close it.**
+The remaining cost is one known defect with a known, measured-equivalent
+replacement. That is its own piece of work on a core unit, not a
+continuation of this one.
+
+### S3 — the grey-histogram route rule is NOT supported
+
+The proposal was that the routes are equivalent on bimodal pages and
+not on tonal ones, so the grey histogram says which. Measured, at each
+page's own threshold:
+
+| page | distinct greys | mass within ±8 of threshold | diff / 1e6 |
+|---|---|---|---|
+| e12s39 p1 | **2** | **0.0** | **16.7** |
+| 1408.0838 p8 | 4 | 123.7 | **0.0** |
+| 1408.0838 p13 | 6 | 68.0 | 1265.6 |
+| 1809.09528 p6 | 3 | 0.0 | 0.0 |
+| 1809.09528 p9 | 2 | 0.0 | 0.0 |
+
+Neither statistic predicts the disagreement. **e12s39 p1 is the
+counterexample: 2 distinct greys, zero mass anywhere near the
+threshold, and 259 samples still differ** — which directly contradicts
+"on bimodal ink there is nothing to convert and the routes are
+bit-identical". And p8 has the most mass near the threshold of any page
+here and disagrees on nothing.
+
+The reason the histogram cannot predict it: **`png16m` and `pgmraw` are
+two independent Ghostscript renders, not two conversions of one
+buffer.** Colour reduction is one contributor; device-level rasterisation
+and anti-aliasing is another, and on bimodal line art it is the only
+one left. A histogram of one render says nothing about how the other
+render drew its edges.
+
+So the rule is **not** put in the contract. The non-claim stands as it
+was: the routes are not interchangeable, and `1408.0838` p13 is the
+named page. Three of five pages here do agree exactly, so a cheap
+predictor may well exist — it is not this one.
+
 ### F4 re-measured — the amplification is closed, by F1's cell floor
 
 Found by re-running the opt-in corpus suite after a crashed session:

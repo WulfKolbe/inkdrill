@@ -1429,6 +1429,97 @@ def _alphabet_one(font, fname, pop, px_em):
                       + "".join(sorted(d[key])))
 
 
+_PAGE_RE = re.compile(r"p(?:age-)?0*(\d+)\Z")
+
+
+def page_number(path):
+    """The page number a rendered-page filename encodes, or None.
+
+    Ten lines because lexicographic order produced a WRONG CONCLUSION
+    twice in one day: `sorted(pages)[18]` is not page 19, and
+    `sorted(glob)[:4]` on a corpus directory returned
+    `p13, p3, p8, page-0003` -- two naming schemes and a partial page
+    set. Both read as a real finding until the mapping was checked.
+    """
+    m = _PAGE_RE.fullmatch(path.stem)
+    return int(m.group(1)) if m else None
+
+
+def pages_by_number(directory):
+    """`{page number: path}` for a directory of rendered pages.
+
+    A dict rather than a list: the corpus holds PARTIAL page sets, so
+    position in a sorted list is not the page number even after sorting
+    numerically. Keying by the number makes that impossible to confuse,
+    and a caller wanting order takes `sorted(d)`.
+    """
+    out = {}
+    for p in sorted(pathlib.Path(directory).glob("*.png")):
+        n = page_number(p)
+        if n is not None:
+            out.setdefault(n, p)
+    return out
+
+
+def _merge_boxes(boxes, tol):
+    """Union boxes whose bounding rectangles touch or overlap within
+    `tol` pixels, to a fixed point.
+
+    S1's hypothesis: seven of fourteen figures came back `fragmented`,
+    and a fragment is an adjacent gap blob that should have been one
+    object. If that is right this is a GROUPING fix and detection was
+    never the problem.
+
+    Merging runs BEFORE the size filter, deliberately. Dropping
+    sub-`min_block` pieces first would discard exactly the fragments
+    that need joining -- the same shape as a filter that excludes the
+    class it exists to compare against.
+    """
+    if tol < 0:
+        raise ValueError(f"tol must be non-negative, got {tol}")
+    cur = list(boxes)
+    while True:
+        parent = list(range(len(cur)))
+
+        def find(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        # Sorted by x0 so the inner loop can stop: once a candidate
+        # starts beyond this box's right edge plus the tolerance, no
+        # later one can touch it either.
+        order = sorted(range(len(cur)), key=lambda i: cur[i][0])
+        merged = False
+        for a in range(len(order)):
+            ia = order[a]
+            for b in range(a + 1, len(order)):
+                ib = order[b]
+                if cur[ib][0] > cur[ia][2] + tol:
+                    break
+                if (cur[ia][0] - tol <= cur[ib][2]
+                        and cur[ib][0] - tol <= cur[ia][2]
+                        and cur[ia][1] - tol <= cur[ib][3]
+                        and cur[ib][1] - tol <= cur[ia][3]):
+                    ra, rb = find(ia), find(ib)
+                    if ra != rb:
+                        parent[ra] = rb
+                        merged = True
+        if not merged:
+            return cur
+        groups = {}
+        for i in range(len(cur)):
+            r = find(i)
+            if r in groups:
+                g = groups[r]
+                groups[r] = (min(g[0], cur[i][0]), min(g[1], cur[i][1]),
+                             max(g[2], cur[i][2]), max(g[3], cur[i][3]))
+            else:
+                groups[r] = cur[i]
+        cur = list(groups.values())
+
+
 def _classify_blocks(truth, blocks, iou):
     """Assign content blocks to labelled figures, 1:1, and name the
     residual. Returns `(Counter, [side errors])`.
@@ -1475,7 +1566,7 @@ def _classify_blocks(truth, blocks, iou):
 
 
 def m_blocks(root, n, rng, doc=None, min_len=60, min_block=200,
-             iou=0.5):
+             iou=0.5, merge_tol=0):
     """U11 premise: do the page's GAPS recover a figure the ink route
     cannot see?
 
@@ -1580,13 +1671,26 @@ def m_blocks(root, n, rng, doc=None, min_len=60, min_block=200,
         # relearning -- a class that cannot occur is not evidence that
         # it did not.
         page_area = mask.width * mask.height
-        blocks = [(c.x0, c.y0, c.x1 + 1, c.y1 + 1) for c in mo.values()
-                  if c.width >= min_block and c.height >= min_block
-                  and c.width * c.height < 0.8 * page_area]
+        # The page-spanning block is dropped BEFORE merging, not after.
+        # It touches every other box, so merging with it in the list
+        # swallows the whole page into one blob -- 13 boxes became 1 at
+        # a tolerance of ONE pixel. Order of operations, not a refuted
+        # hypothesis, and it read exactly like a refuted hypothesis.
+        raw = [(c.x0, c.y0, c.x1 + 1, c.y1 + 1) for c in mo.values()
+               if c.width >= min_block // 4 and c.height >= min_block // 4
+               and c.width * c.height < 0.8 * page_area]
+        if merge_tol:
+            raw = _merge_boxes(raw, merge_tol)
+        blocks = [b for b in raw
+                  if b[2] - b[0] >= min_block and b[3] - b[1] >= min_block
+                  and (b[2] - b[0]) * (b[3] - b[1]) < 0.8 * page_area]
+        tot["pre_merge"] += len(raw)
         counts, e = _classify_blocks(truth, blocks, iou)
         tot.update(counts)
         errs.extend(e)
         tot["blocks"] += len(blocks)
+    print(f"  merge_tol {merge_tol} px: {tot['pre_merge']} boxes before the "
+          f"size filter")
     print(f"  {tot['blocks']} blocks over {min_block} px against "
           f"{sum(tot[k] for k in ('matched', 'merged', 'split', 'fragmented', 'missed'))} "
           f"labelled figures")
@@ -3481,6 +3585,11 @@ def main():
                     choices=("bbox", "area"),
                     help="boxes only: how a hole's size is measured. "
                          "Changes the count by 2x -- see units.md.")
+    ap.add_argument("--merge-tol", type=int, default=0,
+                    help="blocks only: union content blocks whose boxes "
+                         "touch within this many px, BEFORE the size "
+                         "filter. 0 is off, which is the measured "
+                         "baseline.")
     ap.add_argument("--iou", type=float, default=0.5,
                     help="blocks only: overlap a block must reach to "
                          "count as covering a figure.")
@@ -3528,7 +3637,8 @@ def main():
         elif name == "blocks":
             fn(root, args.n or default_n, random.Random(args.seed),
                doc=args.doc, min_len=args.min_len,
-               min_block=args.min_block, iou=args.iou)
+               min_block=args.min_block, iou=args.iou,
+               merge_tol=args.merge_tol)
         elif name == "separability":
             fn(root, args.n or default_n, random.Random(args.seed),
                doc=args.doc)

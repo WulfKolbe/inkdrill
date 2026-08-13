@@ -328,6 +328,32 @@ nothing inside it, so it cannot test a rule about what a figure
 contains. The fixture must hold both classes the rule separates, or it
 cannot fail.
 
+**A filter holding a guarantee is not a guarantee.** F4's shape, and
+distinct from the three families above: the emitted `lines.json` was
+route-invariant, and it held only because F1's cell floor had removed
+the population that was unstable. Sweep the floor and the guarantee
+un-holds:
+
+| `cell_scale` | lines | differing between routes |
+|---|---|---|
+| 0.0 | 761 | **254** |
+| 1.0 | 166 | 1 |
+| 3.0 (default) | 81 | **0** |
+
+Nothing in the chain became more robust. Widen the filter and the
+defect returns, so the property is of what is currently emitted rather
+than of the code. When a guarantee starts holding after an unrelated
+change, find which filter is carrying it before recording it — and
+record the filter beside it.
+
+**Every classifier test asserts each class FIRES at least once.** Five
+defects now share the shape "a class that could not occur": the tables
+size filter that excluded booktabs, U13's `count >= 12`, the block
+classifier that counted any overlap as coverage, and the page-spanning
+block that made `missed` unreachable. A zero in a class that cannot be
+non-zero is not evidence. Assert every branch of a classification with
+a fixture that reaches it.
+
 **Mutate the ENTRY function, not the inner one.** If the inner
 function's branches die and the entry function's survive, the tests are
 one level too deep — the same tool answering a different question, and

@@ -281,3 +281,68 @@ class TC_4_BlockAssignment(unittest.TestCase):
     def test_iou_is_zero_for_disjoint_and_one_for_identical(self):
         self.assertEqual(measure._iou((0, 0, 10, 10), (20, 20, 30, 30)), 0.0)
         self.assertEqual(measure._iou((0, 0, 10, 10), (0, 0, 10, 10)), 1.0)
+
+
+class TC_5_PageNumbers(unittest.TestCase):
+    """Lexicographic glob order produced a wrong conclusion twice in
+    one day. This is the ten lines that stop it."""
+
+    def test_page_19_is_not_index_18(self):
+        """`sorted(pages)[18]` was read as page 19 and is not. The
+        corpus sorts p1, p10, p11, ... so position and page number
+        diverge from the tenth page on."""
+        names = [pathlib.Path(f"p{i}.png") for i in range(1, 25)]
+        lexical = sorted(names, key=lambda p: p.name)
+        self.assertNotEqual(measure.page_number(lexical[18]), 19)
+        self.assertEqual(measure.page_number(pathlib.Path("p19.png")), 19)
+
+    def test_both_naming_schemes_are_read(self):
+        self.assertEqual(measure.page_number(pathlib.Path("page-0007.png")), 7)
+        self.assertEqual(measure.page_number(pathlib.Path("p7.png")), 7)
+
+    def test_a_name_that_is_not_a_page_returns_None(self):
+        """Absent, not zero. A zero would key a real entry in the map."""
+        self.assertIsNone(measure.page_number(pathlib.Path("compare.png")))
+        self.assertIsNone(measure.page_number(pathlib.Path("p12b.png")))
+
+
+class TC_6_MergeBoxes(unittest.TestCase):
+    """S1's grouping fix. Every outcome is asserted to FIRE -- the
+    standing rule after two 'a class that could not occur' defects."""
+
+    def test_boxes_that_touch_are_unioned(self):
+        got = measure._merge_boxes([(0, 0, 10, 10), (10, 0, 20, 10)], 1)
+        self.assertEqual(got, [(0, 0, 20, 10)])
+
+    def test_boxes_beyond_the_tolerance_are_LEFT_ALONE(self):
+        """The other answer. A merge that unioned everything would pass
+        the test above, and that is exactly what happened on p10 -- 13
+        boxes became 1 at a tolerance of one pixel."""
+        got = measure._merge_boxes([(0, 0, 10, 10), (50, 0, 60, 10)], 1)
+        self.assertEqual(sorted(got), [(0, 0, 10, 10), (50, 0, 60, 10)])
+
+    def test_merging_is_TRANSITIVE_to_a_fixed_point(self):
+        """A chain must close in one call. Three boxes where only the
+        neighbours touch is the case a single pass gets wrong."""
+        got = measure._merge_boxes(
+            [(0, 0, 10, 10), (10, 0, 20, 10), (20, 0, 30, 10)], 1)
+        self.assertEqual(got, [(0, 0, 30, 10)])
+
+    def test_the_x_sorted_early_exit_does_not_miss_a_pair(self):
+        """The inner loop breaks once a candidate starts beyond this
+        box's right edge. A box that is wide and early must still reach
+        one that starts late and overlaps it."""
+        got = measure._merge_boxes(
+            [(0, 0, 100, 10), (5, 0, 15, 10), (90, 0, 110, 10)], 0.0)
+        self.assertEqual(got, [(0, 0, 110, 10)])
+
+    def test_a_negative_tolerance_is_refused(self):
+        with self.assertRaises(ValueError):
+            measure._merge_boxes([(0, 0, 1, 1)], -1)
+
+    def test_a_zero_tolerance_still_merges_overlapping_boxes(self):
+        """The accepting side of the refusal above, so the guard cannot
+        be made unconditional."""
+        self.assertEqual(measure._merge_boxes([(0, 0, 10, 10),
+                                               (5, 5, 15, 15)], 0),
+                         [(0, 0, 15, 15)])
