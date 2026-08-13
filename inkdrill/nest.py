@@ -95,6 +95,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from bisect import bisect_right
+from collections import defaultdict
+
 from .raster import BG, INK, InkMask, Rect
 from .sweep import Capture, sweep
 
@@ -218,6 +221,77 @@ class Nesting:
         return True
 
 
+def _regions_via_sweeps(padded: InkMask):
+    """Regions, extents and parents from TWO SWEEPS instead of a
+    per-pixel flood fill.
+
+    `_label` is retained below as the reference implementation and the
+    tests hold the two to byte-identical output. This is the fast path
+    and it is not a different algorithm -- the ink components of
+    `sweep(m, conn=8)` and the background components of
+    `sweep(m.inverted(), conn=4)` are the same partition the flood fill
+    produces, because the connectivity pair is the same.
+
+    Two things have to be reproduced exactly rather than merely
+    computed, and both are about identity rather than geometry:
+
+    * **Ids are assigned in raster order of each region's first pixel**,
+      because that is what the flood fill's `for s in range(w * h)` does
+      and `Nesting.roots` is sorted by id. Sorting components by
+      (topmost line, then leftmost start) reproduces it.
+    * **The parent is the region directly above a region's topmost-
+      leftmost pixel.** The flood fill reads that from the label array;
+      here a per-line index of runs is binary-searched instead. Runs are
+      the unit this package works in -- a glyph is ~190 px and ~9 runs
+      -- so the lookup is over a far smaller set.
+    """
+    w = padded.width
+    fgres = sweep(padded, axis="row", conn=8, capture=Capture.NONE)
+    bgres = sweep(padded.inverted(), axis="row", conn=4, capture=Capture.NONE)
+
+    per_line: dict[int, list[tuple[int, int, int]]] = defaultdict(list)
+    box: dict[int, list[int]] = {}
+    area: dict[int, int] = {}
+    top: dict[int, tuple[int, int]] = {}
+
+    for res, is_ink in ((fgres, True), (bgres, False)):
+        by_id = {n.id: n for n in res.nodes}
+        for comp in res.components:
+            runs = [by_id[i] for i in comp.nodes]
+            y0 = min(r.line for r in runs)
+            x0 = min(r.lo for r in runs if r.line == y0)
+            a = 0
+            bx = [min(r.lo for r in runs), y0,
+                  max(r.hi for r in runs), max(r.line for r in runs)]
+            for r in runs:
+                a += r.hi - r.lo + 1
+                per_line[r.line].append((r.lo, r.hi, (is_ink, comp.root)))
+            box[(is_ink, comp.root)] = bx
+            area[(is_ink, comp.root)] = a
+            top[(is_ink, comp.root)] = (y0, x0)
+
+    # Raster order of the first pixel, ink before background exactly as
+    # the flood fill numbered them: all ink 0..n_fg-1, then background.
+    ink = sorted((k for k in box if k[0]), key=lambda k: top[k])
+    bg = sorted((k for k in box if not k[0]), key=lambda k: top[k])
+    ident = {k: i for i, k in enumerate(ink)}
+    ident.update({k: len(ink) + i for i, k in enumerate(bg)})
+
+    for line in per_line:
+        per_line[line].sort()
+
+    def region_at(line: int, x: int) -> int:
+        row = per_line.get(line)
+        if not row:
+            raise KeyError(f"no run covers ({line}, {x})")
+        i = bisect_right(row, (x, w, (True, -1))) - 1
+        if i < 0 or not (row[i][0] <= x <= row[i][1]):
+            raise KeyError(f"no run covers ({line}, {x})")
+        return ident[row[i][2]]
+
+    return ident, box, area, top, region_at, len(ink)
+
+
 def _label(mask: InkMask, want_ink: bool, conn: int) -> tuple[list[int], int]:
     """Flood-fill labelling over the padded grid. Returns (labels, count)
     with -1 where the pixel is not of the wanted polarity."""
@@ -269,55 +343,28 @@ def nest(mask: InkMask, *, conn: int = 8) -> Nesting:
             mask.data[src:src + mask.width]
     padded = InkMask(bytes(buf), w, h)
 
-    fg, n_fg = _label(padded, True, 8)
-    bg, n_bg = _label(padded, False, 4)
+    ident, box, area, top, region_at, n_fg = _regions_via_sweeps(padded)
 
     regions: dict[int, Region] = {}
-    # ids: ink regions 0..n_fg-1, background regions n_fg..n_fg+n_bg-1
-    def bg_id(b: int) -> int:
-        return n_fg + b
+    # Extents are shifted back to ORIGINAL (unpadded) coordinates here;
+    # the sweeps ran on the padded grid.
+    for key, rid in ident.items():
+        bx = box[key]
+        regions[rid] = Region(rid, Kind.INK if key[0] else Kind.HOLE, -1,
+                              area[key],
+                              bx[0] - 1, bx[1] - 1, bx[2] - 1, bx[3] - 1)
 
-    # extents and areas, in ORIGINAL (unpadded) coordinates
-    box: dict[int, list[int]] = {}
-    area: dict[int, int] = {}
-    top: dict[int, int] = {}          # first (topmost, then leftmost) pixel
-    for p in range(w * h):
-        f, b = fg[p], bg[p]
-        rid = f if f != -1 else bg_id(b)
-        x, y = p % w - 1, p // w - 1
-        if rid not in box:
-            box[rid] = [x, y, x, y]
-            top[rid] = p
-            area[rid] = 0
-        else:
-            bb = box[rid]
-            if x < bb[0]:
-                bb[0] = x
-            if y < bb[1]:
-                bb[1] = y
-            if x > bb[2]:
-                bb[2] = x
-            if y > bb[3]:
-                bb[3] = y
-        area[rid] += 1
+    outside = region_at(0, 0)         # the pad ring, by construction
+    regions[outside].kind = Kind.OUTSIDE
 
-    outside = bg_id(bg[0])            # the pad ring, by construction
-
-    for rid, bb in box.items():
-        kind = (Kind.INK if rid < n_fg
-                else (Kind.OUTSIDE if rid == outside else Kind.HOLE))
-        regions[rid] = Region(rid, kind, -1, area[rid], *bb)
-
-    # Parent of every region: the label directly above its topmost pixel.
-    # Exact, not heuristic -- see the module docstring.
-    for rid, r in regions.items():
+    # Parent of every region: the region directly above its topmost
+    # pixel. Exact, not heuristic -- see the module docstring.
+    for key, rid in ident.items():
         if rid == outside:
             continue
-        p = top[rid]
-        up = p - w
-        f, b = fg[up], bg[up]
-        parent = f if f != -1 else bg_id(b)
-        r.parent = parent
+        y0, x0 = top[key]
+        parent = region_at(y0 - 1, x0)
+        regions[rid].parent = parent
         regions[parent].children.append(rid)
 
     # Depth: alternates from every top-level ink component.

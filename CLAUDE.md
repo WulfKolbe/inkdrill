@@ -508,13 +508,23 @@ decided it. Do not "fix" them without re-taking that measurement.
 - **U8's band tier and shared memory.** Measured into the ground;
   conditional on decode continuing to dominate.
 
-One known performance defect is recorded rather than fixed: **`nest()`
-is 15.0x slower than the two sweeps it is equivalent to** (19.70 s vs
-1.31 s on a 3400x4400 page, byte-identical output — 3,390 ink regions,
-1,190 holes). It flood-fills per pixel and accumulates extents in a
-per-pixel Python loop, the same run-discipline violation as
-`classify.normalise`. `measure.py boxes` uses the two-sweep form
-directly, so the cost is avoided where it was measured.
+**`nest()`'s per-pixel flood fill is FIXED** (was: 15x slower than the
+two sweeps it is equivalent to). It now labels via `sweep(m, conn=8)`
+and `sweep(m.inverted(), conn=4)`, with the parent lookup done by
+binary search over a per-line run index instead of a label array:
+
+| page | before | after | |
+|---|---|---|---|
+| Heim scan p229 | 21.83 s | 0.80 s | **27.3x** |
+| Infineon p19 | 18.23 s | 0.61 s | **29.9x** |
+| 1408.0838 p8 | 18.20 s | 1.70 s | **10.7x** |
+
+Output is **byte-identical**, ids included — region ids are assigned in
+raster order of each region's first pixel precisely so the replacement
+is an equality rather than an isomorphism. `_label` is retained as the
+reference oracle and is exercised only by
+`T6_8_TwoSweepsEqualTheFloodFill`; do not delete it because it looks
+unused.
 
 One known correctness defect is pinned rather than fixed: `group()` absorbs a display
 big operator's limits into the operator. The obvious remedy does not

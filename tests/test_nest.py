@@ -3,7 +3,8 @@
 import random
 import unittest
 
-from inkdrill.nest import InvalidConnectivity, Kind, nest
+from inkdrill.nest import (InvalidConnectivity, Kind, _label,  # noqa: F401
+                           nest)
 from inkdrill.raster import BG, INK, InkMask
 from inkdrill.sweep import Capture, sweep
 
@@ -315,6 +316,115 @@ class T6_7_ConnectivityIsPaired(unittest.TestCase):
         res = sweep(m(rows), axis="row", conn=8, capture=Capture.GRAPH)
         self.assertEqual(nest(m(rows)).hole_count, res.cycle_count)
         self.assertEqual(nest(m(rows)).hole_count, 1)
+
+
+class T6_8_TwoSweepsEqualTheFloodFill(unittest.TestCase):
+    """`nest` labels via two sweeps; `_label` is the flood fill it
+    replaced, kept as the REFERENCE ORACLE and exercised only here.
+
+    This is the project's usual shape -- a second independent
+    computation rather than a golden file -- and it is what licenses
+    the replacement. The two share no code: one walks pixels with a
+    stack, the other unions runs.
+
+    The equality asserted is not "the same holes" but the WHOLE
+    structure, ids included. Ids are assigned in raster order of each
+    region's first pixel precisely so this can be an equality rather
+    than an isomorphism, because `Nesting.roots` is ordered by id and a
+    caller can key on it.
+    """
+
+    @staticmethod
+    def _flood(mask):
+        """The old implementation's body, over `_label`."""
+        w, h = mask.width + 2, mask.height + 2
+        buf = bytearray(w * h)
+        for y in range(mask.height):
+            src = y * mask.width
+            buf[(y + 1) * w + 1:(y + 1) * w + 1 + mask.width] = \
+                mask.data[src:src + mask.width]
+        padded = InkMask(bytes(buf), w, h)
+        fg, n_fg = _label(padded, True, 8)
+        bg, _ = _label(padded, False, 4)
+        box, area, top = {}, {}, {}
+        for p in range(w * h):
+            f, b = fg[p], bg[p]
+            rid = f if f != -1 else n_fg + b
+            x, y = p % w - 1, p // w - 1
+            if rid not in box:
+                box[rid] = [x, y, x, y]
+                top[rid] = p
+                area[rid] = 0
+            else:
+                bb = box[rid]
+                bb[0] = min(bb[0], x)
+                bb[1] = min(bb[1], y)
+                bb[2] = max(bb[2], x)
+                bb[3] = max(bb[3], y)
+            area[rid] += 1
+        outside = n_fg + bg[0]
+        parent = {}
+        for rid in box:
+            if rid == outside:
+                continue
+            up = top[rid] - w
+            f, b = fg[up], bg[up]
+            parent[rid] = f if f != -1 else n_fg + b
+        return outside, box, area, parent
+
+    @staticmethod
+    def _dump(n):
+        return (n.outside, sorted(n.roots),
+                sorted((r.id, r.kind.value, r.area,
+                        r.x0, r.y0, r.x1, r.y1, r.parent)
+                       for r in n.regions.values()))
+
+    def _compare(self, mask):
+        outside, box, area, parent = self._flood(mask)
+        want = sorted((rid, area[rid], *box[rid], parent.get(rid))
+                      for rid in box)
+        got = sorted((r.id, r.area, r.x0, r.y0, r.x1, r.y1, r.parent)
+                     for r in nest(mask).regions.values())
+        self.assertEqual(got, want)
+        n = nest(mask)
+        self.assertEqual(n.outside, outside)
+        self.assertEqual(sorted(n.roots),
+                         sorted(r for r, pa in parent.items() if pa == outside))
+
+    def test_the_two_agree_on_random_masks(self):
+        rng = random.Random(20260813)
+        for _ in range(60):
+            w, h = rng.randint(3, 26), rng.randint(3, 26)
+            data = bytes(INK if rng.random() < rng.choice((0.2, 0.45, 0.7))
+                         else BG for _ in range(w * h))
+            self._compare(InkMask(data, w, h))
+
+    def test_the_two_agree_on_a_nested_frame(self):
+        """A structured case, not only noise: a box inside a box with
+        ink in the innermost hole exercises depth and the `fbox`
+        relation, which random masks reach only by luck."""
+        w = h = 30
+        buf = bytearray(w * h)
+        for x in range(2, 28):
+            buf[2 * w + x] = INK
+            buf[27 * w + x] = INK
+        for y in range(2, 28):
+            buf[y * w + 2] = INK
+            buf[y * w + 27] = INK
+        for x in range(8, 22):
+            buf[8 * w + x] = INK
+            buf[21 * w + x] = INK
+        for y in range(8, 22):
+            buf[y * w + 8] = INK
+            buf[y * w + 21] = INK
+        buf[15 * w + 15] = INK
+        self._compare(InkMask(bytes(buf), w, h))
+
+    def test_an_all_ink_and_an_all_background_mask_agree(self):
+        """The degenerate ends, where the outside region is the only
+        one or the ink is one blob touching every edge."""
+        for fill in (INK, BG):
+            self._compare(InkMask(bytes([fill]) * (12 * 9), 12, 9))
 
 
 if __name__ == "__main__":

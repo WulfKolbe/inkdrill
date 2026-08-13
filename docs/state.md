@@ -626,6 +626,48 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### T1 — `nest()` relabelled by two sweeps: 10.7x to 29.9x, identical
+
+The recorded per-pixel flood-fill defect, fixed. `nest()` now labels
+with `sweep(m, conn=8)` for ink and `sweep(m.inverted(), conn=4)` for
+holes-plus-outside — the same partition, because the connectivity pair
+is the same — and the parent lookup binary-searches a per-line run
+index rather than reading a label array.
+
+| page | before | after | speedup | identical |
+|---|---|---|---|---|
+| Heim scan p229 | 21.83 s | 0.80 s | **27.3x** | yes |
+| Infineon p19 | 18.23 s | 0.61 s | **29.9x** | yes |
+| 1408.0838 p8 | 18.20 s | 1.70 s | **10.7x** | yes |
+
+**Byte-identical, ids included.** Two things had to be reproduced
+rather than merely computed, both about identity: ids are assigned in
+**raster order of each region's first pixel**, because that is what the
+flood fill's `for s in range(w * h)` did and `Nesting.roots` is ordered
+by id; and the parent is the region directly above a region's
+topmost-leftmost pixel. Getting ids right is what makes this an
+equality rather than an isomorphism, so a caller keying on `roots`
+order is unaffected.
+
+`_label` is kept as the **reference oracle**, exercised only by
+`T6_8_TwoSweepsEqualTheFloodFill` — the project's usual shape, a second
+independent computation rather than a golden file. The two share no
+code: one walks pixels with a stack, the other unions runs. Four
+mutants, all killed: id order, the parent row, background connectivity,
+and the unpadding.
+
+**F2 closes with it**, since 97% of `page_lines` was `nest`:
+
+| page | `page_lines` before | after |
+|---|---|---|
+| Heim scan p229 | 21.80 s | **0.76 s** |
+| Infineon p7 | 18.02 s | **0.60 s** |
+| Infineon p19 | 17.93 s | **0.61 s** |
+| 1408.0838 p8 | 17.72 s | **1.69 s** |
+
+`load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
+is the already-recorded 85–95% and the reason the PNM route exists.
+
 ### S1 — merging lifts the white-run route to 8/14, still not enough
 
 The fragmentation was the whole result, so the hypothesis was that it
