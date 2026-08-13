@@ -40,6 +40,11 @@ def main(argv=None) -> int:
     ap.add_argument("--page-number", type=int, default=1)
     ap.add_argument("--tol", type=float, default=2.0,
                     help="cell-lattice clustering tolerance, px")
+    ap.add_argument("--glyphs", action="store_true",
+                    help="also emit one `glyph` line per ink component -- "
+                         "bbox, area, holes and principal axis, with no "
+                         "classification. A text page emits nothing "
+                         "without this.")
     ap.add_argument("--stats", action="store_true",
                     help="print a summary to stderr instead of timing "
                          "nothing")
@@ -85,7 +90,7 @@ def main(argv=None) -> int:
     t_load = time.perf_counter() - t0
     t0 = time.perf_counter()
     pt = 72.0 / dpi[0]
-    lines = page_lines(mask, pt=pt, tol=args.tol)
+    lines = page_lines(mask, pt=pt, tol=args.tol, glyphs=args.glyphs)
     doc = lines_json([page_record(page=args.page_number,
                                   width_px=mask.width, height_px=mask.height,
                                   dpi=dpi, lines=lines)],

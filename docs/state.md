@@ -626,6 +626,44 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### T2 — a `glyph` line type: a text page emits 1,162 instead of 0
+
+The blobs existed and nothing emitted them, so a scanned text page
+produced an empty `lines.json`. `page_lines(..., glyphs=True)` now
+emits one line per ink component — box in points, ink area, hole count,
+principal axis. **No classification and no name**: that needs symbol
+identity, which this project records as a gap rather than guesses at.
+
+| page | time | lines |
+|---|---|---|
+| Heim scan p229 | 1.22 s | **1,162 glyph** |
+| Infineon p19 | 0.95 s | 1 table, 52 cells, **941 glyph** |
+
+Every glyph carried an axis; none fell back.
+
+**No size filter, and that is measured rather than assumed.** On the
+Heim page 1,161 of 1,164 components lie inside any reasonable size
+bound (heights p1=4, p50=44, p99=90 px against a 44 px text scale), so
+a bound would be a threshold that changes nothing except what a future
+dpi silently retunes. A consumer filters on the emitted `area`.
+
+**Two id spaces, joined on exact geometry.** Moments come from `sweep`
+and are keyed by `Component.root`; `table`/`diagram` lines are keyed by
+`Region.id`. Rather than carry both into one file they are joined on
+`(x0, y0, x1, y1, area)` — exact, because `nest` now labels with that
+very sweep, so the two are the same partition. A region with no unique
+match keeps its geometry and loses only the axis, which is **absent
+rather than null**.
+
+Opt-in, because it changes what every existing consumer receives.
+`python3 -m inkdrill page.png --dpi 400 --glyphs`.
+
+Five mutants, four killed (the switch, the already-emitted guard, the
+hole count, the axis key). One survives and is recorded rather than
+defended with a contrived fixture: the ambiguous-geometry guard, since
+two 8-connected components sharing an exact box *and* area is possible
+in principle and no fixture reaches it.
+
 ### T1 — `nest()` relabelled by two sweeps: 10.7x to 29.9x, identical
 
 The recorded per-pixel flood-fill defect, fixed. `nest()` now labels

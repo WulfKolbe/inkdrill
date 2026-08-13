@@ -73,7 +73,9 @@ G7  `ink.rules[]` carries a MEASURED `width_pt`, never a rule name --
 
 from __future__ import annotations
 
+from .aggregate import moments_per_component
 from .nest import Kind, nest
+from .sweep import Capture, sweep
 
 __all__ = ["NoResolution", "lines_json", "page_record", "page_lines",
            "text_scale",
@@ -324,9 +326,37 @@ def diagram_line(region, pt: float, *, ground: str | None = None,
                  cell_row=None, cell_column=None, ink=ink)
 
 
+def glyph_line(region, pt: float, *, holes: int = 0, axis=None) -> dict:
+    """One ink component, described and NOT named (T2).
+
+    The blobs exist and nothing emitted them, so a page of text emitted
+    nothing at all. This makes the first pass visible: a bbox in
+    points, the ink area, the hole count, and the principal axis. There
+    is no classification here and no glyph name -- that needs symbol
+    identity, which this project does not have and records as a gap.
+
+    NO SIZE FILTER, and that is measured rather than assumed. On a
+    scanned page 1,161 of 1,164 components fall inside any reasonable
+    size bound, so a bound would be a threshold that changes nothing
+    except what a future dpi silently retunes. A consumer filters on
+    the emitted `area` and box.
+
+    `axis` is absent rather than null when the moments could not be
+    matched to this region -- a key present with a null value would say
+    the axis was measured and found to be nothing.
+    """
+    ink = {"region_id": region.id, "area": region.area, "holes": holes}
+    if axis is not None:
+        ink["axis"] = [round(axis[0], 6), round(axis[1], 6)]
+    return _line("glyph", (region.x0, region.y0, region.x1 + 1,
+                           region.y1 + 1), pt, cell_row=None,
+                 cell_column=None, ink=ink)
+
+
 def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                max_fill: float = 0.35, cell_scale: float = 3.0,
-               diagram_scale: float = 3.0, require_content: bool = True):
+               diagram_scale: float = 3.0, require_content: bool = True,
+               glyphs: bool = False):
     """Every emittable object on one page, with rules attached.
 
     A region becomes a `table` when it encloses a LATTICE (>= 2 holes),
@@ -428,6 +458,36 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                 and (held or not require_content)):
             out.append((region, [diagram_line(region, pt, ground=ground,
                                               contains=held)]))
+
+    if glyphs:
+        # The moments come from `sweep`, whose ids are `Component.root`
+        # and are NOT `Region.id`. Rather than carry two id spaces into
+        # one file, they are joined on exact geometry -- the two are the
+        # same partition, since `nest` labels with this very sweep --
+        # and a region with no unique match keeps its geometry and
+        # loses only the axis.
+        by_geom = {}
+        for c in moments_per_component(
+                sweep(mask, conn=8, capture=Capture.GRAPH)).values():
+            key = (c.x0, c.y0, c.x1, c.y1, c.area)
+            # DEFENSIVE and unasserted: two 8-connected components
+            # sharing an exact box AND area is possible in principle
+            # and no fixture here reaches it -- removing this line
+            # kills no test. It is kept because the failure it prevents
+            # is attaching one component's axis to another, which is a
+            # silently wrong value rather than an error. Recorded as a
+            # surviving mutant rather than defended by a contrived
+            # fixture.
+            by_geom[key] = None if key in by_geom else c
+        done = {r.id for r, _ in out}
+        for region in sorted(inks, key=lambda r: (r.y0, r.x0)):
+            if region.id in done or region.id in rule_ids:
+                continue
+            c = by_geom.get((region.x0, region.y0, region.x1, region.y1,
+                             region.area))
+            out.append((region, [glyph_line(
+                region, pt, holes=len(n.holes_of(region.id)),
+                axis=c.principal_axis if c is not None else None)]))
 
     for region, lines in out:
         mine = [r for r in rules if _contains(region, r)]

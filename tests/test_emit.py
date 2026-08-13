@@ -7,6 +7,7 @@ readable as a table in the source.
 import json
 import unittest
 
+from inkdrill.emit import glyph_line  # noqa: F401
 from inkdrill.emit import (NoResolution, cell_grid, diagram_line,
                            ink_regions, is_rule, lines_json, page_lines,
                            page_record, rule_record, rule_width_pt,
@@ -564,6 +565,99 @@ class T1_6_Diagrams(unittest.TestCase):
         m = grid_mask(3, 3)
         self.assertGreater(len(page_lines(m, pt=PT, tol=1.0, cell_scale=0.0)),
                            len(page_lines(m, pt=PT, tol=1.0, cell_scale=9.0)))
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class T1_8_Glyphs(unittest.TestCase):
+    """T2: the blobs exist and nothing emitted them.
+
+    A `glyph` line describes a component and names nothing. Every class
+    of the decision is asserted to fire -- the standing rule after five
+    "a class that could not occur" defects.
+    """
+
+    @staticmethod
+    def _letters(w=200, h=60, n=6):
+        """`n` hollow rings, so holes are non-zero and the components
+        are letter-shaped rather than solid blocks."""
+        buf = bytearray(w * h)
+        for i in range(n):
+            ox = 4 + i * 30
+            for x in range(ox, ox + 16):
+                buf[18 * w + x] = 0xFF
+                buf[41 * w + x] = 0xFF
+            for y in range(18, 42):
+                buf[y * w + ox] = 0xFF
+                buf[y * w + ox + 15] = 0xFF
+        return InkMask(bytes(buf), w, h)
+
+    def test_glyphs_are_OFF_by_default(self):
+        """Opt-in, because it changes what every existing consumer
+        receives. The negative side of the switch, asserted."""
+        m = self._letters()
+        self.assertEqual(page_lines(m, pt=PT, tol=1.0), [])
+
+    def test_one_line_per_component_with_its_holes(self):
+        m = self._letters(n=6)
+        lines = page_lines(m, pt=PT, tol=1.0, glyphs=True)
+        self.assertEqual([l["type"] for l in lines], ["glyph"] * 6)
+        self.assertEqual([l["ink"]["holes"] for l in lines], [1] * 6)
+
+    def test_the_axis_of_a_TALL_component_differs_from_a_WIDE_one(self):
+        """The axis is measured, not copied. A fixture of one shape
+        could not tell a real principal axis from a constant."""
+        w, h = 80, 80
+        buf = bytearray(w * h)
+        for y in range(5, 70):                    # a tall bar
+            for x in range(8, 14):
+                buf[y * w + x] = 0xFF
+        for x in range(30, 75):                   # a wide bar
+            for y in range(30, 36):
+                buf[y * w + x] = 0xFF
+        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
+                           glyphs=True)
+        axes = [l["ink"]["axis"] for l in lines]
+        self.assertEqual(len(axes), 2)
+        tall, wide = sorted(axes, key=lambda a: abs(a[0]))
+        self.assertLess(abs(tall[0]), 0.2)        # points down the page
+        self.assertGreater(abs(wide[0]), 0.8)     # points across it
+
+    def test_a_region_emitted_as_a_TABLE_is_not_also_a_glyph(self):
+        """One object, one line. A component that already arrived as a
+        table must not arrive again as a blob."""
+        w, h = 400, 200
+        buf = bytearray(w * h)
+        for x in range(10, 390):
+            for t in range(3):
+                buf[(10 + t) * w + x] = 0xFF
+                buf[(190 + t) * w + x] = 0xFF
+                buf[(100 + t) * w + x] = 0xFF
+        for y in range(10, 193):
+            for t in range(3):
+                buf[y * w + 10 + t] = 0xFF
+                buf[y * w + 200 + t] = 0xFF
+                buf[y * w + 389 + t] = 0xFF
+        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
+                           glyphs=True, cell_scale=0.0)
+        kinds = [l["type"] for l in lines]
+        self.assertIn("table", kinds)
+        table_ids = {l["ink"]["region_id"] for l in lines
+                     if l["type"] == "table"}
+        glyph_ids = {l["ink"]["region_id"] for l in lines
+                     if l["type"] == "glyph"}
+        self.assertEqual(table_ids & glyph_ids, set())
+
+    def test_the_axis_key_is_ABSENT_not_null_when_unmatched(self):
+        """`glyph_line` is reachable directly, and a key present with a
+        null value would claim the axis was measured and found to be
+        nothing."""
+        from inkdrill.nest import Kind as K, Region
+        r = Region(7, K.INK, 0, 12, 1, 2, 5, 9)
+        self.assertNotIn("axis", glyph_line(r, PT)["ink"])
+        self.assertIn("axis", glyph_line(r, PT, axis=(1.0, 0.0))["ink"])
 
 
 if __name__ == "__main__":
