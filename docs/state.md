@@ -626,6 +626,69 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### A — the font route, and topology's blind set is REFLECTIONS
+
+`measure.py separability` runs the whole font route on a real
+document's own embedded font — `mutool extract` → `type1.load` →
+`charstring.outline` → `scan.render` → `sweep` — and reads the
+partition it produces.
+
+**How far the route reaches, measured first** (`measure.py fontmix`,
+60 corpus documents, one PDF each, seed 20260807):
+
+| | |
+|---|---|
+| only CFF/TrueType/CID | 35/60 — **58%** |
+| Type 1 text face, parses | 16/60 — **27%** |
+| no embedded font at all | 8/60 — 13% |
+| Type 1 present, no usable text face | 1/60 — 2% |
+
+The route runs on the second class only. This is a demonstration on a
+**minority of the corpus** and is not a coverage claim. The last class
+is the scanned document — Heim, WDorg4 — where there is no font to read
+and the image path is the whole of what inkdrill has.
+
+**What the partition says.** Three documents' own faces, 96 px/em:
+
+| document | inked glyphs | classes | largest class |
+|---|---|---|---|
+| 1408.0838 | 82 | 5 | 55 (**67%**) |
+| 1809.09528 | 80 | 5 | 53 (**66%**) |
+| Meta-Learning_with_GNN | 84 | 4 | 55 (**65%**) |
+
+**Two thirds of a real text face lands in one topology class** —
+`(1, 0)`, one component and no hole: `C E F G H I J K L M N S T U …`.
+This is `reeb.signature`'s docstring claim ("a stable partition, **not**
+a classifier") measured on real embedded fonts rather than argued.
+
+**The named maths pairs, and the structural reason.** cmsy10 and
+cmex10, by glyph name:
+
+| pair | | verdict |
+|---|---|---|
+| union / intersection | (1,0) vs (1,0) | BLIND |
+| lessequal / greaterequal | (2,0) vs (2,0) | BLIND |
+| lessmuch / greatermuch | (2,0) vs (2,0) | BLIND |
+| unionsq / intersectionsq | (1,0) vs (1,0) | BLIND |
+| plusminus / minusplus | (1,0) vs (1,0) | BLIND |
+| summationdisplay / productdisplay | (1,0) vs (1,0) | BLIND |
+| uniondisplay / intersectiondisplay | (1,0) vs (1,0) | BLIND |
+| circleplus / circleminus | (1,4) vs (1,2) | SEPARABLE |
+| integraldisplay / contintegraldisplay | (1,0) vs (1,2) | SEPARABLE |
+
+**The blind set is not a list of accidents.** `(components, cycles)` is
+a topological invariant, so it is unchanged by **reflection** and by
+**rotation** — and every blind pair above is one of the other
+reflected. No resolution and no threshold reaches them, because nothing
+about the ink distinguishes them. The two separable pairs are the two
+that differ in **hole count** rather than in orientation. Pinned by a
+test at three sizes, with the separable pair asserted beside it so the
+class cannot pass by reporting everything blind.
+
+This is the honest scope of the topology channel, and it is why U13's
+extents channel and the conjunction verifier exist: a consumer that
+trusts topology alone will return `∑` for `∏` confidently.
+
 ### C — the OCR substitution audit: 60%, not eight of eight
 
 `measure.py substitutions` asks the whole cross-check thesis as one

@@ -49,6 +49,7 @@ import pathlib
 import random
 import difflib
 import re
+import shutil
 import struct
 import sys
 import time
@@ -984,9 +985,14 @@ def _substitutions(ocr, truth):
     return subs, kept, dropped, aligned
 
 
-def _glyph_topology(font, ch, px_em):
-    """(components, cycles) of one character rendered from `font`."""
-    nm = _AGL.get(ch)
+def _glyph_topology(font, ch, px_em, name=None):
+    """(components, cycles) of one glyph rendered from `font`.
+
+    Addressed by character through the Adobe glyph list, or directly by
+    `name` -- a maths symbol has no character in the text population
+    and naming it is the only honest way to reach it.
+    """
+    nm = name if name is not None else _AGL.get(ch)
     if nm is None or nm not in font.charstrings:
         return None
     try:
@@ -1109,6 +1115,226 @@ def m_substitutions(root, n, rng, truth_tex=None, ocr_dir=None,
     print("  A pair the topology cannot separate is not a defect -- it is")
     print("  the boundary of what ink alone can say, and the reason this")
     print("  is a cross-check and not a recogniser.")
+
+
+def m_fontmix(root, n, rng):
+    """Item A's premise: how far does the FONT ROUTE reach?
+
+    `type1.py` reads Type 1 programs -- PFB and PFA. If most embedded
+    fonts are CFF or TrueType, then "render the document's own font and
+    compare it to the ink" is a demonstration on a minority of pages,
+    and saying so is the difference between a scoped result and an
+    overclaim. The rule here is the one that cancelled U8's band tier:
+    measure what a design rests on before relying on it.
+
+    POPULATION: `n` corpus documents drawn at random, ONE PDF each --
+    the first by name -- so a document with twenty variants of the same
+    paper cannot dominate. Per document the question is not "is a Type
+    1 file present" but "is there a Type 1 face that PARSES and carries
+    a Latin text alphabet", because a Type 1 symbol font with eleven
+    glyphs does not let the route run.
+
+    The four classes are reported separately and never summed into a
+    coverage figure. "No embedded font at all" is not a failure of the
+    parser -- it is the scanned document, where the route does not
+    apply and the image path is the only one there is.
+    """
+    import subprocess
+    import tempfile
+    docs = [c[0] for d in sorted(root.iterdir()) if d.is_dir()
+            for c in [sorted(d.glob("*.pdf"))] if c]
+    if not docs:
+        print(f"  no PDFs under {root}")
+        return
+    if shutil.which("mutool") is None:
+        print("  mutool not on PATH; this measurement needs it")
+        return
+    sample = rng.sample(docs, min(n, len(docs)))
+    latin = set("abcdefghijklmnopqrstuvwxyz")
+    cls = Counter()
+    sizes = []
+    for pdf in sample:
+        with tempfile.TemporaryDirectory() as td:
+            r = subprocess.run(["mutool", "extract", str(pdf)], cwd=td,
+                               capture_output=True, timeout=180)
+            files = list(pathlib.Path(td).iterdir()) if not r.returncode else []
+            fonts = [f for f in files if f.suffix.lower() in
+                     (".pfa", ".pfb", ".cff", ".ttf", ".otf", ".cid")]
+            if not fonts:
+                cls["no embedded font at all"] += 1
+                continue
+            t1 = [f for f in fonts if f.suffix.lower() in (".pfa", ".pfb")]
+            best = 0
+            for f in t1:
+                try:
+                    font = t1_load(f)
+                except Exception:
+                    continue
+                # A Latin alphabet, not merely a parse: a symbol font
+                # with eleven glyphs parses and cannot carry the route.
+                if len(latin & set(font.charstrings)) >= 20:
+                    best = max(best, len(font.charstrings))
+            if best:
+                cls["Type 1 text face, parses"] += 1
+                sizes.append(best)
+            elif t1:
+                cls["Type 1 present, no usable text face"] += 1
+            else:
+                cls["only CFF/TrueType/CID"] += 1
+    print(f"  {len(sample)} documents, one PDF each")
+    for k, v in cls.most_common():
+        print(f"  {v:>4}/{len(sample):<4} {v / len(sample):>5.0%}  {k}")
+    if sizes:
+        print(f"  glyphs in the chosen face: median "
+              f"{sorted(sizes)[len(sizes) // 2]}")
+    print("  The font route reaches the FIRST class only. The last is the")
+    print("  scanned document -- Heim, WDorg4 -- where there is no font to")
+    print("  read and the image path is the whole of what inkdrill has.")
+
+
+def m_separability(root, n, rng, doc=None):
+    """Item A. The FONT ROUTE, end to end, on a real document's own
+    embedded font -- and what topology cannot tell apart in it.
+
+        mutool extract -> type1.load -> charstring.outline
+                       -> scan.render -> sweep
+
+    Every stage is inkdrill's own except the first, and the first is
+    unpacking rather than interpretation. The point is not that the
+    chain runs -- `charstrings` and `outlines` already measured that on
+    7,616 fonts -- but what the chain SAYS: partition a real face by
+    (components, cycles) and read the classes.
+
+    POPULATION: `n` corpus documents drawn at random, one PDF each,
+    keeping those with a Type 1 text face. `measure.py fontmix` puts
+    that at 27% of documents, so this is a demonstration on a minority
+    of the corpus and is not a coverage claim. The other 58% are CFF or
+    TrueType, which this parser does not read, and 13% are scans with
+    no embedded font at all.
+
+    THE PRODUCT IS THE LARGEST CLASS, not the number of classes. A face
+    of 94 glyphs splitting into a dozen topology classes sounds
+    discriminating until one class holds forty of them. The blind sets
+    are printed with their members, because a pair inkdrill cannot
+    separate is a place a wrong answer will be returned confidently by
+    anything that trusts topology alone.
+
+    The maths pairs are checked BY NAME against `cmsy10`, because the
+    ones that matter are known in advance and a random face will not
+    contain them: union against intersection, less-equal against
+    greater-equal.
+    """
+    import subprocess
+    import tempfile
+    if shutil.which("mutool") is None:
+        print("  mutool not on PATH; this measurement needs it")
+        return
+    docs = [c[0] for d in sorted(root.iterdir()) if d.is_dir()
+            for c in [sorted(d.glob("*.pdf"))] if c]
+    if doc:
+        docs = [p for p in docs if p.parent.name == doc]
+    if not docs:
+        print(f"  no PDFs under {root}")
+        return
+    sample = rng.sample(docs, min(n, len(docs))) if not doc else docs
+    latin = set("abcdefghijklmnopqrstuvwxyz")
+    px_em = 96.0                       # the measured stable floor; scan.py
+    shown = 0
+    for pdf in sample:
+        if shown >= 3:
+            break
+        with tempfile.TemporaryDirectory() as td:
+            r = subprocess.run(["mutool", "extract", str(pdf)], cwd=td,
+                               capture_output=True, timeout=180)
+            if r.returncode:
+                continue
+            best = None
+            for f in sorted(pathlib.Path(td).iterdir()):
+                if f.suffix.lower() not in (".pfa", ".pfb"):
+                    continue
+                try:
+                    font = t1_load(f)
+                except Exception:
+                    continue
+                if len(latin & set(font.charstrings)) >= 20 and (
+                        best is None or
+                        len(font.charstrings) > len(best.charstrings)):
+                    best = font
+            if best is None:
+                continue
+            classes = defaultdict(list)
+            failed = 0
+            for nm in sorted(best.charstrings):
+                try:
+                    mask, _ = scan_render(cs_outline(best, nm),
+                                          best.units_per_em, px_em)
+                except Exception:
+                    failed += 1
+                    continue
+                if not mask.ink_count:
+                    continue                      # space and its kin
+                res = sweep(mask, conn=8, capture=Capture.GRAPH)
+                classes[(len(res.components),
+                         sum(c.cycle_count for c in res.components))
+                        ].append(nm)
+            drawn = sum(len(v) for v in classes.values())
+            if not drawn:
+                continue
+            shown += 1
+            big = max(classes.values(), key=len)
+            print(f"  {pdf.parent.name[:40]:<40} {drawn:>4} inked glyphs "
+                  f"-> {len(classes):>2} topology classes, "
+                  f"largest {len(big)} ({len(big) / drawn:.0%}), "
+                  f"{failed} failed to render")
+            for key in sorted(classes, key=lambda k: -len(classes[k]))[:3]:
+                mem = classes[key]
+                print(f"        {str(key):>8} x{len(mem):<3} "
+                      + " ".join(mem[:14])
+                      + (" ..." if len(mem) > 14 else ""))
+    if not shown:
+        print("  no document in the sample had a Type 1 text face")
+
+    tree = pathlib.Path(os.environ.get("INKDRILL_TYPE1",
+                                       "/usr/share/texmf-dist/fonts/type1"))
+    src = next(tree.rglob("cmsy10.pfb"), None) if tree.is_dir() else None
+    if src is None:
+        print("  cmsy10.pfb not found; skipping the named maths pairs")
+        return
+    ex = next(tree.rglob("cmex10.pfb"), None)
+    faces = {"cmsy10": t1_load(src)}
+    if ex is not None:
+        faces["cmex10"] = t1_load(ex)
+    print("  the maths pairs, by name:")
+    for face, a, b in (("cmsy10", "union", "intersection"),
+                       ("cmsy10", "lessequal", "greaterequal"),
+                       ("cmsy10", "lessmuch", "greatermuch"),
+                       ("cmsy10", "unionsq", "intersectionsq"),
+                       ("cmsy10", "circleplus", "circleminus"),
+                       ("cmsy10", "plusminus", "minusplus"),
+                       ("cmex10", "summationdisplay", "productdisplay"),
+                       ("cmex10", "integraldisplay", "contintegraldisplay"),
+                       ("cmex10", "uniondisplay", "intersectiondisplay")):
+        sym = faces.get(face)
+        if sym is None or a not in sym.charstrings or b not in sym.charstrings:
+            print(f"        {a}/{b}: not in {face}")
+            continue
+        ta = _glyph_topology(sym, None, px_em, name=a)
+        tb = _glyph_topology(sym, None, px_em, name=b)
+        verdict = "SEPARABLE" if ta != tb else "BLIND"
+        print(f"  {face:>8} {a:>18}/{b:<20} {str(ta):>7} vs "
+              f"{str(tb):<7} {verdict}")
+    print("  The blind set is not a list of accidents. (components,")
+    print("  cycles) is a topological invariant, so it is unchanged by")
+    print("  REFLECTION and by ROTATION -- and every blind pair above is")
+    print("  one of the other reflected: union/intersection,")
+    print("  lessequal/greaterequal, summation/product. No resolution and")
+    print("  no threshold reaches them, because nothing about the ink")
+    print("  distinguishes them. The two SEPARABLE pairs are the two that")
+    print("  differ in HOLE COUNT rather than in orientation.")
+    print("  A BLIND pair is where a consumer that trusts topology alone")
+    print("  will return a wrong answer confidently. It is named here so")
+    print("  that consumer can require a second channel for it -- which is")
+    print("  what U13's extents channel and the conjunction verifier are.")
 
 
 def m_boxes(root, n, rng, fill_max=0.10, hole="bbox", doc=None):
@@ -2911,6 +3137,8 @@ MEASUREMENTS = {
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
+    "fontmix": (m_fontmix, 60),
+    "separability": (m_separability, 40),
     "substitutions": (m_substitutions, 0),
     "halftone": (m_halftone, 10),
     "tables": (m_tables, 25),
@@ -3012,6 +3240,9 @@ def main():
         elif name == "boxes":
             fn(root, args.n or default_n, random.Random(args.seed),
                fill_max=args.fill_max, hole=args.hole_measure, doc=args.doc)
+        elif name == "separability":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               doc=args.doc)
         elif name == "substitutions":
             fn(root, args.n or default_n, random.Random(args.seed),
                truth_tex=args.truth_tex, ocr_dir=args.ocr_dir,
