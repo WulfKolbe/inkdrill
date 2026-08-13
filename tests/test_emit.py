@@ -393,7 +393,7 @@ class T1_5_Rules(unittest.TestCase):
         rules = lines[0]["ink"]["rules"]
         self.assertEqual([r["orient"] for r in rules], ["v"])
 
-    def test_a_rule_attaches_to_its_OWN_parent_only(self):
+    def test_a_rule_attaches_to_its_OWN_parent_only(self):  # noqa: D401
         """Containment, not "every rule on the page". Two frames side by
         side with a rule in one: the other must come back with none."""
         w, h = 520, 60
@@ -401,6 +401,7 @@ class T1_5_Rules(unittest.TestCase):
         frame(buf, w, 0, 0, 250, 60)
         frame(buf, w, 260, 0, 510, 60)
         hline(buf, w, 28, 10, 240, 2)          # inside the LEFT frame
+        buf[30 * w + 380] = 0xFF               # and something in the RIGHT
         lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
                            diagram_scale=0.0)
         counts = sorted(len(l.get("ink", {}).get("rules", [])) for l in lines)
@@ -426,11 +427,19 @@ class T1_6_Diagrams(unittest.TestCase):
         with no text cannot supply a text scale, which is the fixture
         having nothing to measure against rather than the rule being
         wrong.
+
+        EACH FRAME HAS SOMETHING IN IT, because a real plot does. An
+        empty rectangle is not a diagram under the containment rule and
+        should not be -- there is nothing in it to be a diagram OF. The
+        fixture used to be four bare rectangles, which is the "a
+        synthetic grid has no letters in it" mistake in another costume.
         """
         w, h = 90, 90
         buf = bytearray(w * h)
         for ox, oy in ((2, 2), (48, 2), (2, 48), (48, 48)):
             frame(buf, w, ox, oy, ox + 38, oy + 38)
+            for k in range(3):                    # plot data inside it
+                buf[(oy + 10 + k * 8) * w + ox + 10 + k * 6] = 0xFF
         lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
                            diagram_scale=0.0)
         self.assertEqual([l["type"] for l in lines], ["diagram"] * 4)
@@ -439,6 +448,7 @@ class T1_6_Diagrams(unittest.TestCase):
         w, h = 40, 40
         buf = bytearray(w * h)
         frame(buf, w, 0, 0, 40, 40)
+        buf[20 * w + 20] = 0xFF
         mask = InkMask(bytes(buf), w, h)
         from inkdrill.nest import nest
         n = nest(mask)
@@ -447,6 +457,25 @@ class T1_6_Diagrams(unittest.TestCase):
                            grounds={rid: "textured"})
         self.assertEqual(lines[0]["type"], "diagram")
         self.assertEqual(lines[0]["ink"]["border_ground"], "textured")
+
+    def test_the_diagram_reports_WHAT_IT_CONTAINS(self):
+        """Found by mutation: the `contains` key could be dropped
+        entirely and nothing failed.
+
+        It is the EVIDENCE for the call, not decoration. A consumer that
+        wants a stricter cut than "at least one" applies it to this
+        number instead of re-running `nest`, so a wrong or missing value
+        silently removes that option.
+        """
+        w, h = 60, 60
+        buf = bytearray(w * h)
+        frame(buf, w, 0, 0, 60, 60)
+        for k in range(3):                       # exactly three inside
+            buf[(15 + k * 12) * w + 30] = 0xFF
+        line = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
+                          diagram_scale=0.0)[0]
+        self.assertEqual(line["type"], "diagram")
+        self.assertEqual(line["ink"]["contains"], 3)
 
     def test_a_letter_sized_hollow_region_is_NOT_a_diagram(self):
         """The Heim failure, pinned. A scanned German page emitted 319
@@ -470,9 +499,18 @@ class T1_6_Diagrams(unittest.TestCase):
                 buf[y * w + ox] = 0xFF
                 buf[y * w + ox + 11] = 0xFF
         m = InkMask(bytes(buf), w, h)
+        # Size alone admits them once the floor is removed ...
         self.assertGreater(len(page_lines(m, pt=PT, tol=1.0,
-                                          diagram_scale=0.0)), 0)
-        self.assertEqual(page_lines(m, pt=PT, tol=1.0, diagram_scale=3.0), [])
+                                          diagram_scale=0.0,
+                                          require_content=False)), 0)
+        # ... the size floor rejects them ...
+        self.assertEqual(page_lines(m, pt=PT, tol=1.0, diagram_scale=3.0,
+                                    require_content=False), [])
+        # ... and CONTAINMENT rejects them with no threshold at all,
+        # because the counter of an `o` holds nothing. That is the rule
+        # that needs no retuning when the text size changes.
+        self.assertEqual(page_lines(m, pt=PT, tol=1.0,
+                                    diagram_scale=0.0), [])
 
     def test_a_solid_blob_is_neither_table_nor_diagram(self):
         """G4: a bare component is not a line."""
@@ -494,6 +532,7 @@ class T1_6_Diagrams(unittest.TestCase):
         w, h = 40, 40
         buf = bytearray(w * h)
         frame(buf, w, 0, 0, 40, 40)
+        buf[20 * w + 20] = 0xFF          # a diagram is a diagram OF something
         line = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
                           diagram_scale=0.0)[0]
         self.assertNotIn("border_ground", line["ink"])
@@ -503,6 +542,7 @@ class T1_6_Diagrams(unittest.TestCase):
         w, h = 40, 40
         buf = bytearray(w * h)
         frame(buf, w, 0, 0, 40, 40)
+        buf[20 * w + 20] = 0xFF
         line = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
                           diagram_scale=0.0)[0]
         self.assertNotIn("rules", line["ink"])

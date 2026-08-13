@@ -626,6 +626,58 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### The diagram floor replaced by CONTAINMENT — no threshold at all
+
+The audit was right that the size floor is a threshold needing
+per-corpus retuning, and that the exact test was already computed.
+**A table cell contains 91 ink components; the counter of an `o`
+contains none.** `nest.ink_in_hole` is that relation, and it is
+deliberately distinct from `hole_of` for exactly this reason.
+
+`page_lines` gained `require_content=True`: a region becomes a
+`diagram` only when one of its holes holds a **separate** ink
+component. The size floor stays as a cheap pre-filter.
+
+**Measured against MathPix's own page labels**, Infineon handbook, six
+pages of each kind:
+
+| MathPix says | pages fired, size | pages fired, containment | objects, size → containment |
+|---|---|---|---|
+| HAS figure | 6/6 | **5/6** | 548 → 12 |
+| HAS table | 6/6 | **6/6** | 18 → 6 |
+| NEITHER | 6/6 | **1/6** | **1549 → 1** |
+
+End to end, with `diagram_scale` left at its default:
+
+| page | size only | + containment |
+|---|---|---|
+| Heim p229 (scanned text) | 3 diagrams | **0** |
+| Infineon p19 (table) | 2 diag, 1 table | **0 diag, 1 table** |
+| Infineon p3 (MathPix: nothing) | 24 diagrams | **0** |
+| Infineon p7 (MathPix: figure) | 57 diag, 5 tab | **1 diag, 5 tab** |
+| Infineon p10 (MathPix: figure) | 2 diag, 1 tab | 0 diag, 1 tab |
+
+**The cost is real and is one page in six.** p10's figure is a single
+connected component — the plot data touches the frame — so nothing is
+loose inside it and containment cannot see it. The page is not silent
+(its table still emits), but the figure is lost. That is the honest
+residual and it is the same gap named below: an **unenclosed** figure
+is what the white-run gap analysis finds, and that half is built and
+not wired into `page_lines`.
+
+**The fixtures had to change, and the change is the lesson.** Four
+tests were bare rectangles, and a bare rectangle is not a diagram under
+this rule — correctly, there is nothing in it to be a diagram *of*.
+They now have plot data inside them, which is what a real figure has.
+This is "a synthetic grid has no letters in it" in another costume, and
+it is the third time that fixture mistake has surfaced.
+
+Five mutants, one survivor, now killed: the `ink.contains` count could
+be dropped entirely with nothing failing. It is the **evidence** for
+the call — a consumer wanting a stricter cut than "at least one"
+applies it to that number instead of re-running `nest` — so a missing
+value silently removes the option.
+
 ### A — the font route, and topology's blind set is REFLECTIONS
 
 `measure.py separability` runs the whole font route on a real

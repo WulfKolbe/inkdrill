@@ -303,11 +303,20 @@ def _contains(outer, inner) -> bool:
             and outer.x1 >= inner.x1 and outer.y1 >= inner.y1)
 
 
-def diagram_line(region, pt: float, *, ground: str | None = None) -> dict:
-    """A hollow rectangle that is not a table, or a textured region."""
+def diagram_line(region, pt: float, *, ground: str | None = None,
+                 contains: int | None = None) -> dict:
+    """A hollow rectangle that is not a table, or a textured region.
+
+    `contains` is the number of separate ink components sitting inside
+    this region's holes -- the evidence for the call, not a summary of
+    it. A consumer that wants a stricter rule than "at least one" can
+    apply its own cut without re-running `nest`.
+    """
     ink = {"region_id": region.id,
            "fill": region.area / max(
                1, (region.x1 - region.x0 + 1) * (region.y1 - region.y0 + 1))}
+    if contains is not None:
+        ink["contains"] = contains
     if ground is not None:
         ink["border_ground"] = ground
     return _line("diagram", (region.x0, region.y0,
@@ -317,7 +326,7 @@ def diagram_line(region, pt: float, *, ground: str | None = None) -> dict:
 
 def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                max_fill: float = 0.35, cell_scale: float = 3.0,
-               diagram_scale: float = 3.0):
+               diagram_scale: float = 3.0, require_content: bool = True):
     """Every emittable object on one page, with rules attached.
 
     A region becomes a `table` when it encloses a LATTICE (>= 2 holes),
@@ -367,6 +376,32 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
     # text -- a figure occupies space a paragraph would have. Different
     # arguments, same threshold shape.
     min_diagram = scale * diagram_scale
+    # CONTAINMENT, which is the real test; the size floor above is only
+    # a cheap pre-filter for it. A table cell holds text and the
+    # counter of an `o` holds nothing, so "does a hole of this region
+    # contain a SEPARATE ink component" separates structure from a
+    # glyph exactly, with no threshold and nothing to retune per
+    # corpus. `nest` has computed it already -- `ink_in_hole` is the
+    # relation, deliberately distinct from `hole_of`.
+    #
+    # Measured on the Infineon handbook against MathPix's own page
+    # labels, six pages of each kind:
+    #
+    #   MathPix says      pages fired          objects emitted
+    #                   size   containment   size   containment
+    #   HAS figure       6/6       5/6         548        12
+    #   HAS table        6/6       6/6          18         6
+    #   NEITHER          6/6       1/6        1549         1
+    #
+    # The size floor fires on every page that has nothing and emits
+    # 1549 objects there. Containment emits one.
+    #
+    # THE COST IS REAL AND IS ONE PAGE IN SIX. p10's figure is a single
+    # connected component -- the plot data touches the frame -- so
+    # nothing is loose inside it and containment cannot see it. That is
+    # the honest residual, not an argument against the rule: an
+    # unenclosed figure is what the white-run gap analysis finds, and
+    # that half is built and not yet wired in here.
     rules = [r for r in inks if is_rule(r)]
     rule_ids = {r.id for r in rules}
 
@@ -385,10 +420,14 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                             min_cell=min_cell)
         if lines:
             out.append((region, lines))
-        elif ((ground == "textured"
-               or region.area / max(1, w * h) < max_fill)
-              and max(w, h) >= min_diagram):
-            out.append((region, [diagram_line(region, pt, ground=ground)]))
+            continue
+        held = sum(len(n.ink_in_hole(h)) for h in n.holes_of(region.id))
+        if ((ground == "textured"
+             or region.area / max(1, w * h) < max_fill)
+                and max(w, h) >= min_diagram
+                and (held or not require_content)):
+            out.append((region, [diagram_line(region, pt, ground=ground,
+                                              contains=held)]))
 
     for region, lines in out:
         mine = [r for r in rules if _contains(region, r)]
