@@ -214,3 +214,70 @@ class TC_3_Blindness(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TC_4_BlockAssignment(unittest.TestCase):
+    """The block/figure assignment, which has been wrong twice.
+
+    Both failures were the same shape and neither raised: a class that
+    could not occur. The first version counted ANY overlap as coverage,
+    so `matched` was nearly unreachable; the second left a
+    page-spanning block in the candidate list, so `missed` was
+    unreachable. Every class is therefore asserted to FIRE here, not
+    merely to be computed.
+    """
+
+    def test_a_clean_one_to_one_cover_is_MATCHED(self):
+        got, errs = measure._classify_blocks(
+            [(0, 0, 100, 100)], [(2, 2, 102, 102)], 0.5)
+        self.assertEqual(got["matched"], 1)
+        self.assertEqual(errs, [0])
+
+    def test_a_figure_broken_into_pieces_is_FRAGMENTED(self):
+        """The route's actual failure mode. Two half-height blocks each
+        overlap the figure and neither reaches the IoU, so it is covered
+        by nothing whole -- which is not the same fault as `split`."""
+        got, _ = measure._classify_blocks(
+            [(0, 0, 100, 100)],
+            [(0, 0, 100, 40), (0, 60, 100, 100)], 0.5)
+        self.assertEqual(got["fragmented"], 1)
+        self.assertEqual(got["matched"], 0)
+
+    def test_a_figure_no_block_touches_is_MISSED(self):
+        """MISSED must be reachable. It was not, for a whole run, because
+        a page-spanning block overlapped every truth -- so `missed` read
+        0 at every setting and that zero meant nothing."""
+        got, _ = measure._classify_blocks(
+            [(0, 0, 100, 100)], [(500, 500, 700, 700)], 0.5)
+        self.assertEqual(got["missed"], 1)
+        self.assertEqual(got["fragmented"], 0)
+
+    def test_one_block_over_two_figures_is_MERGED(self):
+        got, _ = measure._classify_blocks(
+            [(0, 0, 100, 100), (0, 0, 100, 99)], [(0, 0, 100, 100)], 0.5)
+        self.assertEqual(got["merged"], 2)
+
+    def test_two_blocks_each_covering_it_is_SPLIT(self):
+        got, _ = measure._classify_blocks(
+            [(0, 0, 100, 100)],
+            [(0, 0, 100, 99), (1, 0, 100, 100)], 0.5)
+        self.assertEqual(got["split"], 1)
+
+    def test_a_block_touching_nothing_is_SPURIOUS(self):
+        got, _ = measure._classify_blocks(
+            [(0, 0, 100, 100)],
+            [(0, 0, 100, 100), (900, 900, 1000, 1000)], 0.5)
+        self.assertEqual((got["matched"], got["spurious"]), (1, 1))
+
+    def test_a_block_that_OVERLAPS_but_does_not_cover_is_not_spurious(self):
+        """The other side of the refusal. A block partly over a figure
+        is evidence about that figure, not a free-standing find, so it
+        must not inflate the count this project treats as its output."""
+        got, _ = measure._classify_blocks(
+            [(0, 0, 100, 100)], [(50, 50, 400, 400)], 0.5)
+        self.assertEqual(got["spurious"], 0)
+        self.assertEqual(got["fragmented"], 1)
+
+    def test_iou_is_zero_for_disjoint_and_one_for_identical(self):
+        self.assertEqual(measure._iou((0, 0, 10, 10), (20, 20, 30, 30)), 0.0)
+        self.assertEqual(measure._iou((0, 0, 10, 10), (0, 0, 10, 10)), 1.0)

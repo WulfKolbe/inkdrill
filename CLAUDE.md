@@ -77,12 +77,12 @@ is reported here:
   when a test proves it.
 
 **Every measured figure is re-runnable.** `tools/premise/measure.py`
-carries one subcommand per claim, 31 of them —
-`banding border boxes charstrings classify colour contraction
-convexity edges fontmix fonts halftone maths missed moments nesting
-neutrality outlines premise rasterisers residuals rotation schedcost
-separability skew spacing stitchcost substitutions tables throughput
-white`.
+carries one subcommand per claim, 33 of them —
+`alphabet banding blocks border boxes charstrings classify colour
+contraction convexity edges fontmix fonts halftone maths missed
+moments nesting neutrality outlines premise rasterisers residuals
+rotation schedcost separability skew spacing stitchcost
+substitutions tables throughput white`.
 If you quote a number, quote the subcommand that produces it. If a measurement decides whether to
 build something, the harness must be committed *before* the decision is
 acted on — that rule exists because it was broken twice.
@@ -319,6 +319,14 @@ tested at `cell_grid` with synthetic boxes and never through
 `table_lines`, so the end-to-end behaviour was unasserted. You do not
 need real pages in the suite; you need real NUMBERS in the fixtures, and
 a fixture whose dimensions came from nowhere is the tell.
+
+**A fixture built to exercise a rule must CONTAIN the thing the rule
+discriminates against.** The general form of a mistake that has now
+surfaced three times: a synthetic table grid has no letters in it, so
+it classified every `B` on a real page as a table; a bare rectangle has
+nothing inside it, so it cannot test a rule about what a figure
+contains. The fixture must hold both classes the rule separates, or it
+cannot fail.
 
 **Mutate the ENTRY function, not the inner one.** If the inner
 function's branches die and the entry function's survive, the tests are

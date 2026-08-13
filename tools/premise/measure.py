@@ -1429,6 +1429,189 @@ def _alphabet_one(font, fname, pop, px_em):
                       + "".join(sorted(d[key])))
 
 
+def _classify_blocks(truth, blocks, iou):
+    """Assign content blocks to labelled figures, 1:1, and name the
+    residual. Returns `(Counter, [side errors])`.
+
+    Extracted because it has been wrong twice. The first version
+    counted ANY overlap as coverage, so a figure that overlapped its
+    own inner blocks read as `split` -- 10 of 11, with the single
+    "match" carrying a whole-page error. The second left a
+    page-spanning block in the candidate list, which overlaps every
+    truth and made `missed` unreachable.
+    """
+    hits_t = [[] for _ in truth]
+    hits_b = [[] for _ in blocks]
+    touch_b = [False] * len(blocks)
+    tot = Counter()
+    errs = []
+    for ti, t in enumerate(truth):
+        for bi, b in enumerate(blocks):
+            v = _iou(t, b)
+            if v > 0.0:
+                touch_b[bi] = True
+            if v >= iou:
+                hits_t[ti].append(bi)
+                hits_b[bi].append(ti)
+    for ti, t in enumerate(truth):
+        good = hits_t[ti]
+        if len(good) > 1:
+            tot["split"] += 1
+        elif len(good) == 1:
+            if len(hits_b[good[0]]) > 1:
+                tot["merged"] += 1
+            else:
+                b = blocks[good[0]]
+                tot["matched"] += 1
+                errs.append(max(abs((b[2] - b[0]) - (t[2] - t[0])),
+                                abs((b[3] - b[1]) - (t[3] - t[1]))))
+        elif any(_iou(t, b) > 0.0 for b in blocks):
+            tot["fragmented"] += 1
+        else:
+            tot["missed"] += 1
+    tot["spurious"] += sum(1 for bi in range(len(blocks))
+                           if not hits_b[bi] and not touch_b[bi])
+    return tot, errs
+
+
+def m_blocks(root, n, rng, doc=None, min_len=60, min_block=200,
+             iou=0.5):
+    """U11 premise: do the page's GAPS recover a figure the ink route
+    cannot see?
+
+    The ink route finds a figure by CONTAINMENT -- something loose
+    inside a frame's hole. It cannot see a plot whose data touches its
+    own frame: one connected component, nothing enclosed. Infineon p10
+    is that page, and it is why this measurement exists rather than a
+    general belief that white-run analysis is a good idea.
+
+    THE COMPUTATION IS THE COMPLEMENT, which is the part that was wrong
+    the first time it was tried. A white GAP blob is the background
+    AROUND content, so comparing its size to a figure's is comparing
+    two different objects, and it read 30-100% error. The content
+    blocks are the complement of the gap mask -- Baird 1994 and Breuel
+    2002 in run form -- and those land within a few percent.
+
+    ASSIGNMENT IS 1:1 AND THAT IS THE POINT. Nearest-neighbour matching
+    reported both of p7's side-by-side diagrams against the SAME block,
+    which reads as two hits and is one block covering two figures. The
+    four classes below are `gold.py`'s residual classes in another
+    setting, and the reason is the same: one accuracy number would
+    throw the finding away.
+
+        matched     exactly one block reaches `iou` against this truth
+        merged      that block also reaches `iou` against another truth
+        split       two or more blocks each reach `iou`
+        fragmented  blocks overlap it but NONE reaches `iou` -- the
+                    figure is broken into pieces, which is the failure
+                    mode this route actually has
+        missed      no block overlaps it at all
+        spurious    a block over `min_block` px overlapping no truth
+
+    `fragmented` is separate from `split` because they are different
+    faults: `split` is a figure covered twice, `fragmented` is a figure
+    covered by nothing whole. Collapsing them was the first version of
+    this harness and it read 10 of 11 "split" while one "match" carried
+    a whole-page error -- a classifier too coarse to see its own
+    failure.
+
+    POPULATION: pages of one document that MathPix's own `lines.json`
+    labels with a `diagram`, `figure` or `chart`. MathPix is an
+    OPINION, not ground truth -- it is the tool being cross-checked --
+    so `spurious` is not automatically an error. A block MathPix has no
+    region for is the finding this project exists to produce, and it is
+    counted separately for that reason rather than scored against.
+
+    FILTERS, both arguments: `--min-len` (the shortest white run
+    counted as a gap) and `--min-block` (the smallest block considered
+    an object). Both are in page pixels, which the border rule in
+    CLAUDE.md warns about -- they are printed with what they kept and
+    dropped so a reader can see the cost.
+    """
+    docs = [d for d in sorted(root.iterdir())
+            if d.is_dir() and (d / "inspect" / "pages").is_dir()
+            and list(d.glob("*.lines.json"))]
+    if doc:
+        docs = [d for d in docs if d.name == doc]
+    if not docs:
+        print("  no document with rendered pages and a lines.json")
+        return
+    d = docs[0]
+    j = json.loads(next(d.glob("*.lines.json")).read_text())
+    want = {"diagram", "figure", "chart"}
+    todo = []
+    for pg in j["pages"]:
+        boxes = [ln for ln in pg.get("lines", []) if ln.get("type") in want
+                 and isinstance(ln.get("region"), dict)]
+        png = d / "inspect" / "pages" / f"p{pg.get('page')}.png"
+        if boxes and png.exists():
+            todo.append((pg, boxes, png))
+    if not todo:
+        print(f"  {d.name}: no labelled figure page with a rendered PNG")
+        return
+    rng.shuffle(todo)
+    todo = todo[:n]
+    print(f"  {d.name[:44]}, {len(todo)} labelled pages; "
+          f"min_len {min_len} px, min_block {min_block} px")
+
+    tot = Counter()
+    errs = []
+    for pg, boxes, png in todo:
+        mask = load_mask(png, threshold=128)
+        sx = mask.width / float(pg["page_width"])
+        sy = mask.height / float(pg["page_height"])
+        truth = [(b["region"]["top_left_x"] * sx,
+                  b["region"]["top_left_y"] * sy,
+                  (b["region"]["top_left_x"] + b["region"]["width"]) * sx,
+                  (b["region"]["top_left_y"] + b["region"]["height"]) * sy)
+                 for b in boxes]
+        wm, _, _, _ = _white_mask(mask, min_len=min_len)
+        # Capture.NONE, deliberately: `moments_per_component` needs the
+        # NODES and not the adjacency, and the graph on a full-page
+        # complement mask is what got this run killed by the OOM killer
+        # at three min_len values in one process.
+        res = sweep(wm.inverted(), conn=8, capture=Capture.NONE)
+        mo = moments_per_component(res)
+        # A PAGE-SPANNING BLOCK IS THE PAGE, NOT AN OBJECT, and leaving
+        # it in makes `missed` unreachable: it overlaps every truth, so
+        # a figure with no real block covering it reads as `fragmented`
+        # rather than `missed`. The first run showed 0 missed at every
+        # setting, which is the empty-class tell this project keeps
+        # relearning -- a class that cannot occur is not evidence that
+        # it did not.
+        page_area = mask.width * mask.height
+        blocks = [(c.x0, c.y0, c.x1 + 1, c.y1 + 1) for c in mo.values()
+                  if c.width >= min_block and c.height >= min_block
+                  and c.width * c.height < 0.8 * page_area]
+        counts, e = _classify_blocks(truth, blocks, iou)
+        tot.update(counts)
+        errs.extend(e)
+        tot["blocks"] += len(blocks)
+    print(f"  {tot['blocks']} blocks over {min_block} px against "
+          f"{sum(tot[k] for k in ('matched', 'merged', 'split', 'fragmented', 'missed'))} "
+          f"labelled figures")
+    for k in ("matched", "merged", "split", "fragmented", "missed",
+              "spurious"):
+        print(f"      {k:<9} {tot[k]:>4}")
+    if errs:
+        errs.sort()
+        print(f"  matched blocks, worst side error: median "
+              f"{errs[len(errs) // 2]:.0f} px, max {errs[-1]:.0f} px")
+    print("  `spurious` is NOT an error rate. MathPix is the tool being")
+    print("  cross-checked, so a block it has no region for is the")
+    print("  finding -- confirm it by eye before calling it either way.")
+
+
+def _iou(a, b):
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    if inter <= 0:
+        return 0.0
+    ua = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / ua if ua > 0 else 0.0
+
+
 def m_boxes(root, n, rng, fill_max=0.10, hole="bbox", doc=None):
     """units.md "U11 box detection": frames and rules from ink alone,
     cross-checked against the rectangles the PDF itself declares.
@@ -3228,6 +3411,7 @@ MEASUREMENTS = {
     "banding": (m_banding, 3),
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
+    "blocks": (m_blocks, 12),
     "boxes": (m_boxes, 8),
     "alphabet": (m_alphabet, 0),
     "fontmix": (m_fontmix, 60),
@@ -3297,6 +3481,14 @@ def main():
                     choices=("bbox", "area"),
                     help="boxes only: how a hole's size is measured. "
                          "Changes the count by 2x -- see units.md.")
+    ap.add_argument("--iou", type=float, default=0.5,
+                    help="blocks only: overlap a block must reach to "
+                         "count as covering a figure.")
+    ap.add_argument("--min-block", type=int, default=200,
+                    help="blocks only: smallest content block counted as "
+                         "an object, in page px. A page-pixel constant, "
+                         "which CLAUDE.md warns about -- it is printed "
+                         "with what it kept.")
     ap.add_argument("--truth-tex", default=None,
                     help="substitutions only: a human transcription, the "
                          "ground truth the OCR is aligned against.")
@@ -3333,6 +3525,10 @@ def main():
         elif name == "boxes":
             fn(root, args.n or default_n, random.Random(args.seed),
                fill_max=args.fill_max, hole=args.hole_measure, doc=args.doc)
+        elif name == "blocks":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               doc=args.doc, min_len=args.min_len,
+               min_block=args.min_block, iou=args.iou)
         elif name == "separability":
             fn(root, args.n or default_n, random.Random(args.seed),
                doc=args.doc)

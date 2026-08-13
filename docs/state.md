@@ -626,6 +626,65 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### The white-run half — measured, and NOT wired in
+
+p10 was the named failing case for the containment rule: a figure whose
+plot data touches its own frame, so nothing is enclosed and `nest`
+sees nothing. `measure.py blocks` measures whether the white-run route
+recovers it.
+
+**The computation is the COMPLEMENT, and getting that wrong first cost
+a run.** A white *gap* blob is the background AROUND content, so
+comparing its size to a figure's compares two different objects — it
+read 30–100% error. The content blocks are the complement of the gap
+mask (Baird 1994, Breuel 2002 in run form), and those land within a few
+percent.
+
+**On the named case it works.** p10's chart matches a single block at
+**IoU 0.80**; p7's at **0.97**.
+
+**On the population it does not generalise.** Infineon handbook, 12
+pages MathPix labels with a figure/chart/diagram, 14 figures,
+`min_len=60`, IoU ≥ 0.5:
+
+| | |
+|---|---|
+| matched | **6** |
+| fragmented | 7 |
+| missed | 1 |
+| merged / split | 0 / 0 |
+| spurious | 0 |
+
+Matched blocks carry a median side error of 116 px (max 195). Raising
+`min_len` is monotonically worse — at 300 px, matched falls to 3 and
+spurious explodes to 32.
+
+**Decision: NOT wired into `page_lines`.** Half the figures come back
+fragmented, and emitting seven fragments as seven `diagram` lines is
+worse than the current silence on p10. The route detects better than it
+delimits, and `page_lines` needs a delimiter. Recorded like U8's band
+tier: measured, decided, not built.
+
+**Two harness defects on the way, both the same shape — a class that
+could not occur.**
+
+1. The first classifier counted ANY overlap as coverage, so a figure
+   overlapping its own inner blocks read as `split`. It reported **10
+   of 11 split** with the single "match" carrying a whole-page error.
+   That number was a harness artefact, not a finding.
+2. A **page-spanning block** stayed in the candidate list. It overlaps
+   every truth, so a figure covered by nothing real read as
+   `fragmented` rather than `missed` — and `missed` read **0 at every
+   setting**. A zero that cannot be anything else is not evidence.
+
+Both are now pinned by tests that assert each class *fires*, and the
+classifier is extracted so it can be tested at all. This is the third
+harness defect in the project and the second of the empty-class shape.
+
+**And the run was killed by the OOM killer** at `Capture.GRAPH` over
+three `min_len` values in one process. `moments_per_component` needs
+the nodes, not the adjacency — `Capture.NONE` brings it to 254 MB.
+
 ### The diagram floor replaced by CONTAINMENT — no threshold at all
 
 The audit was right that the size floor is a threshold needing
