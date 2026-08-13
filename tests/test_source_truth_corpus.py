@@ -321,26 +321,49 @@ class T11_3_EmitRouteInvariance(unittest.TestCase):
         with self.assertRaises(NoResolution):
             pnm_mask(self.pgm)
 
-    def test_emit_is_NOT_route_invariant_KNOWN_DEFECT(self):
-        """S2's acceptance criterion FAILS. This records the fact and
-        the extent, and deliberately does NOT claim the boundary.
+    def test_emit_IS_route_invariant_on_this_page_defect_CLOSED(self):
+        """S2's acceptance criterion, which USED TO FAIL and now holds
+        on this page. Flipped on 2026-08-13 with the measurement.
 
-        259 samples of 15.5M differ between the routes -- 16.7 per
-        million -- and that moves **254 of 761 emitted lines**. The
-        dominant difference is `cell_row_span`, off by one: band starts
-        come from exact hole `y0` values clustered at `tol`, so a
-        one-pixel shift can push a start across the tolerance, create or
-        remove a band boundary, and move every span crossing it. Region
-        extents move by up to one pixel as well.
+        WHAT CHANGED, and it is not the reader. The input perturbation
+        is exactly what it always was -- **259 samples of 15,465,468
+        differ between the routes, 16.7 per million** -- and it used to
+        move **254 of 761 emitted lines**, because band starts came
+        from hole `y0` values clustered at `tol`, so a one-pixel shift
+        created or removed a band boundary and moved every span
+        crossing it.
 
-        So the spans shipped in `5e7df5e` are unstable under a
-        perturbation four orders of magnitude smaller than a cell.
+        **F1's CELL FLOOR closed it**, and that was not the expected
+        answer -- the first explanation written here blamed the
+        `diagram` containment rule and was wrong. Measured by sweeping
+        the floor on this page, with every other filter off:
 
-        What IS route-invariant is established elsewhere and separately:
-        components, holes, the authored panel width and the tick pitch
-        (`T11_2`). Which further fields are invariant is NOT asserted
-        here, because two attempts to state it were wrong -- that needs
-        measuring across pages, not guessing in an assertion.
+            cell_scale   lines   differing
+                   0.0     761         254     <- the recorded defect
+                   1.0     166           1
+                   2.0      98           0
+                   3.0      81           0     <- the default
+
+        The 761 lines were overwhelmingly spurious cells, and the
+        unstable spans were spans BETWEEN them. Removing the population
+        removed the instability; the chain was never made more robust.
+        That distinction matters, because the instability would return
+        with the population -- it is a property of what is emitted, not
+        a guarantee that now holds.
+
+        THIS IS NOT A CLAIM THAT THE ROUTES ARE INTERCHANGEABLE, and
+        the counterexample is named rather than left for someone to
+        find. On `1408.0838` p13, an anti-aliased figure page at
+        threshold 128, the two rasterisers differ by **1,265 per
+        million -- 76x this page** -- and the TOPOLOGY differs with
+        them, 2633 components against 2656. The PNG route emits two
+        diagrams there and the PGM route none. That is not the chain
+        amplifying a small difference; it is the two masks not being
+        the same page, and no emit-level guarantee can repair it.
+
+        So: the amplification is closed BY A FILTER, the
+        interchangeability is not claimed, and the page that refutes it
+        is written down.
         """
         import json
         from inkdrill.emit import page_lines
@@ -349,34 +372,23 @@ class T11_3_EmitRouteInvariance(unittest.TestCase):
             self.skipTest("ghostscript unavailable, or no source PDF")
         pt = 72.0 / 400.0
         pgm = pnm_mask(self.pgm, dpi=400, threshold=240)
+
+        # The input difference is unchanged -- assert it, so a future
+        # reader cannot mistake this for the renderers having converged.
+        differing = sum(1 for x, y in zip(self.mask.data, pgm.data) if x != y)
+        self.assertGreater(differing, 0,
+                           "if the masks are now identical this test proves "
+                           "nothing about the chain")
+        self.assertLess(differing * 1e6 / (self.mask.width * self.mask.height),
+                        100.0, "the input perturbation moved; re-measure "
+                               "before trusting the equality below")
+
         a = page_lines(self.mask, pt=pt, tol=2.0)
         b = page_lines(pgm, pt=pt, tol=2.0)
-        self.assertEqual(len(a), len(b), "the line COUNT is route-invariant")
-        self.assertEqual([x["type"] for x in a], [y["type"] for y in b],
-                         "the line KINDS are route-invariant")
-        self.assertNotEqual(json.dumps(a, sort_keys=True),
-                            json.dumps(b, sort_keys=True),
-                            "if these now agree, the defect is fixed and "
-                            "this test should become an equality assertion")
-
-    def _superseded_test_lines_json_is_identical_through_both_routes(self):
-        import json
-        from inkdrill.emit import lines_json, page_lines, page_record
-        from inkdrill.pnmio import load_mask as pnm_mask
-        if self.pgm is None:
-            self.skipTest("ghostscript unavailable, or no source PDF")
-        pt = 72.0 / 400.0
-        pgm = pnm_mask(self.pgm, dpi=400, threshold=240)
-        docs = []
-        for mask in (self.mask, pgm):
-            docs.append(lines_json(
-                [page_record(page=1, width_px=mask.width,
-                             height_px=mask.height, dpi=(400.0, 400.0),
-                             lines=page_lines(mask, pt=pt, tol=2.0))],
-                render_dpi=400.0))
-        self.assertEqual(json.dumps(docs[0], sort_keys=True),
-                         json.dumps(docs[1], sort_keys=True),
-                         "the emitted document moved with the raster route")
+        self.assertTrue(a, "an empty page would make the equality vacuous")
+        self.assertEqual(json.dumps(a, sort_keys=True),
+                         json.dumps(b, sort_keys=True),
+                         "emit is no longer route-invariant on this page")
 
     def test_every_region_is_in_points_not_pixels(self):
         """A constraint to preserve, not a change: pdf.js applies its

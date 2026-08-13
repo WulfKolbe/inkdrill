@@ -626,6 +626,55 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### F4 re-measured — the amplification is closed, by F1's cell floor
+
+Found by re-running the opt-in corpus suite after a crashed session:
+`test_emit_is_NOT_route_invariant_KNOWN_DEFECT` **failed**, because the
+two routes now agree. Its own docstring said that if they ever agreed
+the test should become an equality assertion.
+
+**The input perturbation is unchanged** — 259 samples of 15,465,468
+differ between the PNG and PGM routes, 16.7 per million, exactly as
+recorded. What changed is that it no longer moves the output.
+
+**The cause was NOT what I first wrote.** The first explanation blamed
+the `diagram` containment rule; the test passed with that rule off, so
+the explanation was wrong. Sweeping the cell floor on the page, every
+other filter off:
+
+| `cell_scale` | lines | differing |
+|---|---|---|
+| 0.0 | **761** | **254** ← the recorded defect, reproduced exactly |
+| 1.0 | 166 | 1 |
+| 2.0 | 98 | 0 |
+| 3.0 (default) | 81 | 0 |
+
+**F1's cell floor closed F4.** The 761 lines were overwhelmingly
+spurious cells and the unstable spans were spans *between* them.
+Removing the population removed the instability — the chain was never
+made more robust, and the instability would return with the
+population. That is a filter holding a guarantee, not a guarantee.
+
+**Route interchangeability is still NOT claimed, and the counterexample
+is named.** On `1408.0838` p13, an anti-aliased figure page at
+threshold 128:
+
+| page | samples differing | per million | topology |
+|---|---|---|---|
+| e12s39 p1 (line art, th240) | 259 / 15.5M | 16.7 | identical |
+| 1408.0838 p8 (th128) | 0 | 0.0 | identical |
+| 1408.0838 p13 (figure, th128) | 18,934 / 15.0M | **1,265.6** | **2633 vs 2656** |
+
+p13 is 76× the perturbation and the *topology itself* differs, so the
+PNG route emits two diagrams there and the PGM route none. That is not
+the chain amplifying a small difference; it is the two masks not being
+the same page, and no emit-level guarantee can repair it.
+
+The test now asserts equality **and** asserts the input perturbation is
+still non-zero and still under 100 per million — so it cannot pass by
+the renderers quietly converging, which would make the equality prove
+nothing.
+
 ### The white-run half — measured, and NOT wired in
 
 p10 was the named failing case for the containment rule: a figure whose
