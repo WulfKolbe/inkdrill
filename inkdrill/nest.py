@@ -101,7 +101,8 @@ from collections import defaultdict
 from .raster import BG, INK, InkMask, Rect
 from .sweep import Capture, sweep
 
-__all__ = ["Kind", "Region", "Nesting", "nest", "InvalidConnectivity"]
+__all__ = ["Kind", "Region", "Nesting", "nest", "ink_only",
+           "InvalidConnectivity"]
 
 
 class InvalidConnectivity(ValueError):
@@ -221,7 +222,7 @@ class Nesting:
         return True
 
 
-def _regions_via_sweeps(padded: InkMask):
+def _regions_via_sweeps(padded: InkMask, fgres=None):
     """Regions, extents and parents from TWO SWEEPS instead of a
     per-pixel flood fill.
 
@@ -246,7 +247,8 @@ def _regions_via_sweeps(padded: InkMask):
       -- so the lookup is over a far smaller set.
     """
     w = padded.width
-    fgres = sweep(padded, axis="row", conn=8, capture=Capture.NONE)
+    if fgres is None:
+        fgres = sweep(padded, axis="row", conn=8, capture=Capture.NONE)
     bgres = sweep(padded.inverted(), axis="row", conn=4, capture=Capture.NONE)
 
     per_line: dict[int, list[tuple[int, int, int]]] = defaultdict(list)
@@ -324,6 +326,86 @@ def _label(mask: InkMask, want_ink: bool, conn: int) -> tuple[list[int], int]:
     return lab, nxt
 
 
+@dataclass(slots=True)
+class InkPass:
+    """The ink half of `nest`, with the background half deferred.
+
+    `regions` are the ink regions `nest(mask)` would produce, ids
+    included -- not merely equivalent. That holds because `nest`
+    numbers ink 0..n_fg-1 from the ink sweep alone and offsets the
+    background afterwards, so an ink region's identity never depended
+    on the background sweep.
+
+    `cycles[i]` is that region's hole COUNT from the cycle rank, which
+    equals `len(nest(mask).holes_of(id))` on every page measured. What
+    is missing is hole GEOMETRY -- where the holes are and what sits
+    inside them -- and `complete()` computes it, REUSING this ink pass
+    rather than sweeping the ink again.
+
+    The reuse is the point. A gate that costs a third sweep whenever it
+    guesses wrong is not a saving, and the first version of this was
+    exactly that: text pages 40% faster, table pages 30% slower, a net
+    loss on a figure-heavy document.
+    """
+    regions: list
+    cycles: list
+    _padded: InkMask
+    _fgres: object
+
+    def pairs(self):
+        return list(zip(self.regions, self.cycles))
+
+    def complete(self) -> "Nesting":
+        """The full `Nesting`, without repeating the ink sweep."""
+        return _build(self._padded, self._fgres)
+
+
+def ink_only(mask: InkMask, *, conn: int = 8) -> InkPass:
+    """The ink regions `nest()` would produce, without the second sweep.
+
+    Exists so a caller that needs no hole GEOMETRY can skip it and
+    still speak the same id space. Emitting ids from two different
+    spaces depending on what happened to be on the page is the trap
+    this package has paid for twice; returning the same ids is what
+    makes the saving safe to take.
+
+    `parent`, `depth` and `children` are NOT filled in -- there is no
+    forest without the background -- and stay at their defaults.
+    """
+    if conn != 8:
+        raise InvalidConnectivity(
+            f"foreground connectivity must be 8 (background 4); got {conn}")
+    padded = _pad(mask)
+    res = sweep(padded, axis="row", conn=8, capture=Capture.GRAPH)
+    by_id = {n.id: n for n in res.nodes}
+    rows = []
+    for comp in res.components:
+        runs = [by_id[i] for i in comp.nodes]
+        y0 = min(r.line for r in runs)
+        rows.append((y0, min(r.lo for r in runs if r.line == y0), comp, runs))
+    rows.sort(key=lambda t: (t[0], t[1]))
+    regions, cycles = [], []
+    for rid, (y0, _x, comp, runs) in enumerate(rows):
+        regions.append(Region(rid, Kind.INK, -1,
+                              sum(r.hi - r.lo + 1 for r in runs),
+                              min(r.lo for r in runs) - 1, y0 - 1,
+                              max(r.hi for r in runs) - 1,
+                              max(r.line for r in runs) - 1))
+        cycles.append(comp.cycle_count)
+    return InkPass(regions, cycles, padded, res)
+
+
+def _pad(mask: InkMask) -> InkMask:
+    """One-pixel border, so the outside is a single region."""
+    w, h = mask.width + 2, mask.height + 2
+    buf = bytearray(w * h)
+    for y in range(mask.height):
+        src = y * mask.width
+        buf[(y + 1) * w + 1:(y + 1) * w + 1 + mask.width] = \
+            mask.data[src:src + mask.width]
+    return InkMask(bytes(buf), w, h)
+
+
 def nest(mask: InkMask, *, conn: int = 8) -> Nesting:
     """Holes, the containment forest and the four relations.
 
@@ -333,17 +415,12 @@ def nest(mask: InkMask, *, conn: int = 8) -> Nesting:
     if conn != 8:
         raise InvalidConnectivity(
             f"foreground connectivity must be 8 (background 4); got {conn}")
+    return _build(_pad(mask), None)
 
-    # Pad by one so the outside is a single border-touching region.
-    w, h = mask.width + 2, mask.height + 2
-    buf = bytearray(w * h)
-    for y in range(mask.height):
-        src = y * mask.width
-        buf[(y + 1) * w + 1:(y + 1) * w + 1 + mask.width] = \
-            mask.data[src:src + mask.width]
-    padded = InkMask(bytes(buf), w, h)
 
-    ident, box, area, top, region_at, n_fg = _regions_via_sweeps(padded)
+def _build(padded: InkMask, fgres) -> Nesting:
+    """The forest, given the padded mask and optionally its ink sweep."""
+    ident, box, area, top, region_at, n_fg = _regions_via_sweeps(padded, fgres)
 
     regions: dict[int, Region] = {}
     # Extents are shifted back to ORIGINAL (unpadded) coordinates here;

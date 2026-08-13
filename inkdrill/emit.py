@@ -74,7 +74,7 @@ G7  `ink.rules[]` carries a MEASURED `width_pt`, never a rule name --
 from __future__ import annotations
 
 from .aggregate import moments_per_component
-from .nest import Kind, nest
+from .nest import Kind, ink_only, nest
 from .sweep import Capture, sweep
 
 __all__ = ["NoResolution", "lines_json", "page_record", "page_lines",
@@ -353,6 +353,31 @@ def glyph_line(region, pt: float, *, holes: int = 0, axis=None) -> dict:
                  cell_column=None, ink=ink)
 
 
+def _glyphs_only(mask, pairs, pt: float):
+    """The no-structure path: glyphs, with holes from the cycle rank.
+
+    Reached when no component could be a table or a diagram, which is
+    every page of plain text. It skips the background sweep -- roughly
+    half of `nest` -- and returns the SAME ids, because an ink region's
+    identity never depended on that sweep.
+    """
+    by_geom = {}
+    for c in moments_per_component(
+            sweep(mask, conn=8, capture=Capture.GRAPH)).values():
+        key = (c.x0, c.y0, c.x1, c.y1, c.area)
+        by_geom[key] = None if key in by_geom else c
+    out = []
+    for region, cycles in sorted(pairs, key=lambda t: (t[0].y0, t[0].x0)):
+        if is_rule(region):
+            continue
+        c = by_geom.get((region.x0, region.y0, region.x1, region.y1,
+                         region.area))
+        out.append(glyph_line(region, pt, holes=cycles,
+                              axis=c.principal_axis if c is not None
+                              else None))
+    return out
+
+
 def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                max_fill: float = 0.35, cell_scale: float = 3.0,
                diagram_scale: float = 3.0, require_content: bool = True,
@@ -376,8 +401,27 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
     near the bbox edge, and is separate work; it is the same shape as
     ticks drawn as part of an axis path rather than as free objects.
     """
-    n = nest(mask)
     grounds = grounds or {}
+    # T4: the hole GEOMETRY is only needed if something on this page
+    # could be a table or a diagram. `ink_only` is the ink half of the
+    # same computation -- same ids, same boxes -- so the cheap path and
+    # the full one speak one id space and a consumer cannot tell which
+    # ran except by what is absent.
+    ink = ink_only(mask)
+    pairs = ink.pairs()
+    heights = sorted(r.y1 - r.y0 + 1 for r, _ in pairs)
+    scale = float(heights[len(heights) // 2]) if heights else 0.0
+    bar = min(scale * cell_scale, scale * diagram_scale)
+    if not any(cyc and max(r.x1 - r.x0 + 1, r.y1 - r.y0 + 1) >= bar
+               for r, cyc in pairs):
+        # Nothing structural is possible. Holes come from the cycle
+        # rank, which IS the per-component hole count -- checked
+        # against `nest` on every page measured.
+        if not glyphs:
+            return []
+        return _glyphs_only(mask, pairs, pt)
+
+    n = ink.complete()          # reuses the ink sweep above
     inks = ink_regions(n)
     # `cell_scale` multiplies the page's own text height. The default
     # is 3.0, and it is chosen by an INVARIANCE rather than by fit:
@@ -392,7 +436,6 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
     # the false positives collapse by 70x. That is the signature of a
     # separation rather than a tuned threshold: any value in the range
     # is safe for the true positive, so the highest one is free.
-    scale = text_scale(n)
     min_cell = scale * cell_scale
     # A FIGURE IS NOT LETTER-SIZED, and `diagram` had no floor at all --
     # so a hollow glyph with fewer than two holes fell through the table

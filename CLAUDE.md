@@ -136,7 +136,10 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   `moments_of_mask`, `moments_per_component`. Raw sums are exact
   integers; that is what makes axis invariance exact. Moments add.
 - **`inkdrill/nest.py`** — holes and the containment forest. `nest()` →
-  `Nesting`. Computes holes independently of `sweep`, so the two check
+  `Nesting`; `ink_only()` → `InkPass` is the ink half with the
+  background sweep deferred, returning the SAME ids so a caller that
+  needs no hole geometry can skip it without changing id space.
+  `InkPass.complete()` finishes without repeating the ink sweep. Computes holes independently of `sweep`, so the two check
   each other. `hole_of` and `ink_in_hole` are deliberately distinct.
 - **`inkdrill/band.py`** — band splitting and seam stitching. `split`,
   `sweep_bands`, `stitch`, `sweep_banded`. Output is indistinguishable

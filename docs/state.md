@@ -626,6 +626,48 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### T4 — skip the hole geometry when nothing needs it
+
+A page of plain text has no table and no diagram, so it needs the hole
+*count* but not the hole *geometry*. `nest.ink_only()` returns an
+`InkPass`: the ink regions `nest` would produce — **ids included, not
+merely equivalent** — plus each component's `cycle_count`, which **is**
+its hole count (checked equal to `len(holes_of(id))` on every page
+measured). `page_lines` gates the background sweep on there being a
+component that could be a table or diagram.
+
+**The ids are the whole reason this is safe.** Emitting `region_id`
+from two different spaces depending on what happened to be on the page
+is the trap this package has paid for twice. `nest` numbers ink
+`0..n_fg-1` from the ink sweep alone and offsets the background
+afterwards, so an ink region's identity never depended on the sweep
+being skipped.
+
+**The first version was a trade, not a saving**, and the measurement
+caught it: `ink_only` and `nest` each ran their own ink sweep, so text
+pages got 34% faster and table pages 30% slower — a **net loss** over
+Infineon's 110-page mix (76 structural, 34 text). `InkPass.complete()`
+now reuses the ink pass:
+
+| page | before T2 | naive gate | reusing gate |
+|---|---|---|---|
+| Heim p229 (text) | 1.22 s | 0.76 s | **0.85 s** |
+| Infineon p19 (table) | 0.95 s | 1.24 s | **1.05 s** |
+| 1408.0838 p8 | — | 3.80 s | **3.23 s** |
+
+**Both surviving mutants were performance-only, and that is the
+signature of a correct optimisation** — doing work that was not needed
+cannot change the output, so no output test can reach it. The only
+killable mutant is the one that *skips* work it needed. The mechanism
+is therefore asserted by COUNTING: `complete()` must do exactly one
+further sweep, and a text page must not call `_build` at all.
+
+One of those counting tests could not fail on its first draft: it spied
+on `emit.nest`, but the code reaches the forest through
+`InkPass.complete()`, so the spy never fired whatever the gate did. It
+now spies on `nest._build`, which both paths go through, and the
+opposite case is asserted on the same spy.
+
 ### T3 — stdin and concatenated PNM: no temp file in the pipeline
 
 `gs -sDEVICE=pgmraw -sOutputFile=%stdout | python3 -m inkdrill - --dpi 400`

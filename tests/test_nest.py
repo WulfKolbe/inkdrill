@@ -4,7 +4,7 @@ import random
 import unittest
 
 from inkdrill.nest import (InvalidConnectivity, Kind, _label,  # noqa: F401
-                           nest)
+                           ink_only, nest)
 from inkdrill.raster import BG, INK, InkMask
 from inkdrill.sweep import Capture, sweep
 
@@ -425,6 +425,105 @@ class T6_8_TwoSweepsEqualTheFloodFill(unittest.TestCase):
         one or the ink is one blob touching every edge."""
         for fill in (INK, BG):
             self._compare(InkMask(bytes([fill]) * (12 * 9), 12, 9))
+
+
+class T6_9_InkPassIsTheSameIdSpace(unittest.TestCase):
+    """T4: the ink half alone, with the background sweep deferred.
+
+    The saving is only safe because the ids are IDENTICAL. Emitting
+    `region_id` from two different spaces depending on what happened to
+    be on the page is the trap this package has paid for twice, so the
+    equality is asserted rather than argued.
+    """
+
+    @staticmethod
+    def _page():
+        """Letters, a framed box with a hole, and a rule -- so ink
+        regions differ in every way the two paths could disagree on."""
+        w, h = 120, 90
+        buf = bytearray(w * h)
+        for i in range(4):                       # hollow rings
+            ox = 4 + i * 14
+            for x in range(ox, ox + 9):
+                buf[10 * w + x] = INK
+                buf[24 * w + x] = INK
+            for y in range(10, 25):
+                buf[y * w + ox] = INK
+                buf[y * w + ox + 8] = INK
+        for x in range(70, 115):                 # a frame
+            buf[40 * w + x] = INK
+            buf[80 * w + x] = INK
+        for y in range(40, 81):
+            buf[y * w + 70] = INK
+            buf[y * w + 114] = INK
+        buf[60 * w + 90] = INK                   # loose ink inside it
+        for x in range(5, 60):                   # a rule
+            buf[85 * w + x] = INK
+        return InkMask(bytes(buf), w, h)
+
+    def test_ids_boxes_and_areas_match_nest_exactly(self):
+        m = self._page()
+        got = sorted((r.id, r.area, r.x0, r.y0, r.x1, r.y1)
+                     for r in ink_only(m).regions)
+        want = sorted((r.id, r.area, r.x0, r.y0, r.x1, r.y1)
+                      for r in nest(m).regions.values() if r.kind is Kind.INK)
+        self.assertEqual(got, want)
+
+    def test_the_cycle_rank_IS_the_hole_count(self):
+        """What lets the cheap path report holes at all. Asserted with a
+        fixture that has both holed and hole-free components, so a
+        constant zero or a constant one would fail."""
+        m = self._page()
+        n = nest(m)
+        pairs = ink_only(m).pairs()
+        self.assertEqual([c for _, c in pairs],
+                         [len(n.holes_of(r.id)) for r, _ in pairs])
+        self.assertEqual(sorted({c for _, c in pairs}), [0, 1])
+
+    def test_complete_equals_a_fresh_nest(self):
+        """`complete()` reuses the ink sweep. If the reuse were wrong
+        the forest would differ, so the whole structure is compared."""
+        m = self._page()
+        a, b = ink_only(m).complete(), nest(m)
+        self.assertEqual(a.outside, b.outside)
+        self.assertEqual(sorted(a.roots), sorted(b.roots))
+        self.assertEqual(
+            sorted((r.id, r.kind.value, r.depth, r.area, r.parent,
+                    tuple(r.children)) for r in a.regions.values()),
+            sorted((r.id, r.kind.value, r.depth, r.area, r.parent,
+                    tuple(r.children)) for r in b.regions.values()))
+
+    def test_the_forest_fields_are_NOT_filled_in(self):
+        """Stated in the contract, so asserted: there is no forest
+        without the background sweep, and a caller must not read one."""
+        for r in ink_only(self._page()).regions:
+            self.assertIsNone(r.parent)
+            self.assertEqual(r.children, [])
+            self.assertEqual(r.depth, -1)
+
+    def test_complete_does_ONE_further_sweep_not_two(self):
+        """The reuse itself, asserted by counting.
+
+        `complete()` returning `_build(padded, None)` is behaviourally
+        EQUIVALENT -- it recomputes the ink sweep and gets the same
+        answer -- so no output test can catch it. That is the signature
+        of an optimisation: the only killable mutant is the one that
+        skips work it needed. The mechanism therefore has to be
+        measured rather than inferred.
+        """
+        import unittest.mock as mock
+        import inkdrill.nest as N
+        m = self._page()
+        ik = ink_only(m)
+        with mock.patch.object(N, "sweep", wraps=N.sweep) as spy:
+            ik.complete()
+        self.assertEqual(spy.call_count, 1, "the ink sweep was repeated")
+
+    def test_connectivity_is_refused_and_accepted(self):
+        m = self._page()
+        with self.assertRaises(InvalidConnectivity):
+            ink_only(m, conn=4)
+        self.assertTrue(ink_only(m, conn=8).regions)
 
 
 if __name__ == "__main__":

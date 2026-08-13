@@ -594,6 +594,55 @@ class T1_8_Glyphs(unittest.TestCase):
                 buf[y * w + ox + 15] = 0xFF
         return InkMask(bytes(buf), w, h)
 
+    def test_a_text_page_never_builds_the_forest(self):
+        """T4's gate, asserted by counting rather than by timing.
+
+        Skipping the background sweep cannot change the output, so
+        "always nest" is an equivalent mutant and no output test
+        reaches it. What can be checked is that the work does not
+        happen -- and the opposite case, that a page with a table does
+        build the forest, so the gate is not simply always closed.
+
+        The spy has to sit on `nest._build`, which BOTH paths go
+        through. Patching `emit.nest` was the first attempt and could
+        not fail: the code reaches the forest via `InkPass.complete()`,
+        so that spy never fired whatever the gate did.
+        """
+        import unittest.mock as mock
+        import inkdrill.nest as N
+        with mock.patch.object(N, "_build", wraps=N._build) as spy:
+            page_lines(self._letters(), pt=PT, tol=1.0, glyphs=True)
+        self.assertEqual(spy.call_count, 0)
+
+    def test_a_page_with_a_table_DOES_build_the_forest_and_the_spy_fires(self):
+        """The other side, on the SAME spy -- otherwise the assertion
+        above passes on a spy that could never fire."""
+        import unittest.mock as mock
+        import inkdrill.nest as N
+        with mock.patch.object(N, "_build", wraps=N._build) as spy:
+            page_lines(self._grid(), pt=PT, tol=1.0, cell_scale=0.0)
+        self.assertEqual(spy.call_count, 1)
+
+    @staticmethod
+    def _grid():
+        w, h = 400, 200
+        buf = bytearray(w * h)
+        for x in range(10, 390):
+            for t in range(3):
+                buf[(10 + t) * w + x] = 0xFF
+                buf[(100 + t) * w + x] = 0xFF
+                buf[(190 + t) * w + x] = 0xFF
+        for y in range(10, 193):
+            for t in range(3):
+                buf[y * w + 10 + t] = 0xFF
+                buf[y * w + 200 + t] = 0xFF
+                buf[y * w + 389 + t] = 0xFF
+        return InkMask(bytes(buf), w, h)
+
+    def test_a_page_with_a_table_still_emits_it(self):
+        lines = page_lines(self._grid(), pt=PT, tol=1.0, cell_scale=0.0)
+        self.assertIn("table", [l["type"] for l in lines])
+
     def test_glyphs_are_OFF_by_default(self):
         """Opt-in, because it changes what every existing consumer
         receives. The negative side of the switch, asserted."""
