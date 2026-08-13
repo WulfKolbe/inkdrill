@@ -676,18 +676,67 @@ cmex10, by glyph name:
 | circleplus / circleminus | (1,4) vs (1,2) | SEPARABLE |
 | integraldisplay / contintegraldisplay | (1,0) vs (1,2) | SEPARABLE |
 
-**The blind set is not a list of accidents.** `(components, cycles)` is
-a topological invariant, so it is unchanged by **reflection** and by
-**rotation** — and every blind pair above is one of the other
-reflected. No resolution and no threshold reaches them, because nothing
-about the ink distinguishes them. The two separable pairs are the two
-that differ in **hole count** rather than in orientation. Pinned by a
-test at three sizes, with the separable pair asserted beside it so the
-class cannot pass by reporting everything blind.
+**Reflection was the wrong explanation — corrected below.** It is true
+that `(components, cycles)` is reflection-invariant, but that is not
+what binds: `F` and `E` are not reflections of each other and are blind
+anyway.
 
-This is the honest scope of the topology channel, and it is why U13's
-extents channel and the conjunction verifier exist: a consumer that
-trusts topology alone will return `∑` for `∏` confidently.
+### A, corrected — cardinality binds, and it is NOT irreducible
+
+`measure.py alphabet`. Two corrections in one measurement, and one of
+them is against the audit that prompted it.
+
+**The audit is right that CARDINALITY binds, not reflection.** U12's
+ceiling arriving in a third place. But quote **efficiency**, never the
+class count — four classes bound two bits only if they are equal in
+size, and 40 of 62 characters land in `(1, 0)`:
+
+| face / population | channel | classes | largest | efficiency |
+|---|---|---|---|---|
+| DejaVuSans, ASCII | (components, cycles) | 4 | 40/62 = 65% | **22%** |
+| | reeb signature, row | 16 | 16/62 = 26% | 56% |
+| | reeb signature, **row+col** | 29 | 6/62 = 10% | **75%** |
+| FreeSerifb, ASCII | (components, cycles) | 4 | 40/62 = 65% | **22%** |
+| | reeb signature, **row+col** | 45 | 5/62 = 8% | **89%** |
+
+So the channel carries **1.3 bits of the 5.95 needed, not 2.0** — the
+cardinality bound overstates it, which is exactly U12's lesson.
+
+**The population is a decision and it changes the answer.** Adding the
+Latin-1 accented forms this corpus actually contains raises
+`(components, cycles)` from 22% to 33%, because an accent is a *second
+component* and the invariant can see it. A Latin-only figure
+understates the channel on German text and a German figure overstates
+it on English. Both are reported; neither alone is the number.
+
+**Where this parts company with the audit: the ceiling is NOT
+irreducible by a better invariant of the same kind.** The audit
+concluded it "can't be reduced by a better invariant of the same kind,
+only by a different channel". A finer invariant of exactly that kind,
+already in this package, lifts it — and running the sweep on **both
+axes** lifts it to 75–89%, largest class 65% → 8%.
+
+**The two axes are complementary, and that is the transferable part:**
+
+| pair | row | col |
+|---|---|---|
+| union / intersection | SEPARABLE | blind |
+| lessequal / greaterequal | blind | SEPARABLE |
+| summationdisplay / productdisplay | SEPARABLE | SEPARABLE |
+| plusminus / minusplus | blind | blind |
+
+A **vertical** reflection falls to the row sweep; a **horizontal** one
+falls to the column sweep. **Six of the seven pairs** that
+`(components, cycles)` calls blind are separated by running both.
+`reeb.signature` is documented as *not rotation invariant* — that
+recorded limitation is precisely what does the work, and axis
+disagreement is information rather than a defect. Only
+`plusminus/minusplus` survives both.
+
+**Scope.** Clean rendered glyphs at 96 px/em — a ceiling on a ceiling.
+U13 already measured that the signature degrades on scanned ink, so
+this says what the channel can carry at best, not what it delivers on a
+page. It does not license dropping the extents channel.
 
 ### C — the OCR substitution audit: 60%, not eight of eight
 

@@ -131,11 +131,14 @@ class TC_3_Blindness(unittest.TestCase):
                              measure._glyph_topology(self.font, "l", px_em),
                              f"at {px_em} px/em")
 
-    def test_a_REFLECTED_pair_is_blind_by_construction(self):
-        """Item A's structural finding, pinned. (components, cycles) is
-        a topological invariant, so it is unchanged by reflection -- and
-        the maths pairs that matter are reflections of each other. This
-        is not a resolution problem and no threshold reaches it."""
+    def test_a_REFLECTED_pair_is_blind_TO_THIS_INVARIANT(self):
+        """(components, cycles) is a topological invariant, so it is
+        unchanged by reflection, and no size reaches that.
+
+        CORRECTED SCOPE. This says nothing about the ink -- only about
+        the two-number summary. `test_the_two_axis_signature_LIFTS_it`
+        separates the same pair, so "nothing about the ink
+        distinguishes them" was wrong and is not asserted here."""
         import os
         tree = pathlib.Path(os.environ.get(
             "INKDRILL_TYPE1", "/usr/share/texmf-dist/fonts/type1"))
@@ -164,6 +167,44 @@ class TC_3_Blindness(unittest.TestCase):
         self.assertNotEqual(
             measure._glyph_topology(sym, None, 96.0, name="circleplus"),
             measure._glyph_topology(sym, None, 96.0, name="circleminus"))
+
+    def test_the_two_axis_signature_LIFTS_it(self):
+        """The correction, pinned. A finer invariant of the SAME KIND --
+        already in this package -- separates pairs that (components,
+        cycles) cannot, so the blind set is a property of the summary
+        and not of topology.
+
+        The two axes are COMPLEMENTARY, which is the part worth
+        keeping: union/intersection is a vertical reflection and falls
+        to the row sweep; lessequal/greaterequal is a horizontal one
+        and falls to the column sweep. Each is blind on the other axis.
+        `reeb.signature` is documented as not rotation invariant --
+        that recorded limitation is what does the work here.
+        """
+        import os
+        from inkdrill.reeb import contract, signature
+        from inkdrill.sweep import Capture, sweep as do_sweep
+        from inkdrill.charstring import outline
+        from inkdrill.scan import render
+        tree = pathlib.Path(os.environ.get(
+            "INKDRILL_TYPE1", "/usr/share/texmf-dist/fonts/type1"))
+        src = next(tree.rglob("cmsy10.pfb"), None) if tree.is_dir() else None
+        if src is None:
+            self.skipTest("no cmsy10.pfb; set INKDRILL_TYPE1")
+        sym = measure.t1_load(src)
+
+        def sig(name, axis):
+            mask, _ = render(outline(sym, name), sym.units_per_em, 96.0)
+            return signature(contract(
+                do_sweep(mask, axis=axis, conn=8, capture=Capture.GRAPH)))
+
+        # vertical reflection: the row sweep sees it, the column one does not
+        self.assertNotEqual(sig("union", "row"), sig("intersection", "row"))
+        self.assertEqual(sig("union", "col"), sig("intersection", "col"))
+        # horizontal reflection: exactly the other way round
+        self.assertEqual(sig("lessequal", "row"), sig("greaterequal", "row"))
+        self.assertNotEqual(sig("lessequal", "col"),
+                            sig("greaterequal", "col"))
 
     def test_an_unmapped_character_returns_None_rather_than_a_topology(self):
         """An unrenderable pair must leave the population visibly. A

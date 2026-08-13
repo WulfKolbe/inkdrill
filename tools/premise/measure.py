@@ -1323,18 +1323,110 @@ def m_separability(root, n, rng, doc=None):
         verdict = "SEPARABLE" if ta != tb else "BLIND"
         print(f"  {face:>8} {a:>18}/{b:<20} {str(ta):>7} vs "
               f"{str(tb):<7} {verdict}")
-    print("  The blind set is not a list of accidents. (components,")
-    print("  cycles) is a topological invariant, so it is unchanged by")
-    print("  REFLECTION and by ROTATION -- and every blind pair above is")
-    print("  one of the other reflected: union/intersection,")
-    print("  lessequal/greaterequal, summation/product. No resolution and")
-    print("  no threshold reaches them, because nothing about the ink")
-    print("  distinguishes them. The two SEPARABLE pairs are the two that")
-    print("  differ in HOLE COUNT rather than in orientation.")
-    print("  A BLIND pair is where a consumer that trusts topology alone")
-    print("  will return a wrong answer confidently. It is named here so")
-    print("  that consumer can require a second channel for it -- which is")
-    print("  what U13's extents channel and the conjunction verifier are.")
+    print("  CORRECTED. Reflection was the wrong explanation. It is true")
+    print("  that (components, cycles) is reflection-invariant, but that")
+    print("  is not what binds -- `F` and `E` are not reflections and are")
+    print("  blind anyway. What binds is CARDINALITY: see the alphabet")
+    print("  partition above. Nor is the ceiling irreducible -- the")
+    print("  two-axis reeb signature separates six of the seven pairs")
+    print("  this two-number summary calls blind. Run `alphabet` for the")
+    print("  measurement that settles both claims.")
+
+
+def m_alphabet(root, n, rng):
+    """What a topological invariant can carry, in BITS -- the correction
+    to item A.
+
+    The blind pairs were first explained by REFLECTION: `(components,
+    cycles)` is a topological invariant, so it cannot see a mirror.
+    True, and not the cause. `F` and `E` are not reflections of each
+    other and are blind anyway. What binds is CARDINALITY -- U12's
+    ceiling arriving in a third place.
+
+    Report `efficiency`, never the class count. Four classes can carry
+    two bits only if they are equal in size, and they are not: 40 of 62
+    characters land in `(1, 0)`. The entropy is what the channel
+    actually carries and it is lower than the cardinality bound, which
+    is exactly the mistake U12 recorded.
+
+    THE CEILING IS NOT IRREDUCIBLE, which is where this parts company
+    with the audit that prompted it. A finer invariant of the same kind
+    -- already in this package -- lifts it, and running the sweep on
+    BOTH axes lifts it further, because `reeb.signature` is
+    deliberately not rotation invariant. A property recorded as a
+    limitation turns out to be the thing that does the work.
+
+    POPULATION, and it changes the answer, so BOTH are reported. The
+    62 unaccented ASCII alphanumerics is the comparable population.
+    Adding the Latin-1 accented forms this corpus actually contains --
+    the German pages are full of them -- raises the efficiency by a
+    third, because an accent is a SECOND COMPONENT and the invariant
+    can see it. A Latin-only figure understates the channel on German
+    text and a German figure overstates it on English. Neither is the
+    number; the pair is.
+
+    CLEAN GLYPHS, not real ink: this is what the channel can carry at
+    best, and U13 already measured that the signature degrades on a
+    scanned page. It is a ceiling on a ceiling.
+    """
+    tree = pathlib.Path(os.environ.get("INKDRILL_TYPE1",
+                                       "/usr/share/texmf-dist/fonts/type1"))
+    px_em = 96.0
+    for fname in ("DejaVuSans.pfb", "FreeSerifb.pfb"):
+        src = next(tree.rglob(fname), None) if tree.is_dir() else None
+        if src is None:
+            print(f"  {fname} not found under {tree}")
+            continue
+        font = t1_load(src)
+        for pop in ("ASCII", "ASCII + Latin-1 accented"):
+            _alphabet_one(font, fname, pop, px_em)
+    print("  The class count is NOT the answer -- 4 classes bound two")
+    print("  bits and the channel carries 1.3, because 40 of 62 land in")
+    print("  one class. Quote efficiency, as U12 records.")
+
+
+def _alphabet_one(font, fname, pop, px_em):
+    chans = {"(components, cycles)": defaultdict(list),
+             "reeb signature, row": defaultdict(list),
+             "reeb signature, row+col": defaultdict(list)}
+    for ch, nm in sorted(_AGL.items()):
+        if nm is None or nm not in font.charstrings or not ch.isalnum():
+            continue
+        if pop == "ASCII" and ord(ch) > 127:
+            continue
+        try:
+            mask, _ = scan_render(cs_outline(font, nm),
+                                  font.units_per_em, px_em)
+        except Exception:
+            continue
+        if not mask.ink_count:
+            continue
+        row = sweep(mask, axis="row", conn=8, capture=Capture.GRAPH)
+        col = sweep(mask, axis="col", conn=8, capture=Capture.GRAPH)
+        chans["(components, cycles)"][
+            (len(row.components),
+             sum(c.cycle_count for c in row.components))].append(ch)
+        sr = signature(contract(row))
+        chans["reeb signature, row"][sr].append(ch)
+        chans["reeb signature, row+col"][
+            (sr, signature(contract(col)))].append(ch)
+    print(f"  {fname}, {pop}")
+    for label, d in chans.items():
+        total = sum(len(v) for v in d.values())
+        if not total:
+            continue
+        ent = -sum((len(v) / total) * math.log2(len(v) / total)
+                   for v in d.values())
+        need = math.log2(total)
+        big = max(d.values(), key=len)
+        print(f"    {label:<26} {len(d):>3} classes, largest "
+              f"{len(big):>2}/{total} = {len(big) / total:>3.0%}, "
+              f"{ent:.2f} of {need:.2f} bits "
+              f"({ent / need:>3.0%} efficiency)")
+        if label == "(components, cycles)":
+            for key in sorted(d, key=lambda k: -len(d[k])):
+                print(f"        {str(key):>7} x{len(d[key]):<3} "
+                      + "".join(sorted(d[key])))
 
 
 def m_boxes(root, n, rng, fill_max=0.10, hole="bbox", doc=None):
@@ -3137,6 +3229,7 @@ MEASUREMENTS = {
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
+    "alphabet": (m_alphabet, 0),
     "fontmix": (m_fontmix, 60),
     "separability": (m_separability, 40),
     "substitutions": (m_substitutions, 0),
