@@ -626,6 +626,68 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### C — the OCR substitution audit: 60%, not eight of eight
+
+`measure.py substitutions` asks the whole cross-check thesis as one
+number: when a real OCR engine substitutes one character for another on
+a real scan, does the **topology** of the two readings differ? Where it
+does, a disagreement is detectable without recognition. Where it does
+not, inkdrill is silent and must say so.
+
+**Population and split rule.** The truth is a human transcription of
+chapter 1 (`Heim_ES_1/tex/chapter_01_de.tex`, 5,169 words); the OCR is
+InftyReader's per-page `.tex` for the scanned pages of the same book,
+290 pages from page 18. Only the **4,417 words that align** under
+`difflib` contribute. Nothing is claimed about the rest — the
+transcription covers part of what those pages hold, which is why the
+aligned share reads 7.8% of the OCR stream and the aligned *count* is
+the population, not the ratio.
+
+**The filter, which is a decision.** Only 1:1 single-character
+substitutions inside an equal-length aligned word pair are counted:
+**101 kept in 33 distinct pairs, 434 dropped** (split, merged and
+multi-character errors). Splits and merges are the other large OCR
+class and would compare a one-glyph topology against a two-glyph one.
+Do not quote the 101 without the 434.
+
+| face | px/em | pairs separable | occurrences separable |
+|---|---|---|---|
+| serif (FreeSerifb) | 96 | 18/30 (60%) | 60/98 (61%) |
+| serif | 48 | 17/30 (57%) | 59/98 (60%) |
+| sans (DejaVuSans) | 96 | 19/33 (58%) | 61/101 (60%) |
+| sans | 48 | 18/33 (55%) | 60/101 (59%) |
+
+**The auditor expected eight of eight. The mechanical population says
+60%,** stable across two faces and two sizes. Eight of eight is what a
+hand-picked eight gives; this is the same population lesson as U0's
+colour fraction and U13's `count >= 12`, arriving through the front
+door for once.
+
+**What it is blind to, by name** — 14 pairs, 40 occurrences in the sans
+face: `I/l` ×14, `y/v` ×9, `t/r` ×4, `U/u` ×3, `F/E`, `W/w`, `f/l`,
+`f/r`, `'/,`, `o/O`, `ì/i`, `í/i`, `ţ/l`, `ţ/t`. Every one is a stroke
+against a stroke, or a ring against a ring. This is the boundary of
+what ink alone can say, and it is the reason this is a cross-check and
+not a recogniser.
+
+The single most common error, `@`→`s` ×19, **is** separable — `@`
+closes and `s` does not — so the largest class is one topology catches.
+
+**It is a CEILING, not a detection rate.** It renders both readings
+from a clean font, so it measures whether the two are *separable*. On
+the page the ink is degraded, and a broken `s` can acquire the hole
+that makes it look like the `@` the engine reported. Detection on the
+scan needs a character-to-blob alignment this corpus has not got, and
+that is the honest next measurement.
+
+Two mutants, one real: forcing the length guard off makes the aligner
+`zip` unequal blocks and **manufacture** a `y`→`z` substitution out of
+words that are not each other — a fabricated pair is worse than a
+missing one, and it is now pinned. The second, replacing the opaque
+maths marker with a space, was **equivalent**: the whole `$...$` span
+goes either way, so the marker and its filter were removed rather than
+left standing as machinery that looks protective and is not.
+
 ### F1's twin fixed — a figure is not letter-sized
 
 `diagram` had no size floor at all while `table` had one, so a hollow

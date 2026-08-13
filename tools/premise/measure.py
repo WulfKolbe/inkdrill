@@ -47,6 +47,7 @@ import math
 import os
 import pathlib
 import random
+import difflib
 import re
 import struct
 import sys
@@ -901,6 +902,213 @@ def _depths(rects):
                 if j != i and b[0] <= a[0] and b[1] <= a[1]
                 and b[2] >= a[2] and b[3] >= a[3] and area[j] > area[i])
             for i, a in enumerate(bs)]
+
+
+# --------------------------------------------------------------------------
+# the OCR substitution audit (item C)
+# --------------------------------------------------------------------------
+
+_AGL = {
+    " ": None, ".": "period", ",": "comma", ":": "colon", ";": "semicolon",
+    "'": "quotesingle", '"': "quotedbl", "-": "hyphen", "(": "parenleft",
+    ")": "parenright", "!": "exclam", "?": "question", "@": "at",
+    "/": "slash", "*": "asterisk", "+": "plus", "=": "equal",
+    "\u00e4": "adieresis", "\u00f6": "odieresis", "\u00fc": "udieresis",
+    "\u00c4": "Adieresis", "\u00d6": "Odieresis", "\u00dc": "Udieresis",
+    "\u00df": "germandbls", "\u00e0": "agrave", "\u00e8": "egrave",
+    "\u00e9": "eacute", "\u00ec": "igrave", "\u00ed": "iacute",
+    "\u00f9": "ugrave", "\u00fa": "uacute", "\u00ee": "icircumflex",
+    "\u00ce": "Icircumflex", "\u00e2": "acircumflex", "\u00f4": "ocircumflex",
+    "\u00e7": "ccedilla", "\u00f1": "ntilde", "\u00e1": "aacute",
+    "\u0163": "tcommaaccent", "\u0107": "cacute", "\u00b0": "degree",
+}
+for _c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ":
+    _AGL[_c] = _c
+for _c, _nm in zip("0123456789", ("zero one two three four five six seven "
+                                  "eight nine").split()):
+    _AGL[_c] = _nm
+
+
+def _tex_words(text):
+    """A LaTeX page or chapter reduced to a stream of plain words.
+
+    Maths is DELETED, not flattened: an OCR error inside `$...$` is a
+    maths error, and mixing it into a text-substitution population
+    would put two different error modes under one number.
+
+    It used to be replaced by an opaque marker that a later filter
+    dropped. A mutation showed the marker was behaviourally identical
+    to a space -- the whole `$...$` goes, content included, either way
+    -- so the marker and its filter are gone rather than left standing
+    as machinery that looks protective and is not.
+    """
+    t = re.sub(r"(?<!\\)%.*", " ", text)
+    t = t.replace("\\eszett", "\u00df").replace("\\mycrcr", " ")
+    t = re.sub(r"\$[^$]*\$", " ", t)
+    t = re.sub(r"\\formula(\{[^}]*\}){3,4}", " ", t)
+    t = re.sub(r"\\[a-zA-Z]+\s*", " ", t)
+    t = re.sub(r"[{}~\\]", " ", t)
+    return [w for w in re.split(r"\s+", t) if w]
+
+
+def _substitutions(ocr, truth):
+    """Align two word streams and pull the 1:1 character substitutions.
+
+    Returns `(counter, kept, dropped, aligned)`. `dropped` is the rest
+    of the disagreement -- split and merged characters, and words that
+    changed length -- and is returned rather than discarded because a
+    substitution rate quoted without it would be a rate over a
+    population the filter chose.
+    """
+    ops = difflib.SequenceMatcher(None, ocr, truth,
+                                  autojunk=False).get_opcodes()
+    aligned = sum(i2 - i1 for tag, i1, i2, _, _ in ops if tag == "equal")
+    subs = Counter()
+    kept = dropped = 0
+    for tag, i1, i2, j1, j2 in ops:
+        if tag != "replace":
+            continue
+        if (i2 - i1) != (j2 - j1):
+            dropped += max(i2 - i1, j2 - j1)
+            continue
+        for a, b in zip(ocr[i1:i2], truth[j1:j2]):
+            if len(a) != len(b):
+                dropped += 1
+                continue
+            d = [(x, y) for x, y in zip(a, b) if x != y]
+            if len(d) == 1:
+                kept += 1
+                subs[d[0]] += 1
+            else:
+                dropped += 1
+    return subs, kept, dropped, aligned
+
+
+def _glyph_topology(font, ch, px_em):
+    """(components, cycles) of one character rendered from `font`."""
+    nm = _AGL.get(ch)
+    if nm is None or nm not in font.charstrings:
+        return None
+    try:
+        mask, _ = scan_render(cs_outline(font, nm), font.units_per_em, px_em)
+    except Exception:
+        return None
+    if not mask.ink_count:
+        return None
+    res = sweep(mask, conn=8, capture=Capture.GRAPH)
+    return (len(res.components),
+            sum(c.cycle_count for c in res.components))
+
+
+def m_substitutions(root, n, rng, truth_tex=None, ocr_dir=None,
+                    first_page=0):
+    """Item C. When a real OCR engine substitutes one character for
+    another on a real scan, does the TOPOLOGY of the two readings
+    differ?
+
+    That is the whole cross-check thesis in one number. inkdrill cannot
+    say what a glyph is; it can say that the thing on the page has two
+    components and one hole and the thing the engine reported has one
+    component and none. Where the topology differs, a disagreement is
+    DETECTABLE without recognition. Where it does not, inkdrill is
+    silent and must say so.
+
+    POPULATION -- and it is narrower than "a scanned book". The truth
+    is a human transcription of chapter 1 (`chapter_01_de.tex`); the
+    OCR is InftyReader's per-page `.tex` for the scanned pages of the
+    same book. Only the words that ALIGN under `difflib` contribute:
+    about 4.4k of 15.5k OCR words, because the transcription covers
+    part of what those pages contain. Nothing is claimed about the
+    unaligned remainder.
+
+    THE FILTER, which is a decision -- only 1:1 single-character
+    substitutions inside an aligned equal-length word pair are counted.
+    Split and merged characters (`rn` for `m`, `\u00fc` for `i`+space) are
+    the other large OCR class and are DROPPED, because their topology
+    comparison is between different numbers of glyphs and would be a
+    different measurement. The count kept and the count dropped are
+    both printed; do not quote one without the other.
+
+    WHAT THIS IS NOT. It renders both readings from a REFERENCE FONT,
+    so it measures whether the two readings are topologically
+    separable -- not whether inkdrill would flag the actual ink on that
+    page, which needs an alignment from character to blob that this
+    corpus does not carry. Two faces are measured, one serif and one
+    sans, so a conclusion cannot rest on one designer's `l`.
+    """
+    if truth_tex is None or ocr_dir is None:
+        print("  needs --truth-tex and --ocr-dir; see the docstring")
+        return
+    truth_p, ocr_p = pathlib.Path(truth_tex), pathlib.Path(ocr_dir)
+    if not truth_p.is_file() or not ocr_p.is_dir():
+        print(f"  missing {truth_p} or {ocr_p}")
+        return
+    truth = _tex_words(truth_p.read_text(encoding="utf-8", errors="replace"))
+    pgs = [p for p in sorted(ocr_p.glob("*.tex"))
+           if re.search(r"(\d{4,})", p.stem)
+           and int(re.search(r"(\d{4,})", p.stem).group(1)) >= first_page]
+    ocr = []
+    for p in pgs:
+        ocr += _tex_words(p.read_text(encoding="utf-8", errors="replace"))
+    if not truth or not ocr:
+        print("  no words on one side")
+        return
+
+    subs, kept, dropped, aligned = _substitutions(ocr, truth)
+
+    print(f"  truth {len(truth)} words; OCR {len(ocr)} words over "
+          f"{len(pgs)} pages; {aligned} aligned ({aligned / len(ocr):.1%})")
+    print(f"  FILTER kept {kept} single-character substitutions in "
+          f"{len(subs)} distinct pairs, dropped {dropped} "
+          f"(split/merge/multi-character)")
+
+    tree = pathlib.Path(os.environ.get("INKDRILL_TYPE1",
+                                       "/usr/share/texmf-dist/fonts/type1"))
+    faces = [("FreeSerifb.pfb", "serif"), ("DejaVuSans.pfb", "sans")]
+    for fname, kind in faces:
+        src = next(tree.rglob(fname), None)
+        if src is None:
+            print(f"  {fname} not found under {tree}; skipping {kind}")
+            continue
+        font = t1_load(src)
+        for px_em in (96.0, 48.0):
+            sep = same = 0
+            sep_w = same_w = 0
+            blind, unrend = [], []
+            for (a, b), c in sorted(subs.items(), key=lambda kv: -kv[1]):
+                ta = _glyph_topology(font, a, px_em)
+                tb = _glyph_topology(font, b, px_em)
+                if ta is None or tb is None:
+                    unrend.append(f"{a}/{b}")
+                    continue
+                if ta != tb:
+                    sep += 1
+                    sep_w += c
+                else:
+                    same += 1
+                    same_w += c
+                    blind.append(f"{a}/{b} {ta} x{c}")
+            tot = sep + same
+            if not tot:
+                continue
+            print(f"  {kind:>5} {px_em:>5.0f} px/em  "
+                  f"topology differs {sep}/{tot} pairs "
+                  f"({sep / tot:.0%}), {sep_w}/{sep_w + same_w} occurrences "
+                  f"({sep_w / (sep_w + same_w):.0%})")
+            if unrend:
+                print(f"        not in this face ({len(unrend)}): "
+                      + ", ".join(unrend))
+            if blind:
+                print(f"        BLIND ({same} pairs, {same_w} occurrences): "
+                      + ", ".join(blind))
+    print("  This is a CEILING, not a detection rate: it compares two")
+    print("  readings rendered from a clean font. On the page the ink is")
+    print("  degraded, and a broken `s` can acquire the hole that makes it")
+    print("  look like the `@` the engine reported. Detection on the scan")
+    print("  needs a character-to-blob alignment this corpus has not got.")
+    print("  A pair the topology cannot separate is not a defect -- it is")
+    print("  the boundary of what ink alone can say, and the reason this")
+    print("  is a cross-check and not a recogniser.")
 
 
 def m_boxes(root, n, rng, fill_max=0.10, hole="bbox", doc=None):
@@ -2703,6 +2911,7 @@ MEASUREMENTS = {
     "border": (m_border, 10),
     "charstrings": (m_charstrings, 400),
     "boxes": (m_boxes, 8),
+    "substitutions": (m_substitutions, 0),
     "halftone": (m_halftone, 10),
     "tables": (m_tables, 25),
     "edges": (m_edges, 8),
@@ -2767,6 +2976,15 @@ def main():
                     choices=("bbox", "area"),
                     help="boxes only: how a hole's size is measured. "
                          "Changes the count by 2x -- see units.md.")
+    ap.add_argument("--truth-tex", default=None,
+                    help="substitutions only: a human transcription, the "
+                         "ground truth the OCR is aligned against.")
+    ap.add_argument("--ocr-dir", default=None,
+                    help="substitutions only: a directory of per-page .tex "
+                         "written by the OCR engine under audit.")
+    ap.add_argument("--first-page", type=int, default=0,
+                    help="substitutions only: skip pages numbered below "
+                         "this. Front matter is not in the transcription.")
     ap.add_argument("--split", default="document",
                     choices=("component", "page", "document", "font"),
                     help="classify only: how train and test are divided. "
@@ -2794,6 +3012,10 @@ def main():
         elif name == "boxes":
             fn(root, args.n or default_n, random.Random(args.seed),
                fill_max=args.fill_max, hole=args.hole_measure, doc=args.doc)
+        elif name == "substitutions":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               truth_tex=args.truth_tex, ocr_dir=args.ocr_dir,
+               first_page=args.first_page)
         elif name == "classify":
             fn(root, args.n or default_n, random.Random(args.seed),
                split=args.split)
