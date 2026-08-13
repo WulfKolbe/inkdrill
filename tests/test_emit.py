@@ -376,7 +376,8 @@ class T1_5_Rules(unittest.TestCase):
         for y in (4, 20, 36):
             hline(buf, w, y, 4, 236, 2)
         frame(buf, w, 0, 0, 240, 44)
-        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0)
+        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
+                           diagram_scale=0.0)
         self.assertEqual(len(lines), 1)
         self.assertEqual(len(lines[0]["ink"]["rules"]), 3)
 
@@ -387,7 +388,8 @@ class T1_5_Rules(unittest.TestCase):
             for t in range(2):
                 buf[y * w + 20 + t] = 0xFF
         frame(buf, w, 0, 0, 44, 240)
-        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0)
+        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
+                           diagram_scale=0.0)
         rules = lines[0]["ink"]["rules"]
         self.assertEqual([r["orient"] for r in rules], ["v"])
 
@@ -399,7 +401,8 @@ class T1_5_Rules(unittest.TestCase):
         frame(buf, w, 0, 0, 250, 60)
         frame(buf, w, 260, 0, 510, 60)
         hline(buf, w, 28, 10, 240, 2)          # inside the LEFT frame
-        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0)
+        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
+                           diagram_scale=0.0)
         counts = sorted(len(l.get("ink", {}).get("rules", [])) for l in lines)
         self.assertEqual(counts, [0, 1])
 
@@ -416,12 +419,20 @@ class T1_6_Diagrams(unittest.TestCase):
     def test_A_PLOT_FRAME_IS_A_DIAGRAM_NOT_A_TABLE(self):
         """The acceptance criterion. Four separated frames must arrive
         as four `diagram` lines -- a plot frame reaching a consumer as a
-        1x1 table is the failure this threshold exists for."""
+        1x1 table is the failure this threshold exists for.
+
+        `diagram_scale=0` because this page is nothing BUT frames: its
+        median ink region is a frame, so a frame cannot be 3x it. A page
+        with no text cannot supply a text scale, which is the fixture
+        having nothing to measure against rather than the rule being
+        wrong.
+        """
         w, h = 90, 90
         buf = bytearray(w * h)
         for ox, oy in ((2, 2), (48, 2), (2, 48), (48, 48)):
             frame(buf, w, ox, oy, ox + 38, oy + 38)
-        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0)
+        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
+                           diagram_scale=0.0)
         self.assertEqual([l["type"] for l in lines], ["diagram"] * 4)
 
     def test_a_textured_region_is_a_diagram_with_its_ground(self):
@@ -432,10 +443,36 @@ class T1_6_Diagrams(unittest.TestCase):
         from inkdrill.nest import nest
         n = nest(mask)
         rid = max(ink_regions(n), key=lambda r: r.area).id
-        lines = page_lines(mask, pt=PT, tol=1.0,
+        lines = page_lines(mask, pt=PT, tol=1.0, diagram_scale=0.0,
                            grounds={rid: "textured"})
         self.assertEqual(lines[0]["type"], "diagram")
         self.assertEqual(lines[0]["ink"]["border_ground"], "textured")
+
+    def test_a_letter_sized_hollow_region_is_NOT_a_diagram(self):
+        """The Heim failure, pinned. A scanned German page emitted 319
+        lines, every one a `diagram`, median 5.3 x 7.4 pt -- every `o`,
+        `e`, `a` and `ue` on the page. `diagram` had no size floor at
+        all while `table` had one, so hollow glyphs fell through the
+        table branch straight into it.
+
+        A CELL is bounded below because it CONTAINS text; a DIAGRAM is
+        bounded below because it REPLACES text. Different arguments,
+        same threshold shape.
+        """
+        w, h = 240, 60
+        buf = bytearray(w * h)
+        for i in range(12):                      # a row of hollow "o"s
+            ox = 4 + i * 19
+            for x in range(ox, ox + 12):
+                buf[20 * w + x] = 0xFF
+                buf[39 * w + x] = 0xFF
+            for y in range(20, 40):
+                buf[y * w + ox] = 0xFF
+                buf[y * w + ox + 11] = 0xFF
+        m = InkMask(bytes(buf), w, h)
+        self.assertGreater(len(page_lines(m, pt=PT, tol=1.0,
+                                          diagram_scale=0.0)), 0)
+        self.assertEqual(page_lines(m, pt=PT, tol=1.0, diagram_scale=3.0), [])
 
     def test_a_solid_blob_is_neither_table_nor_diagram(self):
         """G4: a bare component is not a line."""
@@ -457,7 +494,8 @@ class T1_6_Diagrams(unittest.TestCase):
         w, h = 40, 40
         buf = bytearray(w * h)
         frame(buf, w, 0, 0, 40, 40)
-        line = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0)[0]
+        line = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
+                          diagram_scale=0.0)[0]
         self.assertNotIn("border_ground", line["ink"])
 
     def test_an_object_with_no_rules_omits_the_array(self):
@@ -465,7 +503,8 @@ class T1_6_Diagrams(unittest.TestCase):
         w, h = 40, 40
         buf = bytearray(w * h)
         frame(buf, w, 0, 0, 40, 40)
-        line = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0)[0]
+        line = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0,
+                          diagram_scale=0.0)[0]
         self.assertNotIn("rules", line["ink"])
 
     def test_a_lattice_still_wins_over_diagram(self):

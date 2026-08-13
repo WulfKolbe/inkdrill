@@ -316,7 +316,8 @@ def diagram_line(region, pt: float, *, ground: str | None = None) -> dict:
 
 
 def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
-               max_fill: float = 0.35, cell_scale: float = 3.0):
+               max_fill: float = 0.35, cell_scale: float = 3.0,
+               diagram_scale: float = 3.0):
     """Every emittable object on one page, with rules attached.
 
     A region becomes a `table` when it encloses a LATTICE (>= 2 holes),
@@ -352,7 +353,20 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
     # the false positives collapse by 70x. That is the signature of a
     # separation rather than a tuned threshold: any value in the range
     # is safe for the true positive, so the highest one is free.
-    min_cell = text_scale(n) * cell_scale
+    scale = text_scale(n)
+    min_cell = scale * cell_scale
+    # A FIGURE IS NOT LETTER-SIZED, and `diagram` had no floor at all --
+    # so a hollow glyph with fewer than two holes fell through the table
+    # branch straight into it. A scanned German page emitted 319 lines,
+    # every one a `diagram`, median 5.3 x 7.4 pt against a page text
+    # scale of the same order: every `o`, `e`, `a`, `ue`.
+    #
+    # Same rule as the cell floor and for the same reason, but note the
+    # bound runs the other way. A CELL is bounded below because it
+    # CONTAINS text. A DIAGRAM is bounded below because it REPLACES
+    # text -- a figure occupies space a paragraph would have. Different
+    # arguments, same threshold shape.
+    min_diagram = scale * diagram_scale
     rules = [r for r in inks if is_rule(r)]
     rule_ids = {r.id for r in rules}
 
@@ -371,7 +385,9 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                             min_cell=min_cell)
         if lines:
             out.append((region, lines))
-        elif ground == "textured" or region.area / max(1, w * h) < max_fill:
+        elif ((ground == "textured"
+               or region.area / max(1, w * h) < max_fill)
+              and max(w, h) >= min_diagram):
             out.append((region, [diagram_line(region, pt, ground=ground)]))
 
     for region, lines in out:

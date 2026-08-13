@@ -626,7 +626,32 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
-### F1 has a twin in the `diagram` class — NOT fixed
+### F1's twin fixed — a figure is not letter-sized
+
+`diagram` had no size floor at all while `table` had one, so a hollow
+glyph with fewer than two holes fell through the table branch straight
+into it. A scanned German page emitted 305–319 lines, every one a
+`diagram`, median 5.3 x 7.4 pt: every `o`, `e`, `a`, `ü`.
+
+| `diagram_scale` | Heim scan, no figures | arXiv p6, real frames |
+|---|---|---|
+| 0.0 | 305 | 703 |
+| 1.0 | 305 | 684 |
+| **3.0** | **3** | **128** |
+| 10.0 | 0 | 94 |
+
+**Acceptance met**: near-zero on the text page, frames retained on the
+figure page. The separation is weaker than the cell floor's — the real
+page keeps falling (128 → 94) rather than holding flat — so 3.0 is
+justified by the *plateau forming* rather than by invariance, and that
+is a weaker warrant, stated as such.
+
+Note the bound runs the other way from the cell floor. A **cell** is
+bounded below because it CONTAINS text; a **diagram** is bounded below
+because it REPLACES text — a figure occupies space a paragraph would
+have. Different arguments, same threshold shape.
+
+### F1's twin — the finding, before the fix
 
 The Heim scans run through the CLI now. `BH1-000229.png`, a scanned
 German physics page at 400 dpi, emits **305 lines, every one a
