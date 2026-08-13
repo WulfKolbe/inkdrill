@@ -626,6 +626,33 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### T3 — stdin and concatenated PNM: no temp file in the pipeline
+
+`gs -sDEVICE=pgmraw -sOutputFile=%stdout | python3 -m inkdrill - --dpi 400`
+now runs with nothing touching disk. Both details of the format are
+handled: Ghostscript writes a `#` comment line after the magic (already
+skipped by `_token`), and a multi-page render arrives **concatenated**
+rather than as one image.
+
+    $ gs ... -dLastPage=4 -sOutputFile=%stdout doc.pdf \
+        | python3 -m inkdrill - --dpi 60 --glyphs --stats
+    <stdin>  4 pages @ 60 dpi
+      load   0.08s   emit   0.98s   2663 KB
+      lines 6872: {'glyph': 6869, 'simple_cell': 2, 'table': 1}
+
+Four pages in, four page records out, numbered from `--page-number` so
+a caller rendering pages 7–9 gets the document's own numbering.
+
+**`read_pnm` still refuses trailing bytes.** That refusal is how a
+caller learns it passed something other than what it thought, so the
+stream is a *different function* — `read_pnm_stream` — rather than a
+relaxed flag on the old one. Both halves are asserted: the single
+reader raises on a two-image buffer, and the stream reads it.
+
+Four mutants, all killed: the trailing-byte refusal, the stream
+terminating after one image, the end index, and the inter-image
+whitespace skip.
+
 ### T2 — a `glyph` line type: a text page emits 1,162 instead of 0
 
 The blobs existed and nothing emitted them, so a scanned text page

@@ -86,7 +86,7 @@ from dataclasses import dataclass
 from .raster import InkMask, binarize
 
 __all__ = ["CorruptPNM", "NoResolution", "PnmImage", "UnsupportedPNM",
-           "load_mask", "read_pnm"]
+           "load_mask", "load_masks", "read_pnm", "read_pnm_stream"]
 
 
 class CorruptPNM(ValueError):
@@ -154,15 +154,35 @@ def read_pnm(src, *, dpi=None) -> PnmImage:
     if res[0] <= 0 or res[1] <= 0:
         raise NoResolution(f"dpi must be positive, got {res}")
 
-    if isinstance(src, (bytes, bytearray, memoryview)):
-        raw = bytes(src)
-    else:
-        with open(src, "rb") as fh:
-            raw = fh.read()
+    raw = _bytes_of(src)
     if len(raw) < 2:
         raise CorruptPNM("file too short to hold a magic number")
+    img, end = _decode_one(raw, 0, res)
+    if end != len(raw):
+        raise CorruptPNM(
+            f"{len(raw) - end} trailing bytes after the raster")
+    return img
 
-    magic, i = _token(raw, 0)
+
+def _bytes_of(src) -> bytes:
+    if isinstance(src, (bytes, bytearray, memoryview)):
+        return bytes(src)
+    if hasattr(src, "read"):
+        return src.read()
+    with open(src, "rb") as fh:
+        return fh.read()
+
+
+def _decode_one(raw: bytes, i: int, res):
+    """One PNM image starting at `i`; returns `(image, end_index)`.
+
+    Split out so a CONCATENATED stream can be walked without relaxing
+    `read_pnm`'s refusal of trailing bytes. A single file with extra
+    data at the end is still an error -- it means the caller passed
+    something other than what it thinks it did -- while a stream of
+    them is a stream, and the difference is which function is called.
+    """
+    magic, i = _token(raw, i)
     if magic in (b"P4", b"P6", b"P1", b"P3", b"P7"):
         raise UnsupportedPNM(
             f"{magic.decode()} is out of scope; this reads P5 (pgmraw) and "
@@ -192,6 +212,7 @@ def read_pnm(src, *, dpi=None) -> PnmImage:
         if len(vals) != want:
             raise CorruptPNM(f"P2 holds {len(vals)} samples, expected {want}")
         gray = bytes(int(v) for v in vals)
+        return PnmImage(width, height, gray, res), len(raw)
     else:
         # Exactly ONE whitespace byte after maxval; a second is DATA (G4).
         if i >= len(raw) or raw[i:i + 1] not in _WS:
@@ -201,10 +222,46 @@ def read_pnm(src, *, dpi=None) -> PnmImage:
         if len(gray) != want:
             raise CorruptPNM(
                 f"raster holds {len(gray)} bytes, expected {want}")
-        if len(raw) - start > want:
-            raise CorruptPNM(
-                f"{len(raw) - start - want} trailing bytes after the raster")
-    return PnmImage(width, height, gray, res)
+    return PnmImage(width, height, gray, res), start + want
+
+
+def read_pnm_stream(src, *, dpi=None):
+    """Every image in a CONCATENATED PNM stream, in order (T3).
+
+    `gs -sDEVICE=pgmraw -sOutputFile=%stdout` writes one PNM per page
+    back to back, so a multi-page render is one stream and not one
+    file. This walks it. Ghostscript also emits a `#` comment line
+    after the magic, which `_token` already skips.
+
+    `dpi` is required for the same reason it is required of `read_pnm`,
+    and it applies to every page: one `gs -r` produced them all.
+    """
+    if dpi is None:
+        raise NoResolution(
+            "PNM carries no resolution, so `dpi` must be supplied; the "
+            "caller invoked ghostscript and knows it")
+    res = (float(dpi), float(dpi)) if isinstance(dpi, (int, float)) \
+        else (float(dpi[0]), float(dpi[1]))
+    if res[0] <= 0 or res[1] <= 0:
+        raise NoResolution(f"dpi must be positive, got {res}")
+    raw = _bytes_of(src)
+    i, n = 0, len(raw)
+    while i < n:
+        # Trailing whitespace between images is not a further image.
+        while i < n and raw[i:i + 1] in _WS:
+            i += 1
+        if i >= n:
+            return
+        img, i = _decode_one(raw, i, res)
+        yield img
+
+
+def load_masks(src, *, dpi=None, threshold: int = 128,
+               ink_is_dark: bool = True):
+    """`read_pnm_stream` straight to masks, one per page."""
+    for img in read_pnm_stream(src, dpi=dpi):
+        yield binarize(img.gray, img.width, img.height,
+                       threshold=threshold, ink_is_dark=ink_is_dark)
 
 
 def load_mask(src, *, dpi=None, threshold: int = 128,

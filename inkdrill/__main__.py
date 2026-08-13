@@ -29,7 +29,8 @@ def main(argv=None) -> int:
         prog="python3 -m inkdrill",
         description="A rendered page to a MathPix-shaped lines.json.")
     ap.add_argument("page", type=pathlib.Path,
-                    help="a ghostscript png16m .png or pgmraw .pgm")
+                    help="a ghostscript png16m .png or pgmraw .pgm, or `-` "
+                         "for a PNM stream on stdin (one record per page)")
     ap.add_argument("-o", "--out", type=pathlib.Path,
                     help="output file; stdout if omitted")
     ap.add_argument("--dpi", type=float, default=None,
@@ -54,6 +55,37 @@ def main(argv=None) -> int:
 
     suffix = args.page.suffix.lower()
     t0 = time.perf_counter()
+    if str(args.page) == "-":
+        # `gs -sOutputFile=%stdout | python3 -m inkdrill - --dpi 400`
+        # needs no temp file, and a multi-page render arrives as one
+        # CONCATENATED stream rather than one image. Page numbers count
+        # from `--page-number`, so a caller rendering pages 7-9 can say
+        # so and the records carry the document's own numbering.
+        if args.dpi is None:
+            ap.error("--dpi is required for a PNM stream: the format "
+                     "cannot record it, and guessing is wrong by 0.071 pt "
+                     "on the e12s39 fixture")
+        from .pnmio import load_masks
+        masks = list(load_masks(sys.stdin.buffer, dpi=args.dpi,
+                                threshold=args.threshold))
+        if not masks:
+            ap.error("stdin held no PNM image")
+        dpi = (args.dpi, args.dpi)
+        t_load = time.perf_counter() - t0
+        t0 = time.perf_counter()
+        pt = 72.0 / dpi[0]
+        records, lines = [], []
+        for k, m in enumerate(masks):
+            page_ln = page_lines(m, pt=pt, tol=args.tol, glyphs=args.glyphs)
+            lines.extend(page_ln)
+            records.append(page_record(page=args.page_number + k,
+                                       width_px=m.width, height_px=m.height,
+                                       dpi=dpi, lines=page_ln))
+        doc = lines_json(records, render_dpi=dpi[0])
+        t_emit = time.perf_counter() - t0
+        _write(args, doc, lines, t_load, t_emit,
+               f"<stdin>  {len(masks)} pages @ {args.dpi:.0f} dpi")
+        return 0
     if suffix in (".pgm", ".pnm"):
         if args.dpi is None:
             ap.error("--dpi is required for a PGM: the format cannot "
@@ -97,22 +129,25 @@ def main(argv=None) -> int:
                      render_dpi=dpi[0])
     t_emit = time.perf_counter() - t0
 
+    _write(args, doc, lines, t_load, t_emit,
+           f"{args.page.name}  {mask.width}x{mask.height} @ {dpi[0]:.0f} dpi")
+    return 0
+
+
+def _write(args, doc, lines, t_load, t_emit, banner):
     text = json.dumps(doc, indent=1)
     if args.out:
         args.out.write_text(text)
     else:
         sys.stdout.write(text)
-
     if args.stats:
         from collections import Counter
         kinds = Counter(l["type"] for l in lines)
-        print(f"{args.page.name}  {mask.width}x{mask.height} @ {dpi[0]:.0f} dpi",
-              file=sys.stderr)
+        print(banner, file=sys.stderr)
         print(f"  load {t_load:6.2f}s   emit {t_emit:6.2f}s   "
-              f"{len(text)/1024:.0f} KB", file=sys.stderr)
-        print(f"  lines {len(lines)}: "
-              f"{dict(kinds.most_common())}", file=sys.stderr)
-    return 0
+              f"{len(text) / 1024:.0f} KB", file=sys.stderr)
+        print(f"  lines {len(lines)}: {dict(kinds.most_common())}",
+              file=sys.stderr)
 
 
 if __name__ == "__main__":
