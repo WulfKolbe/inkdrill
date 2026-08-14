@@ -70,6 +70,8 @@ from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # n
 from inkdrill.classify import (Channels, Classifier, Template,  # noqa: E402
                                confusion as classify_confusion, normalise,
                                signature_features, template_of)
+from inkdrill.emit import (gap_mask as emit_gap_mask,  # noqa: E402
+                           merge_boxes)
 from inkdrill.coverage import Box, CoverageClass, Region, check  # noqa: E402
 from inkdrill.domains import (DIMENSIONS, Domain, convexity, describe,  # noqa: E402
                               dimensions_of, efficiency,
@@ -1462,65 +1464,6 @@ def pages_by_number(directory):
     return out
 
 
-def _merge_boxes(boxes, tol):
-    """Union boxes whose bounding rectangles touch or overlap within
-    `tol` pixels, to a fixed point.
-
-    S1's hypothesis: seven of fourteen figures came back `fragmented`,
-    and a fragment is an adjacent gap blob that should have been one
-    object. If that is right this is a GROUPING fix and detection was
-    never the problem.
-
-    Merging runs BEFORE the size filter, deliberately. Dropping
-    sub-`min_block` pieces first would discard exactly the fragments
-    that need joining -- the same shape as a filter that excludes the
-    class it exists to compare against.
-    """
-    if tol < 0:
-        raise ValueError(f"tol must be non-negative, got {tol}")
-    cur = list(boxes)
-    while True:
-        parent = list(range(len(cur)))
-
-        def find(i):
-            while parent[i] != i:
-                parent[i] = parent[parent[i]]
-                i = parent[i]
-            return i
-
-        # Sorted by x0 so the inner loop can stop: once a candidate
-        # starts beyond this box's right edge plus the tolerance, no
-        # later one can touch it either.
-        order = sorted(range(len(cur)), key=lambda i: cur[i][0])
-        merged = False
-        for a in range(len(order)):
-            ia = order[a]
-            for b in range(a + 1, len(order)):
-                ib = order[b]
-                if cur[ib][0] > cur[ia][2] + tol:
-                    break
-                if (cur[ia][0] - tol <= cur[ib][2]
-                        and cur[ib][0] - tol <= cur[ia][2]
-                        and cur[ia][1] - tol <= cur[ib][3]
-                        and cur[ib][1] - tol <= cur[ia][3]):
-                    ra, rb = find(ia), find(ib)
-                    if ra != rb:
-                        parent[ra] = rb
-                        merged = True
-        if not merged:
-            return cur
-        groups = {}
-        for i in range(len(cur)):
-            r = find(i)
-            if r in groups:
-                g = groups[r]
-                groups[r] = (min(g[0], cur[i][0]), min(g[1], cur[i][1]),
-                             max(g[2], cur[i][2]), max(g[3], cur[i][3]))
-            else:
-                groups[r] = cur[i]
-        cur = list(groups.values())
-
-
 def _classify_blocks(truth, blocks, iou):
     """Assign content blocks to labelled figures, 1:1, and name the
     residual. Returns `(Counter, [side errors])`.
@@ -1700,7 +1643,7 @@ def m_blocks(root, n, rng, doc=None, min_len=60, min_block=200,
                if c.width >= min_block // 4 and c.height >= min_block // 4
                and c.width * c.height < 0.8 * page_area]
         if merge_tol:
-            raw = _merge_boxes(raw, merge_tol)
+            raw = merge_boxes(raw, merge_tol)
         blocks = [b for b in raw
                   if b[2] - b[0] >= min_block and b[3] - b[1] >= min_block
                   and (b[2] - b[0]) * (b[3] - b[1]) < 0.8 * page_area]
@@ -2080,28 +2023,18 @@ def m_border(root, n, rng, quantise=0, doc=None):
 
 
 def _white_mask(mask, *, min_len, bounded=True):
-    """A mask of the white runs that look like GAPS rather than margins.
-
-    Two rules, both one line, and the first is the whole trick: a white
-    run touching the scan-line edge is a margin -- white connects around
-    every object through the page border, so keeping those gives one
-    page-sized blob. Discarding them disconnects the page into layout.
-
-    Both axes are written with C-speed slice assignment, the row one
-    contiguous and the column one strided. Writing the column axis as a
-    per-pixel loop is the run-discipline violation this project keeps
-    finding; `raster._iter_runs_col` already reads that way.
-    """
+    """The gap mask. The wired-in version lives in `emit.gap_mask`; this
+    keeps the `bounded=False` control the white measurement needs to
+    show what the ink-bounded rule buys, and delegates otherwise."""
+    if bounded:
+        m = emit_gap_mask(mask, min_gap=min_len)
+        return m, m.ink_count, 0, 0
     W, H = mask.width, mask.height
     inv = mask.inverted()
     buf = bytearray(W * H)
     kept = edge = short = 0
     for axis in ("row", "col"):
-        limit = W if axis == "row" else H
         for r in iter_runs(inv, axis):
-            if bounded and (r.lo == 0 or r.hi == limit - 1):
-                edge += 1
-                continue
             n = r.hi - r.lo + 1
             if n < min_len:
                 short += 1

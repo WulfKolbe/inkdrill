@@ -1003,6 +1003,77 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### The white-gap route is WIRED as a second route
+
+**Step 1, merge the fragments.** `emit.merge_boxes` unions gap blobs
+whose boxes touch within a tolerance, before any size filter. The
+page-spanning block is dropped *before* merging — it touches everything
+and otherwise swallows the page.
+
+**Step 2, the 14-figure measurement.** `measure.py blocks --n 12
+--merge-tol 8`:
+
+| | before merging | after |
+|---|---|---|
+| matched | 6 | **8** |
+| fragmented | **7** | 5 |
+| missed | 1 | 1 |
+| spurious | 0 | 3 |
+
+**Fragmented is no longer the largest class**, so by the stated rule it
+gets wired.
+
+**Step 3, wired as a second route, `nest` untouched.**
+`page_lines(..., white_route=True)` adds `emit.content_blocks` — the
+complement of the gap mask. Every line carries `ink.route`, `"ink"` or
+`"white"`.
+
+| page | emitted |
+|---|---|
+| Heim p229 (scanned text) | 2 `block` |
+| Infineon p16 (text) | nothing |
+| Infineon p19 (table) | 1 table, 52 cells |
+| Infineon p7 (3 figures) | 5 tables, 93 cells, 1 `diagram`, 3 `block` |
+| **Infineon p10 (connected plot)** | 1 table, 4 cells, **1 `block`** |
+
+p10 is the case the route exists for — a plot whose data touches its own
+frame, enclosing nothing, invisible to `nest`. It is now found.
+
+**The type is `block`, not `diagram`, and that is measured.** On a
+scanned text page this route returns paragraph blocks — 33 and 113
+components at exactly the page's text scale. Calling those `diagram`
+is the F1 defect again. But no content-profile gate can fix it either:
+p10 profiles at **0.91×** the page text scale against the text blocks'
+**1.00×**, so any filter tight enough to reject the text rejects the
+motivating case. The line therefore reports what was found — content
+bounded by white on every side — and leaves "is it a figure" to the
+consumer, the same call as emitting a rule's width instead of
+`\toprule`.
+
+**A correction to the page-7 premise.** The task described page 7 as
+both routes firing on one object from opposite sides. Measured: the ink
+frame is 385.6 × 443.7 pt and **its hole is 377.8 × 435.2 pt — exactly
+the number the "white route" recovered**. That pair is one component's
+geometry and `nest` had both all along; the border is
+`(frame − hole) / 2`. The genuine gap route finds *different* objects
+on that page (349.9 × 170.5 pt and the two halftones), which is why it
+is worth having and why it is not what those two numbers demonstrate.
+
+**Step 4, the page-7 test now runs.** A hermetic fixture reproduces the
+structure — grey luma 153 frame, interior holding many components, two
+large filled blocks — at 1/5 the real page's resolution. Its dpi is
+therefore 80, not 400, which puts the frame at 385.2 pt against the
+real 385.6 and every points-based floor where it lands on the real
+page. The corpus class stays as opt-in real evidence and passes at 400,
+200, 150 and 120 dpi.
+
+Six mutants, all killed, four needing a better fixture: the merge
+(count is the wrong observable — merging *enlarges*, two stayed two
+while the boxes grew 166×100 → 358×193), the gap floor (it filters run
+LENGTH, not gap width, and a run survives if EITHER axis is long
+enough — so the short pocket had to be short in both), the edge rule,
+and a `route` parameter with one possible value, now a constant.
+
 ### The white-run route measured properly: a DETECTOR, not a delimiter
 
 S1's conclusion stands, but its evidence did not. Two faults, both mine:

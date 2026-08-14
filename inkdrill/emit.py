@@ -76,7 +76,7 @@ from __future__ import annotations
 from .aggregate import moments_per_component
 from .classify import NoTemplates, template_of
 from .nest import Kind, Region, ink_only, nest
-from .raster import InkMask
+from .raster import InkMask, iter_runs
 from .version import resolve as resolve_version
 from .sweep import Capture, sweep
 
@@ -303,6 +303,13 @@ def rule_record(region, pt: float) -> dict:
             "orient": "h" if w >= h else "v"}
 
 
+def _overlaps(a, b) -> bool:
+    """Boxes intersect at all. Used to decide whether the two routes
+    are looking at the same object, so it is deliberately generous --
+    a partial overlap means one report, not two."""
+    return not (a.x1 < b.x0 or b.x1 < a.x0 or a.y1 < b.y0 or b.y1 < a.y0)
+
+
 def _contains(outer, inner) -> bool:
     return (outer.x0 <= inner.x0 and outer.y0 <= inner.y0
             and outer.x1 >= inner.x1 and outer.y1 >= inner.y1)
@@ -316,8 +323,18 @@ def diagram_line(region, pt: float, *, ground: str | None = None,
     this region's holes -- the evidence for the call, not a summary of
     it. A consumer that wants a stricter rule than "at least one" can
     apply its own cut without re-running `nest`.
+
+    `route` says WHICH route found it: `"ink"` for white enclosed by one
+    component (`nest`), `"white"` for content between ink (the gap
+    route). Neither subsumes the other and both run, so a consumer
+    seeing two lines over one object -- page 7 of 2409.18839 is that
+    case, the grey frame from the ink and its interior from the white --
+    can tell they are two views rather than a duplicate.
     """
-    ink = {"region_id": region.id,
+    # `route` is "ink" by construction -- a `diagram` is only ever
+    # produced by the nest path. It was briefly a parameter with one
+    # possible value, which no test could distinguish from a constant.
+    ink = {"region_id": region.id, "route": "ink",
            "fill": region.area / max(
                1, (region.x1 - region.x0 + 1) * (region.y1 - region.y0 + 1))}
     if contains is not None:
@@ -327,6 +344,175 @@ def diagram_line(region, pt: float, *, ground: str | None = None,
     return _line("diagram", (region.x0, region.y0,
                              region.x1 + 1, region.y1 + 1), pt,
                  cell_row=None, cell_column=None, ink=ink)
+
+
+def gap_mask(mask, *, min_gap: float):
+    """White runs that look like GAPS rather than margins.
+
+    Two rules, and the first is the whole trick: a white run touching
+    the scan-line edge is a MARGIN -- white connects around every object
+    through the page border, so keeping those gives one page-sized blob.
+    Discarding them disconnects the page into layout.
+
+    `min_gap` is in PIXELS; the caller converts from points, because a
+    constant here would be retuned by a dpi change.
+    """
+    W, H = mask.width, mask.height
+    inv = mask.inverted()
+    buf = bytearray(W * H)
+    for axis in ("row", "col"):
+        limit = W if axis == "row" else H
+        for r in iter_runs(inv, axis):
+            n = r.hi - r.lo + 1
+            if r.lo == 0 or r.hi == limit - 1 or n < min_gap:
+                continue
+            if axis == "row":
+                b = r.line * W
+                buf[b + r.lo:b + r.hi + 1] = b"\xff" * n
+            else:
+                buf[r.lo * W + r.line:r.hi * W + r.line + 1:W] = b"\xff" * n
+    return InkMask(bytes(buf), W, H)
+
+
+def merge_boxes(boxes, tol: float):
+    """Union boxes whose rectangles touch or overlap within `tol`, to a
+    fixed point.
+
+    Runs BEFORE any size filter: dropping small pieces first would
+    discard exactly the fragments that need joining. Measured on 14
+    labelled figures, this moves `fragmented` from 7 to 5 and `matched`
+    from 6 to 8 -- which is what took fragmented off the top and made
+    the route worth wiring.
+    """
+    if tol < 0:
+        raise ValueError(f"tol must be non-negative, got {tol}")
+    cur = list(boxes)
+    while True:
+        parent = list(range(len(cur)))
+
+        def find(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        order = sorted(range(len(cur)), key=lambda i: cur[i][0])
+        merged = False
+        for a in range(len(order)):
+            ia = order[a]
+            for b in range(a + 1, len(order)):
+                ib = order[b]
+                if cur[ib][0] > cur[ia][2] + tol:
+                    break
+                if (cur[ia][0] - tol <= cur[ib][2]
+                        and cur[ib][0] - tol <= cur[ia][2]
+                        and cur[ia][1] - tol <= cur[ib][3]
+                        and cur[ib][1] - tol <= cur[ia][3]):
+                    ra, rb = find(ia), find(ib)
+                    if ra != rb:
+                        parent[ra] = rb
+                        merged = True
+        if not merged:
+            return cur
+        groups = {}
+        for i in range(len(cur)):
+            r = find(i)
+            g = groups.get(r)
+            groups[r] = cur[i] if g is None else (
+                min(g[0], cur[i][0]), min(g[1], cur[i][1]),
+                max(g[2], cur[i][2]), max(g[3], cur[i][3]))
+        cur = list(groups.values())
+
+
+def content_blocks(mask, *, pt: float, min_gap_pt: float = 10.8,
+                   min_block_pt: float = 36.0, merge_tol_pt: float = 1.5):
+    """Content blocks: the COMPLEMENT of the gap mask (the white route).
+
+    `nest` finds white ENCLOSED BY ONE COMPONENT; this finds white
+    BETWEEN ink. Neither subsumes the other, which is why both run --
+    a plot whose data touches its own frame encloses nothing and is
+    invisible to `nest`, while a `\fbox` is invisible here.
+
+    Defaults are the measured ones expressed in POINTS: 10.8 pt is the
+    60 px gap floor at 400 dpi, 36 pt the 200 px block floor, 1.5 pt the
+    8 px merge tolerance. In page pixels they would be retuned by a dpi
+    change.
+
+    A PAGE-SPANNING block is dropped before merging, not after. It
+    touches every other box, so merging with it in the list swallows the
+    whole page -- 13 boxes became 1 at a tolerance of one pixel.
+    """
+    area = mask.width * mask.height
+    if not area:
+        return []
+    mo = moments_per_component(
+        sweep(gap_mask(mask, min_gap=min_gap_pt / pt).inverted(),
+              conn=8, capture=Capture.NONE))
+    floor = min_block_pt / pt
+    raw = [(c.x0, c.y0, c.x1 + 1, c.y1 + 1) for c in mo.values()
+           if c.width >= floor / 4 and c.height >= floor / 4
+           and c.width * c.height < 0.8 * area]
+    if merge_tol_pt:
+        raw = merge_boxes(raw, merge_tol_pt / pt)
+    return [b for b in raw
+            if b[2] - b[0] >= floor and b[3] - b[1] >= floor
+            and (b[2] - b[0]) * (b[3] - b[1]) < 0.8 * area]
+
+
+def _box_of(line, pt: float):
+    """A `Region` recovering the pixel box of an emitted line, so a rule
+    can be attached to it like any other object."""
+    r = line["region"]
+    x0 = int(round(r["top_left_x"] / pt))
+    y0 = int(round(r["top_left_y"] / pt))
+    return Region(-1, Kind.INK, -1, 0, x0, y0,
+                  x0 + int(round(r["width"] / pt)) - 1,
+                  y0 + int(round(r["height"] / pt)) - 1)
+
+
+def _white_lines(mask, pt: float, known, enabled: bool):
+    """THE SECOND ROUTE, as lines.
+
+    `nest` finds white ENCLOSED BY ONE COMPONENT; this finds content
+    BETWEEN ink. Neither subsumes the other, so both run -- a plot whose
+    data touches its own frame encloses nothing and is invisible to
+    `nest`, while an `\fbox` is invisible here.
+
+    Measured over 14 labelled figures with the fragments merged:
+    matched 8, fragmented 5, missed 1. Fragmented is no longer the
+    largest class, which is what made this worth wiring. On a text page
+    it emits 0-2 blocks, so it does not flood.
+
+    THE TYPE IS `block`, NOT `diagram`, and that is a measurement rather
+    than a decision. On a scanned text page this route returns the
+    paragraph blocks -- 33 and 113 components at exactly the page's text
+    scale -- and calling those `diagram` is the F1 defect again. But a
+    gate on content profile cannot fix it either: Infineon p10, the
+    connected plot this route exists for, profiles at 0.91x the text
+    scale against the text blocks' 1.00x, so ANY text-block filter tight
+    enough to reject the text would reject the motivating case. Measured
+    rather than assumed.
+
+    So the line says what was found -- a region of content bounded by
+    white on every side -- and leaves "is it a figure" to the consumer,
+    which is the same call as emitting a rule's width instead of
+    `\toprule`.
+
+    NO OVERLAP SUPPRESSION. Both routes contribute; page 7 of
+    2409.18839 is the case where they fire on one object from opposite
+    sides, the grey frame from the ink and its interior from the white,
+    and suppressing either loses half the evidence.
+    """
+    if not enabled:
+        return []
+    out = []
+    for x0, y0, x1, y1 in content_blocks(mask, pt=pt):
+        box = Region(-1, Kind.INK, -1, (x1 - x0) * (y1 - y0),
+                     x0, y0, x1 - 1, y1 - 1)
+        out.append(_line("block", (x0, y0, x1, y1), pt,
+                         cell_row=None, cell_column=None,
+                         ink={"route": "white"}))
+    return out
 
 
 def glyph_line(region, pt: float, *, holes: int = 0, axis=None,
@@ -486,7 +672,7 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                max_fill: float = 0.35, cell_scale: float = 3.0,
                diagram_scale: float = 3.0, require_content: bool = True,
                glyphs: bool = False, classifier=None,
-               top_k: int = 8):
+               top_k: int = 8, white_route: bool = True):
     """Every emittable object on one page, with rules attached.
 
     A region becomes a `table` when it encloses a LATTICE (>= 2 holes),
@@ -519,12 +705,19 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
     bar = min(scale * cell_scale, scale * diagram_scale)
     if not any(cyc and max(r.x1 - r.x0 + 1, r.y1 - r.y0 + 1) >= bar
                for r, cyc in pairs):
-        # Nothing structural is possible. Holes come from the cycle
-        # rank, which IS the per-component hole count -- checked
-        # against `nest` on every page measured.
-        if not glyphs:
-            return []
-        return _glyphs_only(mask, pairs, pt, classifier, top_k)
+        # Nothing structural is possible for the INK route. Holes come
+        # from the cycle rank, which IS the per-component hole count --
+        # checked against `nest` on every page measured.
+        #
+        # The WHITE route still runs: it finds content between ink and
+        # owes nothing to enclosure, so a page with no enclosing
+        # component is exactly where it is the only route there is.
+        # Returning early here was the first version and it made the
+        # second route unreachable on every text page -- the same
+        # "built but not wired" failure it was added to fix.
+        head = (_glyphs_only(mask, pairs, pt, classifier, top_k)
+                if glyphs else [])
+        return head + _white_lines(mask, pt, [], white_route)
 
     n = ink.complete()          # reuses the ink sweep above
     inks = ink_regions(n)
@@ -617,6 +810,9 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                 if r.id not in done and r.id not in rule_ids]
         out.extend((box, [ln]) for box, ln in
                    _clustered(mask, rest, pt, classifier, top_k))
+
+    white = _white_lines(mask, pt, [r for r, _ in out], white_route)
+    out.extend((_box_of(l, pt), [l]) for l in white)
 
     for region, lines in out:
         mine = [r for r in rules if _contains(region, r)]
