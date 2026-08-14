@@ -627,13 +627,63 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
     return [ln for _, lines in out for ln in lines]
 
 
+def free_rules(mask, *, pt: float, regions=None) -> list[dict]:
+    """Drawn rules that no other ink region encloses (A4).
+
+    A `|l|l|` table's rules ARE the frame -- one connected component --
+    so they are not regions and never appear here. **A booktabs table
+    draws disjoint rules and encloses nothing**, so its rules are
+    free-standing components that no emitted object contains, and
+    `page_lines` therefore attaches them to nothing. Measured across
+    seven corpus pages: 33 rules found, **0 reaching the file**.
+
+    They are reported on the PAGE rather than as lines of their own,
+    which keeps `emit`'s standing rule -- a rule is a measurement
+    attached to an object, not an object -- while not silently dropping
+    the only evidence a booktabs table leaves.
+
+    "Free" is decided by geometry alone: a rule inside a frame is
+    enclosed by that frame's region and is excluded, so this does not
+    duplicate what `page_lines` already attaches. It says nothing about
+    which rule is a `\toprule`; that needs the table's context and
+    belongs to the consumer.
+    """
+    # A plain list of ink regions, so a caller can hand in either
+    # `ink_only(mask).regions` or `ink_regions(nest(mask))` without this
+    # function having to know which shape it was given -- guessing
+    # between a list and a dict by `hasattr` was the first version and
+    # it raised on the second caller.
+    if regions is None:
+        regions = ink_only(mask).regions
+    inks = [r for r in regions if r.kind is Kind.INK]
+    rules = [r for r in inks if is_rule(r)]
+    others = [r for r in inks if not is_rule(r)]
+    out = []
+    for r in rules:
+        if any(o is not r and _contains(o, r) for o in others):
+            continue
+        out.append(rule_record(r, pt))
+    return sorted(out, key=lambda d: (d["y0"], d["x0"]))
+
+
 def page_record(*, page: int, width_px: int, height_px: int, dpi,
-                lines=()) -> dict:
-    """One page, with every coordinate in pt (G1, G2)."""
+                lines=(), rules=()) -> dict:
+    """One page, with every coordinate in pt (G1, G2).
+
+    `ink.rules` holds rules no emitted object encloses -- the booktabs
+    case, where the table draws no frame and the rules are the only
+    evidence it exists. Absent when there are none, so a page with no
+    rules does not carry an empty array claiming they were looked for
+    and found to be zero... which they were, so it is emitted whenever
+    the caller passes the list, and omitted when it passes nothing.
+    """
     pt = _pt_per_px(dpi)
-    return {"page": page, "image_id": None,
-            "page_width": width_px * pt, "page_height": height_px * pt,
-            "lines": list(lines)}
+    rec = {"page": page, "image_id": None,
+           "page_width": width_px * pt, "page_height": height_px * pt,
+           "lines": list(lines)}
+    if rules:
+        rec["ink"] = {"rules": list(rules)}
+    return rec
 
 
 def lines_json(pages, *, source: str = SOURCE, render_dpi: float) -> dict:

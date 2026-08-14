@@ -51,7 +51,7 @@ def main(argv=None) -> int:
                          "nothing")
     args = ap.parse_args(argv)
 
-    from .emit import lines_json, page_lines, page_record
+    from .emit import free_rules, lines_json, page_lines, page_record
 
     suffix = args.page.suffix.lower()
     t0 = time.perf_counter()
@@ -78,9 +78,10 @@ def main(argv=None) -> int:
         for k, m in enumerate(masks):
             page_ln = page_lines(m, pt=pt, tol=args.tol, glyphs=args.glyphs)
             lines.extend(page_ln)
-            records.append(page_record(page=args.page_number + k,
-                                       width_px=m.width, height_px=m.height,
-                                       dpi=dpi, lines=page_ln))
+            records.append(page_record(
+                page=args.page_number + k, width_px=m.width,
+                height_px=m.height, dpi=dpi, lines=page_ln,
+                rules=free_rules(m, pt=pt)))
         doc = lines_json(records, render_dpi=dpi[0])
         t_emit = time.perf_counter() - t0
         _write(args, doc, lines, t_load, t_emit,
@@ -124,8 +125,10 @@ def main(argv=None) -> int:
     pt = 72.0 / dpi[0]
     lines = page_lines(mask, pt=pt, tol=args.tol, glyphs=args.glyphs)
     doc = lines_json([page_record(page=args.page_number,
-                                  width_px=mask.width, height_px=mask.height,
-                                  dpi=dpi, lines=lines)],
+                                  width_px=mask.width,
+                                  height_px=mask.height, dpi=dpi,
+                                  lines=lines,
+                                  rules=free_rules(mask, pt=pt))],
                      render_dpi=dpi[0])
     t_emit = time.perf_counter() - t0
 

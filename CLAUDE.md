@@ -191,7 +191,9 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   the geometry of their leaves.
 - **`inkdrill/emit.py`** — findings as a MathPix-shaped `lines.json`.
   `lines_json`, `page_record`, `table_lines`, `ink_regions`,
-  `rule_width_pt`. The only producer of an interchange format, and it
+  `rule_width_pt`, `free_rules` (booktabs rules, which nothing
+  encloses, reported on the PAGE). A `glyph` line is one `group()`
+  CLUSTER, not one component. `ocr.version` is the git commit. The only producer of an interchange format, and it
   writes no files. Points come from `pHYs` or it raises. Emits measured
   stroke widths, never `\toprule`/`\midrule` — that call needs the
   table's context and belongs to the consumer.

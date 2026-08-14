@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 
 from inkdrill.emit import glyph_line  # noqa: F401
+from inkdrill.emit import free_rules, is_rule  # noqa: F401
 from inkdrill.emit import (NoResolution, cell_grid, diagram_line,
                            ink_regions, is_rule, lines_json, page_lines,
                            page_record, rule_record, rule_width_pt,
@@ -946,6 +947,100 @@ class T1_11_GlyphsAreClusters(unittest.TestCase):
         for l in lines:
             if "parts" in l["ink"]:
                 self.assertEqual(l["ink"]["region_id"], min(l["ink"]["parts"]))
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class T1_12_FreeRules(unittest.TestCase):
+    """A4: a booktabs table draws no frame, so its rules are enclosed by
+    nothing and `page_lines` attached them to nothing.
+
+    Measured across seven corpus pages before the fix: 33 rules found,
+    0 reaching the file.
+    """
+
+    @staticmethod
+    def _booktabs():
+        """Three disjoint horizontal rules with text between them. The
+        aspect is taken from a real rule at 400 dpi -- about 250:1 --
+        because a 14:1 fixture is correctly refused by `is_rule` and
+        would measure zero."""
+        w, h = 520, 120
+        buf = bytearray(w * h)
+        for y0 in (10, 40, 100):
+            for y in range(y0, y0 + 2):
+                for x in range(10, 510):
+                    buf[y * w + x] = 0xFF
+        for k in range(6):                        # cell text
+            for y in range(60, 76):
+                for x in range(30 + k * 70, 44 + k * 70):
+                    buf[y * w + x] = 0xFF
+        return InkMask(bytes(buf), w, h)
+
+    def test_disjoint_rules_reach_the_page_record(self):
+        m = self._booktabs()
+        got = free_rules(m, pt=PT)
+        self.assertEqual(len(got), 3)
+        for r in got:
+            self.assertEqual(r["orient"], "h")
+            self.assertGreater(r["width_pt"], 0.0)
+
+    def test_they_arrive_in_reading_order(self):
+        got = free_rules(self._booktabs(), pt=PT)
+        self.assertEqual([r["y0"] for r in got],
+                         sorted(r["y0"] for r in got))
+
+    def test_a_rule_INSIDE_A_FRAME_is_not_reported_here(self):
+        """The other class, and the reason this is not just "every
+        rule". A framed table encloses its rules, `page_lines` already
+        attaches them to that table, and reporting them again would
+        double-count.
+
+        THE FIXTURE MUST CONTAIN AN ENCLOSED RULE. The first version
+        was a bare frame -- one component, no rule region at all -- so
+        the containment guard was never reached and deleting it kept
+        the test green. A fixture must hold both classes the rule
+        separates.
+        """
+        w, h = 400, 200
+        buf = bytearray(w * h)
+        for x in range(10, 390):                  # a hollow frame
+            for t in range(3):
+                buf[(10 + t) * w + x] = 0xFF
+                buf[(190 + t) * w + x] = 0xFF
+        for y in range(10, 193):
+            for t in range(3):
+                buf[y * w + 10 + t] = 0xFF
+                buf[y * w + 389 + t] = 0xFF
+        for y in range(100, 102):                 # a rule INSIDE it,
+            for x in range(30, 370):              # not touching the frame
+                buf[y * w + x] = 0xFF
+        for y in range(150, 152):                 # and a second one
+            for x in range(30, 370):
+                buf[y * w + x] = 0xFF
+        m = InkMask(bytes(buf), w, h)
+        from inkdrill.nest import ink_only as _ink
+        inks = _ink(m).regions
+        self.assertEqual(sum(1 for r in inks if is_rule(r)), 2,
+                         "the fixture must contain enclosed rules or it "
+                         "cannot exercise the guard")
+        self.assertEqual(free_rules(m, pt=PT), [])
+
+    def test_a_page_with_no_rules_omits_the_key(self):
+        """Absent rather than an empty array: a page of prose was not
+        asked about rules and found to have none, it simply has none."""
+        rec = page_record(page=1, width_px=100, height_px=100,
+                          dpi=(400.0, 400.0), lines=[], rules=[])
+        self.assertNotIn("ink", rec)
+
+    def test_a_page_with_rules_carries_them(self):
+        m = self._booktabs()
+        rec = page_record(page=1, width_px=m.width, height_px=m.height,
+                          dpi=(400.0, 400.0), lines=[],
+                          rules=free_rules(m, pt=PT))
+        self.assertEqual(len(rec["ink"]["rules"]), 3)
 
 
 if __name__ == "__main__":

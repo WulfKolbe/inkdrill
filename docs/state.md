@@ -635,6 +635,39 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### A4 — booktabs rules reach the file: 33 of 33, was 0 of 33
+
+Measured first: across seven corpus pages, `is_rule` found **33 rules
+and 0 reached the output**. The cause is structural rather than a bug
+in the attachment: `page_lines` attaches a rule to the innermost
+emitted object *containing* it, and a booktabs table **draws no frame**,
+so its rules are free-standing components that nothing contains.
+
+`free_rules()` reports rules no other ink region encloses, on the
+**page record** rather than as lines of their own — which keeps
+`emit`'s standing rule that a rule is a measurement attached to an
+object, not an object, while not dropping the only evidence a booktabs
+table leaves.
+
+| page | free rules |
+|---|---|
+| 1408.0838 p3 / p8 / p13 | 4 / 0 / 2 |
+| 1809.09528 p2 / p6 / p9 | 6 / 14 / 4 |
+| e12s39 p1 | 3 |
+| **total** | **33** (was 0) |
+
+A rule *inside* a frame is enclosed by that frame's region and is
+excluded, so this does not double-count what `page_lines` already
+attaches. Scope unchanged: rules inside a connected `|l|l|` frame are
+not components at all and still need the run-structure work.
+
+Four mutants, three killed immediately. The fourth — deleting the
+containment guard — survived because the fixture was a bare frame:
+**one component, no rule region, so the guard was never reached**. The
+fixture now contains two enclosed rules and asserts they exist before
+asserting they are excluded. Fifth appearance of a fixture that could
+not fail.
+
 ### A1–A3 — the fix reaches the file, and the file says who wrote it
 
 **A1. `group()` was fixed while unreachable from the CLI.** Traced from
