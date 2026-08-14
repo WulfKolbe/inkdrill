@@ -294,6 +294,10 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
         kids_of: dict[int, list[int]] = {}     # prev node -> current nodes
         cur: list[tuple[int, int, int]] = []
         pi = 0
+        # Hoisted: `prevline` cannot change inside this loop, and
+        # `len()` in the two-pointer conditions is evaluated once per
+        # advance of each pointer -- the innermost code in the package.
+        nprev = len(prevline)
 
         for r in runs:
             nid = uf.make()
@@ -304,10 +308,10 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
 
             # -- adjacency: two-pointer sweep over the previous line -------
             adj: list[int] = []
-            while pi < len(prevline) and prevline[pi][1] < r.lo - slack:
+            while pi < nprev and prevline[pi][1] < r.lo - slack:
                 pi += 1
             pj = pi
-            while pj < len(prevline) and prevline[pj][0] <= r.hi + slack:
+            while pj < nprev and prevline[pj][0] <= r.hi + slack:
                 adj.append(prevline[pj][2])
                 pj += 1
 

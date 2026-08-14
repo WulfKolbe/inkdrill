@@ -166,7 +166,50 @@ class S4_4_CrudePhi(unittest.TestCase):
                               [(2, 1), (118, 3), (1, 38), (117, 39)])
         c = compare(m, crude)
         self.assertEqual(c.source, topology_of(m))
-        self.assertIsInstance(c.transport_is_nearer, bool)
+        # `None` is a legitimate verdict -- see T-S4_5 -- so the type
+        # is bool OR None and asserting `bool` alone would forbid the
+        # answer real ink usually gives.
+        self.assertIn(c.transport_is_nearer, (True, False, None))
+
+
+class TS4_5_TheVerdictIsPerChannel(unittest.TestCase):
+    """The summary used to be `max(transport_drift) < max(resample_drift)`.
+
+    That is a decision disguised as a metric: with two channels it has
+    to pick one to believe, and `max` picks whichever is WORSE. On real
+    DocReal ink transport tracked components while multiplying cycles by
+    an order of magnitude, so the single boolean reported "not nearer"
+    on the strength of the channel that was losing and hid the one that
+    was winning.
+    """
+
+    def test_agreeing_channels_give_a_boolean(self):
+        c = Comparison((100, 10), (100, 10), (70, 4))
+        self.assertEqual(c.nearer_by_channel, (True, True))
+        self.assertIs(c.transport_is_nearer, True)
+
+    def test_agreeing_the_other_way_gives_False(self):
+        """Both sides of the boolean, so it cannot be a constant."""
+        c = Comparison((100, 10), (70, 4), (100, 10))
+        self.assertEqual(c.nearer_by_channel, (False, False))
+        self.assertIs(c.transport_is_nearer, False)
+
+    def test_DISAGREEING_channels_give_None_not_a_guess(self):
+        """The real-ink case, and the whole point. Components track and
+        cycles blow up: the honest answer is that this page does not
+        order the two paths."""
+        c = Comparison(source=(436, 180), transported=(408, 2238),
+                       resampled=(337, 188))
+        self.assertEqual(c.nearer_by_channel, (True, False))
+        self.assertIsNone(c.transport_is_nearer)
+
+    def test_the_per_channel_drifts_are_still_readable(self):
+        """`None` must not hide the numbers -- a caller needing one
+        boolean has to decide what to do with the disagreement, and it
+        can only do that if both drifts are available."""
+        c = Comparison((436, 180), (408, 2238), (337, 188))
+        self.assertLess(c.transport_drift[0], c.resample_drift[0])
+        self.assertGreater(c.transport_drift[1], c.resample_drift[1])
 
 
 if __name__ == "__main__":

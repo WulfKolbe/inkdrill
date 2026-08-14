@@ -84,6 +84,10 @@ G5  the identity transform is a fixed point of `transport`: the mask
 G6  `compare` reports both topologies and the input's; it draws no
     conclusion, because the ordering is the finding and a caller with a
     population should be the one to state it
+G7  the verdict is PER CHANNEL. `transport_is_nearer` is `None` when
+    components and cycles disagree, which on real ink is the usual
+    case -- collapsing them with `max()` was a decision disguised as a
+    metric, and it silently believed whichever channel was worse
 """
 
 from __future__ import annotations
@@ -245,9 +249,32 @@ class Comparison:
         return self._drift(self.resampled)
 
     @property
-    def transport_is_nearer(self) -> bool:
-        """The ORDERING, which is the claim this bench can support."""
-        return max(self.transport_drift) < max(self.resample_drift)
+    def nearer_by_channel(self) -> tuple[bool, bool]:
+        """Which path is nearer, per channel: `(components, cycles)`.
+
+        TWO ANSWERS, because there are two channels and they disagree.
+        On real DocReal ink the transport path tracked components while
+        multiplying cycles by an order of magnitude, so a single verdict
+        had to pick one to believe and `max()` picked whichever was
+        worse -- a decision disguised as a metric, and the metric was
+        the summary rather than the finding.
+        """
+        return tuple(t < r for t, r in zip(self.transport_drift,
+                                          self.resample_drift))
+
+    @property
+    def transport_is_nearer(self) -> bool | None:
+        """`True`/`False` when the channels AGREE, `None` when they do
+        not (G6).
+
+        `None` is a real answer and the common one: it says this page
+        does not order the two paths, which is the finding rather than a
+        missing result. A caller wanting a number per channel reads
+        `nearer_by_channel`; a caller that needs one boolean must decide
+        what to do with `None` rather than have `max()` decide silently.
+        """
+        comp, cyc = self.nearer_by_channel
+        return comp if comp == cyc else None
 
 
 def compare(mask: InkMask, m, *, width=None, height=None) -> Comparison:

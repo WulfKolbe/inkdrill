@@ -181,11 +181,19 @@ three.
 
 From `algorithms.md` §9, with status:
 
-1. **`normalise` from the run list** — 6.7×, exact, ~25 lines. Also the
-   only place violating the run discipline. *Open.*
+1. ~~**`normalise` from the run list** — 6.7×, exact.~~ **Measured and
+   NOT taken, 2026-08-14.** Real on its population (339 Latin Modern
+   crops at 12–44 px); 1.80× on real scanned crops and **0.02× on a
+   200×200 textured region**, which `emit` now hands it whenever a
+   classifier is supplied. The pixel form's early exit makes its cost
+   about `grid**2` probes at any size. Table in `algorithms.md` §9 and
+   in the docstring.
 2. **Struct-of-arrays `RunNode` store** — the largest remaining CPython
    win, invasive, measure first. *Open.*
-3. **Cache `len(prevline)`** out of the two-pointer loop. Trivial. *Open.*
+3. ~~**Cache `len(prevline)`** out of the two-pointer loop.~~ **Done
+   2026-08-14, and it is WITHIN NOISE** — 0.255 s → 0.250 s at
+   `Capture.NONE`, unchanged at `GRAPH`. Kept as a cleanup; recorded as
+   not a win so the next reader does not expect one.
 4. **Transposed mask** vs 4,960 strided column slices. Unmeasured. *Open.*
 5. **`rows()` modal-height seeding** — **fixed 2026-08-09.**
 6. **`group()` absorbing big-operator limits** — confirmed, **not fixed**;
@@ -625,6 +633,35 @@ choosing the answer, which is the failure this project has now found six
 times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
+
+### Three recorded problems, worked 2026-08-14
+
+**`normalise` from the run list — measured, NOT taken.** The top-ranked
+improvement. Implemented twice (my form and `algorithms.md` §7.2's
+tabulated one), both bit-exact, both a pessimisation outside the
+population the 6.74× was measured over. Full table in §6 above and in
+the docstring. Sixth instance of the population lesson: the instrument
+was right and the conclusion was wider than its reach.
+
+**`warp.Comparison`'s verdict was a decision disguised as a metric —
+FIXED.** `transport_is_nearer` was
+`max(transport_drift) < max(resample_drift)`, which with two channels
+has to pick one to believe, and `max` picks whichever is *worse*. On
+real DocReal ink transport tracked components (436 → 408) while
+multiplying cycles by an order of magnitude (180 → 2,238), so the single
+boolean reported "not nearer" on the strength of the losing channel and
+hid the winning one.
+
+Now `nearer_by_channel` gives `(components, cycles)` and
+`transport_is_nearer` returns **`None` when they disagree** — a real
+answer, and the usual one on real ink: this page does not order the two
+paths. Added as G7. The old form was **asserted by nothing**: changing
+the return type from `bool` to `bool | None` broke no test, and the one
+test that touched it asserted `isinstance(..., bool)`, which now forbids
+the answer real ink gives. Four tests added, mutant killed.
+
+**`len(prevline)` hoisted — done, and within noise.** 0.255 → 0.250 s.
+Recorded as a cleanup rather than a speedup.
 
 ### C1–C4 — the ranked list travels, and inkdrill never chooses
 

@@ -578,9 +578,38 @@ is where the time goes.
 
 
 
-**1. `normalise` from the run list — 6.7×, exact, ~25 lines.** §7.2. It is
-also the only place in the code base that violates the run discipline, so
-the fix is a consistency repair as much as a speed one.
+**1. ~~`normalise` from the run list — 6.7×, exact, ~25 lines.~~
+MEASURED AND NOT TAKEN, 2026-08-14.** The 6.74× is real *on the
+population it was measured over* — 339 Latin Modern crops at 12–44 px —
+and does not survive a wider one. Both the run form and §7.2's own
+tabulated form were implemented and verified bit-exact (4,000 masks × 5
+grid sizes; 1,500 masks for the tabulated one), then timed against the
+pixel form:
+
+| size | density | pixel | tabulated (§7.2) | ratio |
+|---|---|---|---|---|
+| 16×16 | 0.02 | 99 µs | 25 µs | **3.98×** |
+| 40×40 | 0.35 | 138 µs | 370 µs | 0.37× |
+| 200×200 | 0.35 | 125 µs | 7,910 µs | **0.02×** |
+| 600×600 | 0.35 | 143 µs | 67,844 µs | **0.00×** |
+
+The pixel form's cost is nearly **constant** — 100–550 µs at any size —
+because it stops at the first ink pixel under a cell, so it does about
+`grid**2` probes however large the mask is. The run forms cost
+O(runs), and §7.2's tabulation costs O((w + h)·grid) before it touches a
+run, which on a 600×600 mask already exceeds the pixel form's total.
+
+On real *scanned* glyph crops (Heim, median 1,428 px) the run form
+measured **1.80×**, not 6.7× — those crops sit near the boundary.
+
+**Why the wider population is now the relevant one:** `emit.page_lines`
+with a classifier calls `normalise` on every ink region's crop, and a
+figure region is large and textured. The optimisation would make that
+case 50–470× slower to make glyphs 1.8–4× faster.
+
+So `normalise` scanning pixels is **correct here**, and it is the one
+place where violating the run discipline is right. The docstring carries
+the table so this is not re-opened on the ranked list alone.
 
 **2. Move the sweep's per-run object construction off the hot path.**
 275,478 `list.append` calls and a `RunNode` dataclass per run. A

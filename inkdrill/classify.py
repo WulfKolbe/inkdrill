@@ -174,6 +174,26 @@ def normalise(mask: InkMask, grid: int = GRID) -> int:
 
     Returning an `int` rather than bytes is what makes `bitmap_distance`
     a single popcount (see the module docstring).
+
+    THIS SCANS PIXELS ON PURPOSE, and it is the one place in the package
+    where that is right. `algorithms.md` ranked "normalise from the run
+    list" as the top remaining improvement at 6.7x; measured, it is a
+    PESSIMISATION almost everywhere, because the loop below stops at the
+    first ink pixel under a cell. That early exit makes the cost about
+    `grid**2` probes whatever the mask's size:
+
+        size       density  runs/area      pixel     run form
+        20x20         0.01     0.0100      121us    13us  9.5x
+        60x60         0.35     0.2306      125us  1061us  0.12x
+        200x200       0.35     0.2270      114us   10.7ms  0.01x
+        600x600       0.35     0.2276      132us  100.2ms  0.00x
+
+    The run form wins only where ink is very sparse -- runs/area around
+    0.01 -- and real glyph crops measured 1.80x, so they sit near the
+    boundary. A run-based rewrite is bit-exact (verified over 4,000
+    masks x 5 grid sizes) and up to 800x slower on a textured region,
+    which `emit` will hand it whenever a classifier is supplied for a
+    figure. Do not re-open this without re-taking that table.
     """
     w, h = mask.width, mask.height
     if w == 0 or h == 0:
