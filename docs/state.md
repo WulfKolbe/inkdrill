@@ -1003,7 +1003,49 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
-### S1 — merging lifts the white-run route to 8/14, still not enough
+### The white-run route measured properly: a DETECTOR, not a delimiter
+
+S1's conclusion stands, but its evidence did not. Two faults, both mine:
+
+**The sample could not choose.** Two 12-page samples of the SAME
+document scored **57% and 78%** matched — a spread wider than the gap
+between any two operating points being compared. S1's "8 of 14" and
+every improvement on it were inside that noise. `--n 0` now runs every
+labelled page.
+
+**The sweep was two lines through a plane.** `min_len` was swept at
+`merge_tol=0`, `merge_tol` at `min_len=60`. The best cell need not lie
+on either line, and on the 12-page set it did not.
+
+**On 93 figures across 69 pages** — 6.6× the old sample:
+
+| `min_len` | `merge` | delimited | detected | spurious/figure |
+|---|---|---|---|---|
+| 30 | 0 | 46% | 89% | 0.04 |
+| 30 | 8 | 52% | **94%** | 0.09 |
+| 30 | 80 | 59% | 94% | 0.16 |
+| 60 | 0 | 47% | 87% | 0.02 |
+| 60 | 8 | 54% | 91% | 0.09 |
+| **60** | **80** | **61%** | 92% | 0.23 |
+
+**The two columns are the finding.** The route reports that *something
+is there* in **94%** of cases and gets its *extent* right in **55%**.
+Fragmentation is not a tuning problem to be closed — it is what this
+method does. And the margin is bad: going from 44 delimited to 57 costs
+2 → 21 spurious, **1.5 phantom objects per figure gained**.
+
+**Decision unchanged: NOT wired into `page_lines`**, which needs an
+extent. Emitting this would add ~30 fragment lines and ~20 phantom
+objects per 93 figures.
+
+**But 94% detection at 0.09 spurious per figure is a usable signal**,
+and it is the one this project is actually for: "say what the other
+tool did not see" needs *something is here*, not a perfect box. That is
+`coverage.py`'s question, not `page_lines`'s, and it needs the other
+tool's regions as a second input. Recorded as the route's real use
+rather than left as a failed delimiter.
+
+### S1 — merging lifts the white-run route to 8/14 (SUPERSEDED)
 
 The fragmentation was the whole result, so the hypothesis was that it
 is a GROUPING problem: seven fragments of one figure are adjacent gap

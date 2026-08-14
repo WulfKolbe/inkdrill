@@ -1619,6 +1619,18 @@ def m_blocks(root, n, rng, doc=None, min_len=60, min_block=200,
     an object). Both are in page pixels, which the border rule in
     CLAUDE.md warns about -- they are printed with what they kept and
     dropped so a reader can see the cost.
+
+    SAMPLE SIZE IS PART OF THE RESULT. Two 12-page samples of the SAME
+    document scored 57% and 78% matched -- a spread wider than the gap
+    between any two operating points this harness compares. A 14-figure
+    sample cannot choose between them, and tuning on one is tuning on
+    noise. `--n 0` runs every labelled page; use it before drawing a
+    conclusion, and quote the figure count beside the rate.
+
+    The two filters were also swept SEPARATELY at first -- `min_len` at
+    `merge_tol=0` and `merge_tol` at `min_len=60` -- which is two lines
+    through a plane and can miss the best cell entirely. Sweep the
+    grid.
     """
     docs = [d for d in sorted(root.iterdir())
             if d.is_dir() and (d / "inspect" / "pages").is_dir()
@@ -1641,10 +1653,17 @@ def m_blocks(root, n, rng, doc=None, min_len=60, min_block=200,
     if not todo:
         print(f"  {d.name}: no labelled figure page with a rendered PNG")
         return
+    # n=0 means EVERY labelled page. Two 12-page samples of this one
+    # document scored 57% and 78% matched, so a 12-page sample cannot
+    # separate two operating points -- the difference between them is
+    # smaller than the difference between two samples. Quote the sample
+    # size beside the rate, and prefer the whole set when choosing.
     rng.shuffle(todo)
-    todo = todo[:n]
-    print(f"  {d.name[:44]}, {len(todo)} labelled pages; "
-          f"min_len {min_len} px, min_block {min_block} px")
+    if n:
+        todo = todo[:n]
+    figures = sum(len(b) for _, b, _ in todo)
+    print(f"  {d.name[:44]}, {len(todo)} labelled pages, {figures} "
+          f"figures; min_len {min_len} px, min_block {min_block} px")
 
     tot = Counter()
     errs = []
