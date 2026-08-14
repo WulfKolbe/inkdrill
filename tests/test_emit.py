@@ -357,6 +357,51 @@ class T1_5_Rules(unittest.TestCase):
                   if l["type"] in ("diagram", "block")]
         self.assertEqual(carrying[0]["region"]["width"], min(widths))
 
+    def test_a_rule_attaches_to_TABLE_OR_DIAGRAM_lines_only(self):
+        """`block` and `glyph` boxes come from other partitions -- the
+        white route, the cluster union -- and can share a box with a
+        diagram, so admitting them as targets makes ownership an
+        iteration-order accident. Measured on 2409.18839 p7: the frame's
+        rule moved from the diagram to a block and back depending on
+        which types competed.
+
+        The fixture is that page's shape: a frame (diagram) containing a
+        text-like block (white route) with a rule inside it. The block
+        is the SMALLER container, so innermost-of-anything picks the
+        block and innermost-of-table-or-diagram picks the frame -- the
+        two answers differ, which is what lets the mutant die.
+
+        Three earlier fixtures could not produce the block at all, and
+        each taught the same lesson at a different scale: the gap floor
+        is ~2x a text height on a real page, so marks must be SMALLER
+        than the floor with sub-floor gaps (real letters), rows must
+        overlap the pitch (real ascenders/descenders interrupt the
+        inter-line band), and a free-standing rule always cuts its
+        block in two -- the pieces rejoin only because `merge_boxes`
+        runs, which is the same mechanism that lifted the corpus
+        measurement from 6 to 8 matched.
+        """
+        w, h = 600, 400
+        buf = bytearray(w * h)
+        frame(buf, w, 5, 5, 595, 395)
+        rows = [100, 122, 144, 166, 194, 216, 238]
+        for i, ry in enumerate(rows):             # brick-staggered marks,
+            off = 14 if i % 2 else 0              # taller than the pitch
+            for c in range(10):
+                for y in range(ry, ry + 24):
+                    for x in range(150 + off + c * 28,
+                                   170 + off + c * 28):
+                        buf[y * w + x] = 0xFF
+        hline(buf, w, 191, 160, 420, 2)           # the rule, 1px clear
+        m = InkMask(bytes(buf), w, h)
+        lines = page_lines(m, pt=0.3, tol=1.0)
+        kinds = [l["type"] for l in lines]
+        self.assertIn("diagram", kinds)
+        self.assertIn("block", kinds)
+        carrying = [l for l in lines if l.get("ink", {}).get("rules")]
+        self.assertEqual([l["type"] for l in carrying], ["diagram"])
+        self.assertEqual(len(carrying[0]["ink"]["rules"]), 1)
+
     def test_TWO_RULE_WEIGHTS_GIVE_DISTINCT_WIDTHS(self):
         """The acceptance criterion, on a BOOKTABS table.
 

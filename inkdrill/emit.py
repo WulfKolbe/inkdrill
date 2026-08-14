@@ -814,14 +814,22 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
     white = _white_lines(mask, pt, [r for r, _ in out], white_route)
     out.extend((_box_of(l, pt), [l]) for l in white)
 
-    # Each rule attaches to the INNERMOST containing line only. The
-    # first form attached it to every container, so a rule inside a
-    # frame inside a frame arrived three times -- one measurement
-    # reported as three. Innermost is smallest containing box, and ties
-    # cannot arise: two distinct emitted regions with identical boxes
-    # would be the same component.
+    # Each rule attaches to the INNERMOST containing TABLE or DIAGRAM
+    # line only. Two decisions, both audited:
+    #
+    # * innermost, because the first form attached to every container
+    #   and a rule inside a frame inside a frame arrived three times;
+    # * table/diagram only, because `block` and `glyph` boxes come from
+    #   OTHER partitions (the white route, the cluster union) and can
+    #   share a box with a diagram -- the nested fixture had a diagram
+    #   and a block both at the same size, decided by iteration order.
+    #   "Ties cannot arise" was claimed of the first fix and was wrong;
+    #   restricting the target types is what actually removes them,
+    #   since one component cannot be two ink regions.
     owner: dict[int, tuple] = {}
     for region, lines in out:
+        if lines[0]["type"] not in ("table", "diagram"):
+            continue
         size = ((region.x1 - region.x0 + 1) * (region.y1 - region.y0 + 1))
         for r in rules:
             if _contains(region, r):
