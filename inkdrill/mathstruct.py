@@ -270,8 +270,14 @@ def detect_scripts(row: Row, *, max_height_ratio: float = 0.80,
     return out
 
 
+_partition_rows = rows          # `group` takes a `rows=` argument, which
+                                # would otherwise shadow the function it
+                                # needs when the argument is omitted.
+
+
 def group(glyphs: Sequence[Glyph], *, share: float = 0.5,
-          max_gap: float = 2.5, stack: float = 0.5) -> list[list[int]]:
+          max_gap: float = 2.5, stack: float = 0.5,
+          rows: Sequence["Row"] | None = None) -> list[list[int]]:
     r"""Join components that belong to one glyph -- `i`, `j`, `:`, `=`.
 
     U13's confusion matrix is dominated by these: a per-component
@@ -284,6 +290,24 @@ def group(glyphs: Sequence[Glyph], *, share: float = 0.5,
         `stack` of the shorter one;
       * the vertical gap between them is under `max_gap` times the taller
         one's height.
+
+    G7: **components in DIFFERENT ROWS are never joined**, and without
+    that bound the three tests above are not enough. Measured on a
+    600 dpi scan: `max_gap=2.5` on a 43 px glyph permits a 108 px
+    vertical gap, and body leading on that page is about 108 px -- so a
+    letter and the x-aligned letter on the NEXT LINE passed gap, share
+    and stack together, and union-find chained 114 components down 80%
+    of the page. 2,125 components became 380 clusters where roughly
+    2,125 were wanted.
+
+    Each of the three conditions was individually right; what was
+    missing was that a rule written for `i` + tittle had the whole page
+    to walk. `rows()` costs 0.01 s on that page and every multi-part
+    glyph -- the tittle, the umlaut, the two dots of `:`, an inline
+    accent -- is within one row by construction.
+
+    Pass `rows` to reuse a partition already computed; otherwise it is
+    computed here.
 
     G6: **the stacking test is what separates one glyph from two.** An
     earlier version used only horizontal overlap and vertical distance,
@@ -310,8 +334,8 @@ def group(glyphs: Sequence[Glyph], *, share: float = 0.5,
     """
     if not 0.0 < share <= 1.0:
         raise ValueError(f"share must be in (0, 1], got {share}")
-    order = sorted(glyphs, key=lambda g: (g.x0, g.top, g.id))
-    parent = {g.id: g.id for g in order}
+    everything = list(glyphs)
+    parent = {g.id: g.id for g in everything}
 
     def find(i: int) -> int:
         while parent[i] != i:
@@ -319,6 +343,36 @@ def group(glyphs: Sequence[Glyph], *, share: float = 0.5,
             i = parent[i]
         return i
 
+    if rows is None:
+        rows = _partition_rows(everything)
+    by_id = {g.id: g for g in everything}
+    # One row at a time. This also drops the pairwise loop from the
+    # whole page to a line: n falls from 2,125 to about 45, and the
+    # loop is quadratic in the worst case.
+    bands = [[by_id[g.id] for g in r.members if g.id in by_id] for r in rows]
+    # A glyph in no row needs no band of its own: `parent` is seeded
+    # from every glyph and the cluster assembly below walks `everything`,
+    # so an untouched glyph is already its own root. Adding a band for
+    # it was dead code -- removing it kills no test, which is how it was
+    # found.
+
+    for band in bands:
+        order = sorted(band, key=lambda g: (g.x0, g.top, g.id))
+        _join_within(order, parent, find, share, max_gap, stack)
+
+    clusters: dict[int, list[int]] = {}
+    for g in everything:
+        clusters.setdefault(find(g.id), []).append(g.id)
+    return sorted((sorted(v) for v in clusters.values()),
+                  key=lambda ids: ids[0])
+
+
+def _join_within(order, parent, find, share, max_gap, stack) -> None:
+    """The pairwise join, over ONE row's glyphs.
+
+    The `break` on `gb.x0 > ga.x1` relies on the x-sort, which still
+    holds within a row -- the sort is done by the caller per band.
+    """
     for a in range(len(order)):
         ga = order[a]
         for b in range(a + 1, len(order)):
@@ -338,9 +392,3 @@ def group(glyphs: Sequence[Glyph], *, share: float = 0.5,
             ra, rb = find(ga.id), find(gb.id)
             if ra != rb:
                 parent[rb] = ra
-
-    clusters: dict[int, list[int]] = {}
-    for g in order:
-        clusters.setdefault(find(g.id), []).append(g.id)
-    return sorted((sorted(v) for v in clusters.values()),
-                  key=lambda ids: ids[0])

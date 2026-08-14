@@ -196,9 +196,10 @@ From `algorithms.md` §9, with status:
    not a win so the next reader does not expect one.
 4. **Transposed mask** vs 4,960 strided column slices. Unmeasured. *Open.*
 5. **`rows()` modal-height seeding** — **fixed 2026-08-09.**
-6. **`group()` absorbing big-operator limits** — confirmed, **not fixed**;
-   the proposed remedy does not reach it, and the real fix is symbol
-   identity. Pinned by a test.
+6. ~~**`group()` absorbing big-operator limits**~~ — **fixed
+   2026-08-14**, as a side effect of bounding `group()` to a text row,
+   and by the very fact that was recorded as why it could not be fixed.
+   Inline limits are still absorbed; symbol identity is still unsolved.
 7. Native port sites. *Open.*
 
 ## 6a. Findings from the 2026-08-09 external audit
@@ -633,6 +634,68 @@ choosing the answer, which is the failure this project has now found six
 times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
+
+### `group()` chained down a text column — fixed, and it closed U14's defect too
+
+Reproduced first, on `BH1-000274` at 600 dpi: **2,125 components became
+380 clusters**, the largest holding 114 components spanning y 603–4875 —
+80% of the page height in a 10%-wide strip. A cluster is meant to be one
+glyph.
+
+**All three join conditions were individually correct.** `max_gap=2.5`
+on a 43 px glyph permits a 108 px vertical gap, and body leading on that
+page is ~108 px, so a letter and the x-aligned letter on the next line
+passed gap, share and stack together, and union-find chained them.
+Nothing bounded a rule written for `i` + tittle to one line of text.
+
+**A single-parameter fix is impossible, and measuring showed why.**
+Sweeping `max_gap` fixes the chaining but breaks the colon:
+
+| `max_gap` | clusters | largest | `i` joins | `:` joins |
+|---|---|---|---|---|
+| 2.50 | 380 | 114 | yes | **yes** |
+| 1.50 | 966 | 29 | yes | no |
+| 0.50 | 1,878 | 6 | yes | no |
+| 0.20 | 2,093 | 3 | **no** | no |
+
+`2.5` exists *to join a colon*: its dots have gap/height = 2.33, which
+is **larger** than the cross-line ratio of 1.5. No threshold on that
+ratio can separate them, so the bound had to be of a different kind.
+
+**Bounded to a row** (`rows()` costs 0.01 s), joins now happen within a
+text line only:
+
+| page | components | clusters | largest | max span |
+|---|---|---|---|---|
+| BH1-000274 | 2,125 | **1,869** (88%) | 3 | 2.5× |
+| BH1-000229 | 1,140 | 996 (87%) | 12 | 5.4× |
+| BH1-000018 | 1,831 | 1,665 (91%) | 3 | 1.8× |
+
+Every acceptance criterion met on the named page. The 12-part cluster on
+p229 is not a chain: it sits inside **one** row that is itself 3.9× the
+median glyph height — a maths line with tall brackets — and spans 2.7×.
+
+**It closed the recorded display-operator defect**, and by the very fact
+the old docstring gave as the reason it could not be closed: "a display
+limit does not vertically overlap its operator, so `rows()` puts them in
+different rows". That was offered as why the obvious fix could not
+reach the defect; once joins are confined to a row it is exactly what
+keeps the limits out. This is **not** symbol identity — an *inline*
+limit shares the operator's row and would still be absorbed.
+
+**The existing fixtures had to change, and that is the finding.** A bare
+dot and stem are TWO rows, and so are a dot and stem beside six letters
+of uniform height; add one ascender and they are one. So "the tittle is
+within-row by construction" is false without a row, and a fixture for a
+within-row rule must contain a row — the same lesson as a table grid
+with no letters in it, in its fourth costume.
+
+Four mutants; three survived and each was a real gap on a path no test
+took — the `rows=` parameter, the per-band x-sort, and an unrowed-glyph
+fallback. Writing the test for the fallback found a **bug in code that
+had never run** (`[[g]]` where `[g]` was meant), and then showed the
+fallback was dead anyway: the union-find already gives an untouched
+glyph its own cluster. Removed.
 
 ### Three recorded problems, worked 2026-08-14
 

@@ -215,17 +215,48 @@ class T14_3_ScriptDetection(unittest.TestCase):
 
 class T14_4_ComponentGrouping(unittest.TestCase):
     """U13's confusion matrix is dominated by `i . : 1 l` -- multi-part
-    glyphs a per-component classifier sees half of."""
+    glyphs a per-component classifier sees half of.
+
+    EVERY FIXTURE HERE SITS IN A LINE OF TEXT, and that is the finding
+    rather than boilerplate. `group()` is now bounded to a row, and a
+    tittle joins its stem's row only because the row's band reaches the
+    ascender line -- which a line of prose establishes and two glyphs
+    alone do not. Measured: an isolated dot and stem are TWO rows, and
+    so are a dot and a stem beside six letters of uniform height; add
+    one ascender and they are one.
+
+    So "the tittle is within-row by construction" is false without a
+    row. A fixture for a within-row rule must contain a row -- the same
+    lesson as a table grid with no letters in it, in its fourth
+    costume.
+    """
+
+    #: A line of prose, with an ascender, at x 0-140. Fixtures place
+    #: their own glyphs to the right of it at x >= 200 so the horizontal
+    #: overlap test is untouched by the context.
+    @staticmethod
+    def _line():
+        out = [g(900, 0.0, 88.0, 13.0, 112.0)]          # an `l`
+        out += [g(901 + i, 20.0 * (i + 1), 96.0,
+                  20.0 * (i + 1) + 13, 112.0) for i in range(6)]
+        return out
+
+    def _clusters_of(self, glyphs):
+        """Cluster the fixture inside a line, then drop the line."""
+        ctx = self._line()
+        ids = {x.id for x in glyphs}
+        return [c for c in group(ctx + list(glyphs))
+                if set(c) & ids]
 
     def test_a_dot_and_a_stem_become_one_glyph(self):
-        dot = g(0, 10.0, 96.0, 13.0, 99.0)
-        stem = g(1, 10.0, 102.0, 13.0, 112.0)
-        self.assertEqual(group([dot, stem]), [[0, 1]])
+        dot = g(0, 200.0, 90.0, 203.0, 93.0)
+        stem = g(1, 200.0, 96.0, 203.0, 112.0)
+        self.assertEqual(self._clusters_of([dot, stem]), [[0, 1]])
 
     def test_a_colon_becomes_one_glyph(self):
-        top = g(0, 10.0, 100.0, 13.0, 103.0)
-        bot = g(1, 10.0, 108.0, 13.0, 111.0)
-        self.assertEqual(group([top, bot]), [[0, 1]])
+        top = g(0, 200.0, 96.0, 203.0, 99.0)
+        bot = g(1, 200.0, 106.0, 203.0, 109.0)
+        self.assertEqual(self._clusters_of([top, bot]), [[0, 1]])
 
     def test_two_adjacent_letters_are_not_merged(self):
         """G6: the overlap test is on the NARROWER width, so a wide glyph
@@ -245,10 +276,12 @@ class T14_4_ComponentGrouping(unittest.TestCase):
     def test_stacking_is_what_distinguishes_one_glyph_from_two(self):
         """The same two boxes: stacked they are one glyph, side by side
         they are two."""
-        stacked = [g(0, 10.0, 90.0, 14.0, 94.0), g(1, 10.0, 100.0, 14.0, 110.0)]
-        beside = [g(0, 10.0, 100.0, 14.0, 110.0), g(1, 11.0, 100.0, 15.0, 110.0)]
-        self.assertEqual(group(stacked), [[0, 1]])
-        self.assertEqual(group(beside), [[0], [1]])
+        stacked = [g(0, 200.0, 90.0, 204.0, 94.0),
+                   g(1, 200.0, 100.0, 204.0, 110.0)]
+        beside = [g(0, 200.0, 100.0, 204.0, 110.0),
+                  g(1, 201.0, 100.0, 205.0, 110.0)]
+        self.assertEqual(self._clusters_of(stacked), [[0, 1]])
+        self.assertEqual(self._clusters_of(beside), [[0], [1]])
 
     def test_horizontal_overlap_is_required_not_just_stacking(self):
         """Two components stacked in the vertical sense but in different
@@ -257,32 +290,38 @@ class T14_4_ComponentGrouping(unittest.TestCase):
         # They must TOUCH horizontally, or the x-ordered early break
         # rejects the pair before the overlap test is reached -- which is
         # how the first version of this test failed to guard anything.
-        stem = g(0, 10.0, 100.0, 14.0, 110.0)
-        adjacent_dot = g(1, 14.0, 90.0, 18.0, 94.0)
-        self.assertEqual(group([stem, adjacent_dot]), [[0], [1]])
+        stem = g(0, 200.0, 100.0, 204.0, 110.0)
+        adjacent_dot = g(1, 204.0, 90.0, 208.0, 94.0)
+        self.assertEqual(self._clusters_of([stem, adjacent_dot]),
+                         [[0], [1]])
         # and the same dot directly above DOES join
-        own_dot = g(2, 10.0, 90.0, 14.0, 94.0)
-        self.assertEqual(group([stem, own_dot]), [[0, 2]])
+        own_dot = g(2, 200.0, 90.0, 204.0, 94.0)
+        self.assertEqual(self._clusters_of([stem, own_dot]), [[0, 2]])
 
-    def test_a_display_operator_absorbs_its_limits_KNOWN_DEFECT(self):
-        """Measured and NOT fixed. A big operator's limits x-overlap it
-        almost totally, are stacked, and sit close relative to its height,
-        so all three grouping conditions hold and it groups as one glyph.
+    def test_a_display_operator_no_longer_absorbs_its_limits(self):
+        """The recorded defect, CLOSED as a side effect of bounding
+        `group` to a row -- and closed by the very fact the old
+        docstring gave as the reason it could not be.
 
-        Excluding what detect_scripts found would not close it: a display
-        limit does not vertically overlap its operator, so rows() puts
-        them in different rows and nothing classifies them as scripts.
-        Telling an accent from a limit geometrically is the same problem
-        as knowing the operator is an operator -- symbol identity, which
-        has no measurement behind it. This test pins the current
-        behaviour so the fix is visible when it lands."""
+        It said: a display limit does not vertically overlap its
+        operator, so `rows()` puts them in different rows and nothing
+        classifies them as scripts. That was offered as why the obvious
+        fix could not reach the defect. Once joins are confined to a
+        row, the same three rows are exactly what keeps the limits out
+        of the operator.
+
+        This does NOT amount to symbol identity. The limits are now
+        three separate clusters rather than one wrong cluster; knowing
+        that the middle one is an operator and the others are its
+        limits is still unsolved, and `\sum` with an INLINE limit --
+        one that does share the operator's row -- would still be
+        absorbed. Recorded as closed for the display case only.
+        """
         op = g(10, 100.0, 100.0, 130.0, 140.0)
         above = g(11, 108.0, 88.0, 122.0, 98.0)
         below = g(12, 108.0, 142.0, 122.0, 152.0)
-        self.assertEqual(group([op, above, below]), [[10, 11, 12]])
-        # and they are in three separate rows, which is why the obvious
-        # fix does not reach them
         self.assertEqual(len(rows([op, above, below])), 3)
+        self.assertEqual(group([op, above, below]), [[10], [11], [12]])
 
     def test_a_vertically_distant_pair_is_not_merged(self):
         top = g(0, 10.0, 20.0, 13.0, 23.0)
@@ -301,10 +340,10 @@ class T14_4_ComponentGrouping(unittest.TestCase):
                 self.assertEqual(group(s), want)
 
     def test_three_parts_join_transitively(self):
-        parts = [g(0, 10.0, 90.0, 13.0, 93.0),
-                 g(1, 10.0, 96.0, 13.0, 99.0),
-                 g(2, 10.0, 102.0, 13.0, 112.0)]
-        self.assertEqual(group(parts), [[0, 1, 2]])
+        parts = [g(0, 200.0, 90.0, 203.0, 93.0),
+                 g(1, 200.0, 96.0, 203.0, 99.0),
+                 g(2, 200.0, 102.0, 203.0, 112.0)]
+        self.assertEqual(self._clusters_of(parts), [[0, 1, 2]])
 
     def test_an_empty_input_groups_to_nothing(self):
         self.assertEqual(group([]), [])
@@ -318,3 +357,111 @@ class T14_4_ComponentGrouping(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class T14_6_GroupingIsBoundedToOneRow(unittest.TestCase):
+    """`group()` chained 114 components down 80% of a scanned page.
+
+    Measured on `BH1-000274` at 600 dpi: 2,125 components collapsed to
+    380 clusters, the largest spanning y 603-4875 in a 10%-wide strip.
+    Expected is roughly one cluster per component.
+
+    All three join conditions were individually CORRECT. The defect was
+    that nothing bounded the search to a line of text: at `max_gap=2.5`
+    and a 43 px glyph the permitted vertical gap is 108 px, and body
+    leading on that page is about the same, so a letter in one line and
+    an x-aligned letter in the next satisfied gap, share and stack
+    together -- and union-find chained them the length of the column.
+
+    The synthetic fixtures could not show it because they have one or
+    two lines. Third instance of "a synthetic fixture has no letters in
+    it": the fixture must contain the thing the rule discriminates
+    against, and here that is a SECOND LINE OF PROSE.
+    """
+
+    @staticmethod
+    def _prose(rows_n=20, cols=30, h=10.0, w=8.0, pitch=25.0, pad=4.0):
+        """A page of prose: x-aligned columns, realistic leading.
+
+        `pitch - h` is 15 and `max_gap * h` is 25, so the gap test
+        passes between consecutive lines -- which is the real page's
+        arithmetic, not a contrived one.
+        """
+        out, gid = [], 0
+        for r in range(rows_n):
+            top = r * pitch
+            for c in range(cols):
+                x0 = c * (w + pad)
+                out.append(Glyph(gid, x0, top, x0 + w, top + h))
+                gid += 1
+        return out
+
+    def test_group_does_not_chain_down_a_text_column(self):
+        glyphs = self._prose()
+        for c in group(glyphs):
+            span = (max(g.bottom for g in glyphs if g.id in c)
+                    - min(g.top for g in glyphs if g.id in c))
+            self.assertLess(span, 3 * 10.0,
+                            f"a cluster of {len(c)} spans {span} px")
+
+    def test_a_SUPPLIED_row_partition_is_honoured(self):
+        """`rows=` exists so a caller that already has the partition
+        does not recompute it. If it were ignored the parameter would be
+        decoration, and nothing else in the suite passes it."""
+        from inkdrill.mathstruct import Row
+        dot = Glyph(0, 200.0, 90.0, 203.0, 93.0)
+        stem = Glyph(1, 200.0, 96.0, 203.0, 112.0)
+        one = [Row([dot, stem], 90.0, 112.0)]
+        two = [Row([dot], 90.0, 93.0), Row([stem], 96.0, 112.0)]
+        self.assertEqual(group([dot, stem], rows=one), [[0, 1]])
+        self.assertEqual(group([dot, stem], rows=two), [[0], [1]])
+
+    def test_a_glyph_in_NO_supplied_row_still_gets_a_cluster(self):
+        """A caller may hand in a partial partition. A glyph that is in
+        none of its rows must come back as its own cluster rather than
+        disappear -- losing ink silently is the worst failure this
+        module has."""
+        from inkdrill.mathstruct import Row
+        a = Glyph(0, 200.0, 96.0, 203.0, 112.0)
+        b = Glyph(1, 300.0, 96.0, 303.0, 112.0)
+        got = group([a, b], rows=[Row([a], 96.0, 112.0)])
+        self.assertEqual(got, [[0], [1]])
+
+    def test_the_band_is_x_SORTED_before_the_early_break(self):
+        """The loop breaks on `gb.x0 > ga.x1`, which is only valid on an
+        x-sorted band -- and a row's members arrive in whatever order the
+        row was built in.
+
+        The fixture puts a FAR-RIGHT glyph between the two parts of the
+        pair. Unsorted, the break fires on it and the stem is never
+        reached; sorted, the pair is adjacent and joins. A band that
+        happens to be in order cannot show this, which is why shuffling
+        a prose page did not catch the mutant.
+        """
+        from inkdrill.mathstruct import Row
+        dot = Glyph(0, 200.0, 90.0, 203.0, 93.0)
+        far = Glyph(1, 500.0, 96.0, 513.0, 112.0)
+        stem = Glyph(2, 200.0, 96.0, 203.0, 112.0)
+        row = Row([dot, far, stem], 90.0, 112.0)   # deliberately unsorted
+        self.assertEqual(group([dot, far, stem], rows=[row]),
+                         [[0, 2], [1]])
+
+    def test_the_result_does_not_depend_on_INPUT_ORDER(self):
+        """The pairwise loop breaks on `gb.x0 > ga.x1`, which is only
+        valid on an x-sorted band. `rows()` members arrive in whatever
+        order the row was built in, so the sort has to happen per band
+        -- and a fixture that is already sorted cannot show it."""
+        import random
+        glyphs = self._prose(rows_n=3, cols=6)
+        want = group(glyphs)
+        rng = random.Random(20260814)
+        for _ in range(8):
+            shuffled = glyphs[:]
+            rng.shuffle(shuffled)
+            self.assertEqual(group(shuffled), want)
+
+    def test_the_cluster_count_tracks_the_component_count(self):
+        """A page of separate letters is a page of separate glyphs. 600
+        components must not become a handful of clusters."""
+        glyphs = self._prose()
+        self.assertGreaterEqual(len(group(glyphs)), int(0.8 * len(glyphs)))

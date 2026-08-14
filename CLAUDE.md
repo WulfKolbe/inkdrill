@@ -537,9 +537,19 @@ reference oracle and is exercised only by
 `T6_8_TwoSweepsEqualTheFloodFill`; do not delete it because it looks
 unused.
 
-One known correctness defect is pinned rather than fixed: `group()` absorbs a display
-big operator's limits into the operator. The obvious remedy does not
-reach it, and the real fix is symbol identity again.
+`group()` **is now bounded to a text row**, which fixed two things at
+once. It was chaining 114 components down 80% of a scanned page --
+`max_gap=2.5` on a 43 px glyph permits a 108 px vertical gap and body
+leading is about 108 px, so an x-aligned letter on the next line passed
+all three join tests and union-find walked the column. 2,125 components
+became 380 clusters; they now become 1,869.
+
+The row bound also **closed the recorded display-operator defect**, by
+the very fact the old docstring gave as the reason it could not be: a
+display limit does not overlap its operator, so `rows()` separates
+them. What was offered as why the obvious fix could not reach the
+defect turned out to be the fix. Symbol identity is still unsolved and
+an INLINE limit would still be absorbed.
 
 ## CodeGraph
 
