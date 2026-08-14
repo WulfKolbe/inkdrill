@@ -68,7 +68,8 @@ from inkdrill.font import (Usability, coverage as font_coverage, inventory,  # n
                            family_of, is_math_family,
                            normalise as fnormalise)
 from inkdrill.classify import (Channels, Classifier, Template,  # noqa: E402
-                               confusion as classify_confusion, normalise)
+                               confusion as classify_confusion, normalise,
+                               signature_features, template_of)
 from inkdrill.coverage import Box, CoverageClass, Region, check  # noqa: E402
 from inkdrill.domains import (DIMENSIONS, Domain, convexity, describe,  # noqa: E402
                               dimensions_of, efficiency,
@@ -2424,18 +2425,10 @@ MATH_FONTS = ("cmmi10.pfb", "cmsy10.pfb", "cmex10.pfb",
               "msam10.pfb", "msbm10.pfb")
 
 
-def _feature_tuple(sig):
-    """The signature as a feature vector -- ONE definition.
-
-    Assembled inline at two call sites before this existed, and both
-    dropped `parts` and `closes`; the second inherited the defect by
-    copy and was fixed a commit later than the first. A tuple built at
-    each call site drifts, and this one drifted silently because the
-    missing fields made a channel look weak rather than making anything
-    fail.
-    """
-    return (sig.parts, sig.cycles, sig.births, sig.closes,
-            sig.merges, sig.splits)
+# The feature vector lives in the PACKAGE now (`classify.signature_features`),
+# because `emit` became a third call site and this tuple had already
+# drifted silently at two.
+_feature_tuple = signature_features
 
 
 def _crop_ink(mask):
@@ -2465,21 +2458,9 @@ def _crop_ink(mask):
     return InkMask(bytes(buf), w, h)
 
 
-def _template_of(mask, label):
-    from inkdrill.aggregate import moments_of_mask
-    from inkdrill.reeb import graph_of, signature as reeb_signature
-    if mask is None or mask.width == 0 or mask.height == 0:
-        return None
-    sig = reeb_signature(graph_of(mask))
-    mo = moments_of_mask(mask)
-    w, h = mask.width, mask.height
-    # The WHOLE signature. An earlier version stored four of its six
-    # fields and dropped `parts` and `closes` -- and `parts` is exactly
-    # what separates i/dotlessi and Theta/O. A verifier measured on a
-    # crippled feature is measuring the harness.
-    return Template(label, normalise(mask),
-                    _feature_tuple(sig),
-                    (w / h, float(h), float(w), mo.elongation))
+# Same reason: the harness must not carry its own copy of the query
+# builder either.
+_template_of = template_of
 
 
 def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
@@ -2659,6 +2640,32 @@ def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
             print("      most dangerous confusions (wrong, accepted):")
             for (a, b), k in worst.most_common(6):
                 print(f"        {a}  read as  {b}   x{k}")
+
+    # C2: `prune` as a FILTER rather than an accept/reject.
+    #
+    # Two numbers, and the SECOND is the one that matters: a pruner that
+    # drops the right answer is worse than no pruner, however few
+    # candidates it leaves. Reported together for that reason.
+    clf = Classifier(channels=Channels(1.0, 1.0, 1.0))
+    for t in templates:
+        clf.add(t)
+    for tol, sig in ((None, 0), (None, 1), (None, 2), (0.15, 0), (0.15, 1)):
+        sizes, survived = [], 0
+        for q in queries:
+            full = clf.classify(q, top_k=0).candidates
+            kept = clf.prune(q, full, extents_tol=tol, sig_tol=sig)
+            sizes.append(len(kept))
+            survived += any(lab == q.label for lab, _ in kept)
+        sizes.sort()
+        med = sizes[len(sizes) // 2]
+        p90 = sizes[int(len(sizes) * 0.9)]
+        print(f"    prune sig_tol={sig} extents_tol={str(tol):<5} of "
+              f"{len(pool)} classes: median {med:>4}, p90 {p90:>4}, "
+              f"max {sizes[-1]:>4};  TRUE LABEL SURVIVES "
+              f"{survived / len(queries):7.2%}")
+    print("    An empty survivor list is a legitimate value -- every")
+    print("    candidate inconsistent with the ink is a finding, not an")
+    print("    error to paper over by returning the unpruned list.")
 
 
 # TeX's own math spacing, in em. These are DEFINITIONS from the

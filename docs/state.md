@@ -626,6 +626,61 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### C1–C4 — the ranked list travels, and inkdrill never chooses
+
+**C1.** `Prediction` now carries `candidates: ((label, distance), ...)`
+and `label`/`distance`/`runner_up`/`margin` are properties over it, so
+existing callers are untouched. `classify(query, top_k=8)` truncates the
+REPORT, not the search — the first entry is the one the two-field
+version returned. `classify` always built the full ranking and threw
+all but two entries away.
+
+**C2 — `prune()` exists and its acceptance criterion is NOT met.** The
+target was a median of ≤5 survivors with the true label surviving ≥99%.
+Measured on the 647-class maths set:
+
+| `sig_tol` | `extents_tol` | median | p90 | true label survives |
+|---|---|---|---|---|
+| 0 | None | 33 | 163 | **92.74%** |
+| 1 | None | 37 | 163 | 94.13% |
+| 2 | None | 102 | 262 | 95.83% |
+| 0 | 0.15 | **1** | 2 | **45.60%** |
+| 1 | 0.15 | 1 | 2 | 45.60% |
+
+**There is no operating point.** Relaxing the signature buys survival
+slowly and blows up the median; adding extents reaches the median
+target by discarding the right answer more than half the time. The
+second number is the one that matters — a pruner that drops the right
+answer is worse than no pruner — so **`emit` does not call `prune`**.
+It ships as a measured tool with its numbers in the docstring.
+
+The reason is the module's own thesis, now measured in filter form as
+well as verifier form: the signature is a **verifier on a winner**, not
+a discriminator over hundreds of candidates. Exact signature equality
+also costs ~7% of true labels outright, because template and query come
+from different rasterisers.
+
+**C3.** A `glyph` line carries `ink.candidates` as `[[label, distance],
+…]`, plus `ink.holes`, `ink.components` and `ink.axis`. Supply a
+classifier and `top_k`; omit it and the key is **absent**. Supply one
+that matches nothing and the list is **empty** — different statements,
+and the empty list is how the unrecognised fraction is transmitted
+rather than hidden behind a best guess.
+
+**C4.** Audited and asserted: no `max`, `min` or `sorted` in `emit`
+ranges over labels — every one is geometry. No line carries a `label`
+key, and a test asserts it rather than trusting the audit.
+
+**Two defects found on the way.** `_feature_tuple` and `_template_of`
+lived in the harness, and `emit` was about to become a third call site
+of a tuple that had **already drifted silently at two** — both dropping
+`parts` and `closes`. They now live in the package as
+`classify.signature_features` and `classify.template_of`, and the
+harness imports them. And the whole classifier path first ran on a real
+page with **905 tests green**: nothing supplied a classifier, so a
+missing `InkMask` import raised `NameError` only on real data. A branch
+no test reaches executes first in production.
+
 ### T4 — skip the hole geometry when nothing needs it
 
 A page of plain text has no table and no diagram, so it needs the hole

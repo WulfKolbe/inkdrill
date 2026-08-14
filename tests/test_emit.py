@@ -711,3 +711,83 @@ class T1_8_Glyphs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class T1_9_Candidates(unittest.TestCase):
+    """C3 and C4: the glyph line carries a RANKED LIST and no decision.
+
+    This path first ran on real data and the suite passed anyway --
+    nothing supplied a classifier, so `_crop` raised `NameError` on a
+    missing import with 905 tests green. A branch no test reaches
+    executes first on a real page, unverified.
+    """
+
+    @staticmethod
+    def _dots(n=3):
+        """`n` separated 6x6 squares -- one component each, so the
+        number of glyph lines is known exactly."""
+        w, h = 20 * n, 20
+        buf = bytearray(w * h)
+        for i in range(n):
+            for y in range(6, 12):
+                for x in range(6 + i * 20, 12 + i * 20):
+                    buf[y * w + x] = 0xFF
+        return InkMask(bytes(buf), w, h)
+
+    @staticmethod
+    def _clf(labels=("a", "b", "c")):
+        from inkdrill.classify import Channels, Classifier, Template
+        c = Classifier(channels=Channels(1.0, 0.0, 0.0))
+        for i, lab in enumerate(labels):
+            c.add(Template(lab, (1 << (i + 1)) - 1))
+        return c
+
+    def test_no_classifier_means_the_key_is_ABSENT(self):
+        lines = page_lines(self._dots(), pt=PT, tol=1.0, glyphs=True)
+        self.assertTrue(lines)
+        for l in lines:
+            self.assertNotIn("candidates", l["ink"])
+
+    def test_a_classifier_yields_a_ranked_list_per_glyph(self):
+        lines = page_lines(self._dots(), pt=PT, tol=1.0, glyphs=True,
+                           classifier=self._clf(), top_k=3)
+        self.assertEqual(len(lines), 3)
+        for l in lines:
+            cands = l["ink"]["candidates"]
+            self.assertEqual(len(cands), 3)
+            self.assertEqual([c[1] for c in cands],
+                             sorted(c[1] for c in cands))
+
+    def test_top_k_bounds_the_list(self):
+        lines = page_lines(self._dots(1), pt=PT, tol=1.0, glyphs=True,
+                           classifier=self._clf(tuple("abcdefgh")), top_k=2)
+        self.assertEqual(len(lines[0]["ink"]["candidates"]), 2)
+
+    def test_an_EMPTY_classifier_yields_an_EMPTY_LIST_not_a_missing_key(self):
+        """The 14.4% transmitted rather than hidden. Empty and absent are
+        different statements: absent means nobody asked, empty means the
+        question was asked and nothing matched."""
+        from inkdrill.classify import Classifier
+        lines = page_lines(self._dots(1), pt=PT, tol=1.0, glyphs=True,
+                           classifier=Classifier())
+        self.assertEqual(lines[0]["ink"]["candidates"], [])
+
+    def test_NO_LINE_EVER_CARRIES_A_SINGLE_LABEL(self):
+        """C4, asserted rather than trusted. inkdrill has no lexicon, so
+        choosing among candidates is the consumer's call; a `label` key
+        would be a decision taken by the party with less information."""
+        lines = page_lines(self._dots(), pt=PT, tol=1.0, glyphs=True,
+                           classifier=self._clf(), top_k=3)
+        for l in lines:
+            self.assertNotIn("label", l)
+            self.assertNotIn("label", l["ink"])
+            self.assertIsInstance(l["ink"]["candidates"], list)
+
+    def test_the_topology_pair_is_always_present(self):
+        lines = page_lines(self._dots(1), pt=PT, tol=1.0, glyphs=True)
+        self.assertEqual(lines[0]["ink"]["components"], 1)
+        self.assertIn("holes", lines[0]["ink"])
+
+
+if __name__ == "__main__":
+    unittest.main()

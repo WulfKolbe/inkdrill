@@ -217,7 +217,12 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   Gärdenfors design test, so a dimension is added by measuring it. Compare
   `efficiency`, not raw `nmi` — the latter is capped by cardinality.
 - **`inkdrill/classify.py`** — 1-NN over separable channels. `normalise`,
-  `Classifier`, `confusion`. The bitmap channel alone reaches 99.1%; the
+  `Classifier`, `confusion`, `template_of`/`signature_features` (the
+  ONE definition of the feature vector — it drifted at two call sites
+  before it lived here). `classify()` returns the RANKED list;
+  `prune()` filters a candidate list but **does not meet its
+  acceptance criterion** on 647 classes (median 33, true label
+  survives 92.7%) and `emit` does not call it. The bitmap channel alone reaches 99.1%; the
   confusion matrix says do not escalate. The signature is a verifier
   (`agrees`), not a discriminator.
 - **`inkdrill/mathstruct.py`** — rows, reference lines, script detection,

@@ -153,7 +153,8 @@ from typing import Iterable, Sequence
 
 from .raster import InkMask
 
-__all__ = ["Template", "Prediction", "Channels", "Classifier",
+__all__ = ["signature_features", "template_of",
+           "Template", "Prediction", "Channels", "Classifier",
            "normalise", "bitmap_distance", "signature_distance",
            "extents_distance", "confusion", "NoTemplates"]
 
@@ -220,6 +221,40 @@ def extents_distance(a: Sequence[float], b: Sequence[float],
     return sum(abs(x - y) * s for x, y, s in zip(a, b, scale))
 
 
+def signature_features(sig) -> tuple[int, ...]:
+    """A `reeb.Signature` as a feature vector -- ONE definition.
+
+    It was assembled inline at two call sites in the harness and both
+    dropped `parts` and `closes`; the second inherited the defect by
+    copy and was fixed a commit later than the first. `parts` is exactly
+    what separates `i` from `dotlessi` and `Theta` from `O`, so the
+    omission made a channel look weak rather than making anything fail.
+
+    It lives here, in the package, because `emit` became a third call
+    site and a tuple built at each one drifts.
+    """
+    return (sig.parts, sig.cycles, sig.births, sig.closes,
+            sig.merges, sig.splits)
+
+
+def template_of(mask: InkMask, label: str) -> "Template | None":
+    """A `Template` from one cropped mask -- the query side, and the
+    template side, built by the SAME code.
+
+    `None` for an empty mask rather than a zero-feature template, which
+    would match anything with no ink.
+    """
+    from .aggregate import moments_of_mask
+    from .reeb import graph_of, signature as reeb_signature
+    if mask is None or mask.width == 0 or mask.height == 0:
+        return None
+    sig = reeb_signature(graph_of(mask))
+    mo = moments_of_mask(mask)
+    w, h = mask.width, mask.height
+    return Template(label, normalise(mask), signature_features(sig),
+                    (w / h, float(h), float(w), mo.elongation))
+
+
 @dataclass(frozen=True, slots=True)
 class Template:
     """One labelled example. `bitmap` is packed; the other channels are
@@ -245,10 +280,40 @@ class Channels:
 
 @dataclass(frozen=True, slots=True)
 class Prediction:
-    label: str
-    distance: float
-    runner_up: str | None
-    runner_up_distance: float | None
+    """The RANKED LIST, with the top two as views onto it (C1).
+
+    `classify` always built the full ranking and then threw all but two
+    entries away. It is the same information either way -- these are
+    properties over `candidates`, not stored fields -- but a consumer
+    choosing among labels needs the tail, and the tail is exactly what
+    a classifier that must not decide has to hand over.
+
+    `candidates` is `((label, distance), ...)`, ascending by distance
+    with ties broken by label (G5), one entry per label.
+    """
+    candidates: tuple[tuple[str, float], ...]
+
+    def __post_init__(self):
+        if not self.candidates:
+            raise ValueError(
+                "a Prediction needs at least one candidate; `classify` "
+                "raises NoTemplates rather than returning an empty one")
+
+    @property
+    def label(self) -> str:
+        return self.candidates[0][0]
+
+    @property
+    def distance(self) -> float:
+        return self.candidates[0][1]
+
+    @property
+    def runner_up(self) -> str | None:
+        return self.candidates[1][0] if len(self.candidates) > 1 else None
+
+    @property
+    def runner_up_distance(self) -> float | None:
+        return self.candidates[1][1] if len(self.candidates) > 1 else None
 
     @property
     def margin(self) -> float:
@@ -281,14 +346,20 @@ class Classifier:
             d += c.extents * extents_distance(query.extents, ref.extents)
         return d
 
-    def classify(self, query: Template) -> Prediction:
-        """Nearest template, with the runner-up from a DIFFERENT label.
+    def classify(self, query: Template, *, top_k: int = 8) -> Prediction:
+        """The nearest `top_k` LABELS, ranked (C1).
 
         Ties break by label (G5), so a repeated run gives the same answer
         and a comparison between two runs means something.
+
+        `top_k` truncates the report, not the search -- every template
+        is still compared, so the first entry is the same one the
+        two-field version returned. `top_k=0` means every label.
         """
         if not self.templates:
             raise NoTemplates("no templates to classify against")
+        if top_k < 0:
+            raise ValueError(f"top_k must be non-negative, got {top_k}")
         best: dict[str, float] = {}
         for ref in self.templates:
             d = self.distance(query, ref)
@@ -296,10 +367,7 @@ class Classifier:
             if cur is None or d < cur:
                 best[ref.label] = d
         ranked = sorted(best.items(), key=lambda kv: (kv[1], kv[0]))
-        label, dist = ranked[0]
-        if len(ranked) > 1:
-            return Prediction(label, dist, ranked[1][0], ranked[1][1])
-        return Prediction(label, dist, None, None)
+        return Prediction(tuple(ranked[:top_k] if top_k else ranked))
 
     def agrees(self, query: Template, label: str,
                *, extents_tol: float | None = None) -> bool:
@@ -344,6 +412,50 @@ class Classifier:
         return any(t.extents and
                    extents_distance(query.extents, t.extents) <= extents_tol
                    for t in ok)
+
+    def prune(self, query: Template, candidates,
+              *, extents_tol: float | None = None, sig_tol: int = 0):
+        """`agrees` over a LIST: the candidates consistent with `query`.
+
+        Same test, applied to every candidate instead of to one. The
+        accept/reject form answered "is the winner consistent?", which
+        throws away the thing a consumer needs -- HOW MANY survive. A
+        pruner that leaves five candidates has done most of the work; one
+        that leaves four hundred has done none, and the old signature
+        could not tell those apart.
+
+        `candidates` is a `Prediction.candidates`-shaped sequence, and
+        the return keeps its order and its distances, so pruning
+        composes with ranking rather than replacing it.
+
+        AN EMPTY RESULT IS A LEGITIMATE VALUE. It says every candidate
+        is inconsistent with the ink, which is a finding -- the residual
+        this project exists to report -- and not an error to be papered
+        over by returning the unpruned list.
+        """
+        if not query.signature:
+            return tuple(candidates)
+        # One pass over the templates rather than one per candidate:
+        # `agrees` scans `self.templates` each call, which is fine for
+        # the single-label question it was written for and quadratic
+        # over a 647-class candidate list.
+        peers: dict[str, list] = {}
+        for t in self.templates:
+            if t.signature:
+                peers.setdefault(t.label, []).append(t)
+        out = []
+        for lab, dist in candidates:
+            ok = [t for t in peers.get(lab, ())
+                  if signature_distance(query.signature,
+                                        t.signature) <= sig_tol]
+            if not ok:
+                continue
+            if extents_tol is None or not query.extents:
+                out.append((lab, dist))
+            elif any(t.extents and extents_distance(query.extents, t.extents)
+                     <= extents_tol for t in ok):
+                out.append((lab, dist))
+        return tuple(out)
 
 
 def confusion(classifier: "Classifier",

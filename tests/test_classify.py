@@ -281,3 +281,132 @@ class T13_9_ConjunctionVerifier(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class T13_9_RankedCandidates(unittest.TestCase):
+    """C1: `classify` always built the ranking and threw it away."""
+
+    @staticmethod
+    def _clf(n=6):
+        c = Classifier(channels=Channels(1.0, 0.0, 0.0))
+        for i in range(n):
+            c.add(Template(f"l{i}", (1 << (i + 1)) - 1))
+        return c
+
+    def test_a_query_returns_several_candidates_with_monotone_distances(self):
+        got = self._clf().classify(Template("?", 0b111))
+        self.assertGreaterEqual(len(got.candidates), 2)
+        self.assertEqual([d for _, d in got.candidates],
+                         sorted(d for _, d in got.candidates))
+
+    def test_label_and_runner_up_are_VIEWS_onto_the_list(self):
+        got = self._clf().classify(Template("?", 0b111))
+        self.assertEqual(got.label, got.candidates[0][0])
+        self.assertEqual(got.distance, got.candidates[0][1])
+        self.assertEqual(got.runner_up, got.candidates[1][0])
+        self.assertEqual(got.runner_up_distance, got.candidates[1][1])
+
+    def test_top_k_truncates_the_REPORT_not_the_SEARCH(self):
+        """The winner must be the same one the full search finds, so a
+        small `top_k` cannot change the answer -- only the tail."""
+        q = Template("?", 0b1011)
+        full = self._clf(6).classify(q, top_k=0)
+        cut = self._clf(6).classify(q, top_k=2)
+        self.assertEqual(len(full.candidates), 6)
+        self.assertEqual(len(cut.candidates), 2)
+        self.assertEqual(cut.candidates, full.candidates[:2])
+
+    def test_one_label_leaves_the_runner_up_None_and_the_margin_infinite(self):
+        c = Classifier(channels=Channels(1.0, 0.0, 0.0))
+        c.add(Template("only", 0b1))
+        got = c.classify(Template("?", 0b1))
+        self.assertIsNone(got.runner_up)
+        self.assertEqual(got.margin, float("inf"))
+
+    def test_an_empty_prediction_is_refused(self):
+        """`classify` raises `NoTemplates` rather than returning one, so
+        the guard exists to stop a caller constructing a Prediction whose
+        `.label` would raise IndexError instead."""
+        with self.assertRaises(ValueError):
+            Prediction(())
+        self.assertEqual(Prediction((("a", 1.0),)).label, "a")
+
+    def test_a_negative_top_k_is_refused_and_zero_accepted(self):
+        with self.assertRaises(ValueError):
+            self._clf().classify(Template("?", 0b1), top_k=-1)
+        self.assertEqual(len(self._clf(4).classify(Template("?", 0b1),
+                                                  top_k=0).candidates), 4)
+
+
+class T13_10_Prune(unittest.TestCase):
+    """C2: `agrees` over a list. Every outcome asserted to fire."""
+
+    @staticmethod
+    def _clf():
+        c = Classifier(channels=Channels(1.0, 1.0, 0.0))
+        c.add(Template("ring", 0b1, (1, 1, 1, 1, 0, 0)))
+        c.add(Template("bar", 0b11, (1, 0, 1, 1, 0, 0)))
+        c.add(Template("two", 0b111, (2, 0, 2, 2, 0, 0)))
+        return c
+
+    def test_only_topology_consistent_candidates_survive(self):
+        c = self._clf()
+        q = Template("?", 0b1, (1, 1, 1, 1, 0, 0))
+        kept = c.prune(q, (("bar", 1.0), ("ring", 2.0), ("two", 3.0)))
+        self.assertEqual(kept, (("ring", 2.0),))
+
+    def test_order_and_distances_are_PRESERVED(self):
+        """Pruning composes with ranking rather than replacing it."""
+        c = self._clf()
+        q = Template("?", 0b1, (1, 1, 1, 1, 0, 0))
+        c.add(Template("ring2", 0b1, (1, 1, 1, 1, 0, 0)))
+        kept = c.prune(q, (("ring2", 0.5), ("bar", 1.0), ("ring", 2.0)))
+        self.assertEqual(kept, (("ring2", 0.5), ("ring", 2.0)))
+
+    def test_an_EMPTY_result_is_a_legitimate_value(self):
+        c = self._clf()
+        q = Template("?", 0b1, (9, 9, 9, 9, 9, 9))
+        self.assertEqual(c.prune(q, (("ring", 1.0), ("bar", 2.0))), ())
+
+    def test_a_query_with_no_signature_prunes_NOTHING(self):
+        """The verifier abstains rather than rejecting when it has no
+        channel to judge on -- the same rule `agrees` follows.
+
+        The fixture includes a label whose templates carry NO signature.
+        Without that, dropping the abstain still returns everything --
+        the loop's `<= sig_tol` is satisfied by an empty signature -- so
+        a fixture where every label has one cannot tell the two apart.
+        That was the first version of this test, and the mutant lived.
+        """
+        c = self._clf()
+        c.add(Template("plain", 0b1010))          # no signature at all
+        cands = (("ring", 1.0), ("bar", 2.0), ("plain", 3.0))
+        self.assertEqual(c.prune(Template("?", 0b1), cands), cands)
+        # and the same query WITH a signature does drop it, so the
+        # abstain is doing the work rather than the fixture being inert
+        q = Template("?", 0b1, (1, 1, 1, 1, 0, 0))
+        self.assertNotIn("plain", [l for l, _ in c.prune(q, cands)])
+
+    def test_prune_equals_agrees_applied_one_by_one(self):
+        """The fast path's oracle. `prune` indexes templates by label in
+        one pass; `agrees` rescans them per call. They must not diverge."""
+        c = self._clf()
+        for bits in (0b1, 0b11, 0b111):
+            for sig in ((1, 1, 1, 1, 0, 0), (1, 0, 1, 1, 0, 0),
+                        (2, 0, 2, 2, 0, 0)):
+                q = Template("?", bits, sig)
+                cands = tuple((t.label, 1.0) for t in c.templates)
+                self.assertEqual(
+                    c.prune(q, cands),
+                    tuple((l, d) for l, d in cands if c.agrees(q, l)))
+
+    def test_sig_tol_widens_the_filter(self):
+        """Measured, not assumed: on the 647-class maths set widening
+        the signature buys survival slowly (92.7% to 95.8%) while the
+        median survivor count explodes (33 to 102). Here it only has to
+        be shown to DO something, so the parameter cannot be inert."""
+        c = self._clf()
+        q = Template("?", 0b1, (1, 1, 1, 1, 0, 0))
+        cands = (("ring", 1.0), ("bar", 2.0), ("two", 3.0))
+        self.assertEqual(len(c.prune(q, cands, sig_tol=0)), 1)
+        self.assertGreater(len(c.prune(q, cands, sig_tol=2)), 1)

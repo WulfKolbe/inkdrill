@@ -74,7 +74,9 @@ G7  `ink.rules[]` carries a MEASURED `width_pt`, never a rule name --
 from __future__ import annotations
 
 from .aggregate import moments_per_component
+from .classify import NoTemplates, template_of
 from .nest import Kind, ink_only, nest
+from .raster import InkMask
 from .sweep import Capture, sweep
 
 __all__ = ["NoResolution", "lines_json", "page_record", "page_lines",
@@ -326,7 +328,8 @@ def diagram_line(region, pt: float, *, ground: str | None = None,
                  cell_row=None, cell_column=None, ink=ink)
 
 
-def glyph_line(region, pt: float, *, holes: int = 0, axis=None) -> dict:
+def glyph_line(region, pt: float, *, holes: int = 0, axis=None,
+               components: int = 1, candidates=None) -> dict:
     """One ink component, described and NOT named (T2).
 
     The blobs exist and nothing emitted them, so a page of text emitted
@@ -344,16 +347,72 @@ def glyph_line(region, pt: float, *, holes: int = 0, axis=None) -> dict:
     `axis` is absent rather than null when the moments could not be
     matched to this region -- a key present with a null value would say
     the axis was measured and found to be nothing.
+
+    `candidates` is `[[label, distance], ...]`, RANKED and never
+    reduced. There is no argmax anywhere in this module: the consumer
+    holds the lexicon and inkdrill deliberately does not, so a single
+    label chosen here would be a decision taken by the party with less
+    information. Absent when no classifier was supplied; **empty when
+    one was and nothing matched**, and those two are different
+    statements.
+
+    `components` is 1 for a single-component line. It is emitted so the
+    topology pair `(components, holes)` reads uniformly and so a future
+    grouped line has the field, not because it was measured to be 1.
     """
-    ink = {"region_id": region.id, "area": region.area, "holes": holes}
+    ink = {"region_id": region.id, "area": region.area, "holes": holes,
+           "components": components}
     if axis is not None:
         ink["axis"] = [round(axis[0], 6), round(axis[1], 6)]
+    if candidates is not None:
+        # A LIST, and possibly an empty one (C3, C4). Empty says every
+        # candidate the classifier knows is inconsistent with this ink,
+        # which is the finding rather than a failure -- it is how the
+        # unrecognised fraction is transmitted instead of hidden behind
+        # a best guess.
+        ink["candidates"] = [[lab, round(float(d), 4)]
+                             for lab, d in candidates]
     return _line("glyph", (region.x0, region.y0, region.x1 + 1,
                            region.y1 + 1), pt, cell_row=None,
                  cell_column=None, ink=ink)
 
 
-def _glyphs_only(mask, pairs, pt: float):
+def _crop(mask, region):
+    """The region's bounding box as a standalone mask.
+
+    A crop, NOT the isolated component: neighbouring ink inside
+    the same box stays, because that is what a page hands a
+    classifier and stripping it would measure a cleaner problem
+    than the real one.
+    """
+    w = region.x1 - region.x0 + 1
+    h = region.y1 - region.y0 + 1
+    buf = bytearray(w * h)
+    for j in range(h):
+        src = (region.y0 + j) * mask.width + region.x0
+        buf[j * w:(j + 1) * w] = mask.data[src:src + w]
+    return InkMask(bytes(buf), w, h)
+
+
+def _candidates_for(mask, region, classifier, top_k):
+    """The ranked candidate list for one region, or None.
+
+    Returns a LIST and never a label (C4). An empty list is a
+    real answer.
+    """
+    if classifier is None:
+        return None
+    q = template_of(_crop(mask, region), "?")
+    if q is None:
+        return ()
+    try:
+        return classifier.classify(q, top_k=top_k).candidates
+    except NoTemplates:
+        return ()
+
+
+def _glyphs_only(mask, pairs, pt: float, classifier=None,
+                 top_k: int = 8):
     """The no-structure path: glyphs, with holes from the cycle rank.
 
     Reached when no component could be a table or a diagram, which is
@@ -372,16 +431,18 @@ def _glyphs_only(mask, pairs, pt: float):
             continue
         c = by_geom.get((region.x0, region.y0, region.x1, region.y1,
                          region.area))
-        out.append(glyph_line(region, pt, holes=cycles,
-                              axis=c.principal_axis if c is not None
-                              else None))
+        out.append(glyph_line(
+            region, pt, holes=cycles,
+            axis=c.principal_axis if c is not None else None,
+            candidates=_candidates_for(mask, region, classifier, top_k)))
     return out
 
 
 def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                max_fill: float = 0.35, cell_scale: float = 3.0,
                diagram_scale: float = 3.0, require_content: bool = True,
-               glyphs: bool = False):
+               glyphs: bool = False, classifier=None,
+               top_k: int = 8):
     """Every emittable object on one page, with rules attached.
 
     A region becomes a `table` when it encloses a LATTICE (>= 2 holes),
@@ -419,7 +480,7 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
         # against `nest` on every page measured.
         if not glyphs:
             return []
-        return _glyphs_only(mask, pairs, pt)
+        return _glyphs_only(mask, pairs, pt, classifier, top_k)
 
     n = ink.complete()          # reuses the ink sweep above
     inks = ink_regions(n)
@@ -530,7 +591,9 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                              region.area))
             out.append((region, [glyph_line(
                 region, pt, holes=len(n.holes_of(region.id)),
-                axis=c.principal_axis if c is not None else None)]))
+                axis=c.principal_axis if c is not None else None,
+                candidates=_candidates_for(mask, region, classifier,
+                                           top_k))]))
 
     for region, lines in out:
         mine = [r for r in rules if _contains(region, r)]
