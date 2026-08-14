@@ -6,6 +6,7 @@ readable as a table in the source.
 
 import json
 import unittest
+from unittest import mock
 
 from inkdrill.emit import glyph_line  # noqa: F401
 from inkdrill.emit import (NoResolution, cell_grid, diagram_line,
@@ -81,7 +82,14 @@ class T1_2_Wrapper(unittest.TestCase):
 
     def test_the_ocr_block_declares_the_space(self):
         d = lines_json([], render_dpi=400.0)
-        self.assertEqual(d["ocr"], {"units": "pt", "render_dpi": 400.0})
+        self.assertEqual(d["ocr"]["units"], "pt")
+        self.assertEqual(d["ocr"]["render_dpi"], 400.0)
+        # A2: what wrote this. Asserted by KEY, not by whole-dict
+        # equality -- the previous form pinned the block exactly and
+        # would have to be edited for every field added to it, which
+        # makes it a change detector rather than a contract.
+        self.assertEqual(d["ocr"]["producer"], "inkdrill")
+        self.assertTrue(d["ocr"]["version"])
         self.assertEqual(d["source"], "inkdrill")
 
     def test_it_round_trips_through_json(self):
@@ -787,6 +795,157 @@ class T1_9_Candidates(unittest.TestCase):
         lines = page_lines(self._dots(1), pt=PT, tol=1.0, glyphs=True)
         self.assertEqual(lines[0]["ink"]["components"], 1)
         self.assertIn("holes", lines[0]["ink"])
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class T1_10_ProducerVersion(unittest.TestCase):
+    """A2: "same bytes" must not be ambiguous between nothing changed
+    and the change could not reach this path."""
+
+    def test_the_version_is_reported_and_non_empty(self):
+        from inkdrill.emit import lines_json
+        ocr = lines_json([], render_dpi=600.0)["ocr"]
+        self.assertEqual(ocr["producer"], "inkdrill")
+        self.assertIsInstance(ocr["version"], str)
+        self.assertTrue(ocr["version"])
+
+    def test_the_version_matches_the_checkout(self):
+        """It is the git commit when there is one. Compared against the
+        repository rather than against itself, so a constant that never
+        moves cannot pass."""
+        import pathlib as _p
+        import subprocess
+        from inkdrill.version import UNKNOWN, resolve
+        root = _p.Path(__file__).resolve().parents[1]
+        if not (root / ".git").exists():
+            self.skipTest("not a git checkout")
+        want = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
+                              capture_output=True, text=True)
+        if want.returncode:
+            self.skipTest("git unavailable")
+        got = resolve()
+        self.assertNotEqual(got, UNKNOWN)
+        self.assertTrue(want.stdout.strip().startswith(got))
+
+    def test_outside_a_checkout_it_is_UNKNOWN_not_a_made_up_number(self):
+        """`unknown` is the truthful answer with no `.git` to read. A
+        fabricated constant would claim "same code" and be wrong, which
+        is worse than admitting ignorance."""
+        import inkdrill.version as V
+        saved = V._cached
+        try:
+            V._cached = None
+            with mock.patch.object(
+                    V.pathlib.Path, "is_dir", lambda self: False), \
+                 mock.patch.object(
+                     V.pathlib.Path, "is_file", lambda self: False):
+                self.assertEqual(V.resolve(), V.UNKNOWN)
+        finally:
+            V._cached = saved
+
+    def test_it_is_resolved_once_and_cached(self):
+        """G4: emitting a document must not cost a file read per page."""
+        import inkdrill.version as V
+        saved = V._cached
+        try:
+            V._cached = None
+            first = V.resolve()
+            with mock.patch.object(
+                    V, "_head_of", side_effect=AssertionError("re-read")):
+                self.assertEqual(V.resolve(), first)
+        finally:
+            V._cached = saved
+
+
+class T1_11_GlyphsAreClusters(unittest.TestCase):
+    """A1: one line per GLYPH, not per component."""
+
+    @staticmethod
+    def _page():
+        """A line of prose with an `i` in it: an ascender establishes the
+        row band, without which the tittle is its own row."""
+        w, h = 300, 60
+        buf = bytearray(w * h)
+
+        def box(x0, y0, x1, y1):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    buf[y * w + x] = 0xFF
+        box(10, 10, 18, 46)                       # an `l`, the ascender
+        for k in range(4):
+            box(40 + k * 20, 22, 48 + k * 20, 46)  # body letters
+        box(140, 14, 146, 18)                      # the tittle
+        box(140, 22, 146, 46)                      # its stem
+        return InkMask(bytes(buf), w, h)
+
+    def test_the_i_arrives_as_ONE_line_with_two_components(self):
+        lines = [l for l in page_lines(self._page(), pt=PT, tol=1.0,
+                                       glyphs=True) if l["type"] == "glyph"]
+        multi = [l for l in lines if l["ink"]["components"] > 1]
+        self.assertEqual(len(multi), 1)
+        self.assertEqual(multi[0]["ink"]["components"], 2)
+        self.assertEqual(len(multi[0]["ink"]["parts"]), 2)
+
+    def test_the_cluster_box_is_the_UNION_of_its_members(self):
+        """A glyph's box must cover its tittle, or a consumer cropping
+        by it hands the classifier a stem."""
+        lines = [l for l in page_lines(self._page(), pt=PT, tol=1.0,
+                                       glyphs=True) if l["type"] == "glyph"]
+        i_line = next(l for l in lines if l["ink"]["components"] == 2)
+        top = i_line["region"]["top_left_y"] / PT
+        bottom = top + i_line["region"]["height"] / PT
+        self.assertLessEqual(top, 14.0)
+        self.assertGreaterEqual(bottom, 46.0)
+
+    def test_a_single_component_glyph_omits_parts(self):
+        """`parts` would repeat `region_id` on every line of a page of
+        prose; absent rather than trivially present."""
+        lines = [l for l in page_lines(self._page(), pt=PT, tol=1.0,
+                                       glyphs=True) if l["type"] == "glyph"]
+        singles = [l for l in lines if l["ink"]["components"] == 1]
+        self.assertTrue(singles)
+        for l in singles:
+            self.assertNotIn("parts", l["ink"])
+
+    def test_the_axis_comes_from_the_SUMMED_moments(self):
+        """A cluster's axis is the axis of the whole glyph, not of
+        whichever member happened to come first.
+
+        The fixture gives the upper part a WIDE, flat shape whose own
+        axis is horizontal, above a tall stem. The union is tall, so
+        summed moments give a vertical axis and the first member's give
+        a horizontal one -- the two answers are opposite, which is what
+        makes this able to fail. Raw moment sums are integers and
+        moments add, so the summed value is exact rather than a proxy.
+        """
+        w, h = 200, 80
+        buf = bytearray(w * h)
+
+        def box(x0, y0, x1, y1):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    buf[y * w + x] = 0xFF
+        box(10, 10, 18, 60)                      # ascender, sets the row
+        box(60, 14, 96, 20)                      # a WIDE flat mark
+        box(74, 26, 82, 60)                      # a tall stem below it
+        lines = [l for l in page_lines(InkMask(bytes(buf), w, h), pt=PT,
+                                       tol=1.0, glyphs=True)
+                 if l["type"] == "glyph"]
+        pair = next(l for l in lines if l["ink"]["components"] == 2)
+        ax = pair["ink"]["axis"]
+        self.assertGreater(abs(ax[1]), abs(ax[0]),
+                           "the cluster axis is the wide mark's, not the "
+                           "whole glyph's")
+
+    def test_region_id_is_the_LOWEST_member_id(self):
+        lines = [l for l in page_lines(self._page(), pt=PT, tol=1.0,
+                                       glyphs=True) if l["type"] == "glyph"]
+        for l in lines:
+            if "parts" in l["ink"]:
+                self.assertEqual(l["ink"]["region_id"], min(l["ink"]["parts"]))
 
 
 if __name__ == "__main__":

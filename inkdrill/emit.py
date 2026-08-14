@@ -75,8 +75,9 @@ from __future__ import annotations
 
 from .aggregate import moments_per_component
 from .classify import NoTemplates, template_of
-from .nest import Kind, ink_only, nest
+from .nest import Kind, Region, ink_only, nest
 from .raster import InkMask
+from .version import resolve as resolve_version
 from .sweep import Capture, sweep
 
 __all__ = ["NoResolution", "lines_json", "page_record", "page_lines",
@@ -329,7 +330,7 @@ def diagram_line(region, pt: float, *, ground: str | None = None,
 
 
 def glyph_line(region, pt: float, *, holes: int = 0, axis=None,
-               components: int = 1, candidates=None) -> dict:
+               components: int = 1, candidates=None, parts=None) -> dict:
     """One ink component, described and NOT named (T2).
 
     The blobs exist and nothing emitted them, so a page of text emitted
@@ -356,12 +357,19 @@ def glyph_line(region, pt: float, *, holes: int = 0, axis=None,
     one was and nothing matched**, and those two are different
     statements.
 
-    `components` is 1 for a single-component line. It is emitted so the
-    topology pair `(components, holes)` reads uniformly and so a future
-    grouped line has the field, not because it was measured to be 1.
+    `components` is the number of ink components this glyph is made of
+    -- 2 for `i`, `j` and an umlaut, 3 for a dotted umlaut, 1 for most
+    letters. `mathstruct.group()` decides; `emit` only reports it.
+
+    `parts` lists the member region ids and is ABSENT for a
+    single-component glyph, where it would repeat `region_id` on every
+    line of a page. `region_id` is the lowest member id, so it remains
+    a stable handle for the glyph as a whole.
     """
     ink = {"region_id": region.id, "area": region.area, "holes": holes,
            "components": components}
+    if parts is not None and len(parts) > 1:
+        ink["parts"] = list(parts)
     if axis is not None:
         ink["axis"] = [round(axis[0], 6), round(axis[1], 6)]
     if candidates is not None:
@@ -375,6 +383,57 @@ def glyph_line(region, pt: float, *, holes: int = 0, axis=None,
     return _line("glyph", (region.x0, region.y0, region.x1 + 1,
                            region.y1 + 1), pt, cell_row=None,
                  cell_column=None, ink=ink)
+
+
+def _clustered(mask, pairs, pt, classifier, top_k):
+    """Ink regions -> GLYPH lines, one per `group()` cluster (A1).
+
+    A glyph is not a component: `i`, `j`, `:` and every umlaut are two
+    or three, and a per-component line hands a classifier half a letter.
+    `mathstruct.group()` joins them, bounded to a text row.
+
+    A cluster's box is the union of its members' and its axis comes
+    from the SUM of their moments -- exact, because raw moment sums are
+    integers and moments add. Taking the largest member's axis would be
+    a proxy where an exact value is available.
+    """
+    from .mathstruct import Glyph as _G, group as _group
+    keep = [(r, h) for r, h in pairs if not is_rule(r)]
+    if not keep:
+        return []
+    by_id = {r.id: (r, h) for r, h in keep}
+    clusters = _group([_G(r.id, float(r.x0), float(r.y0),
+                          float(r.x1), float(r.y1)) for r, _ in keep])
+
+    moms = {}
+    for c in moments_per_component(
+            sweep(mask, conn=8, capture=Capture.GRAPH)).values():
+        key = (c.x0, c.y0, c.x1, c.y1, c.area)
+        moms[key] = None if key in moms else c
+
+    out = []
+    for ids in clusters:
+        members = [by_id[i] for i in ids if i in by_id]
+        if not members:
+            continue
+        regs = [r for r, _ in members]
+        box = Region(min(r.id for r in regs), Kind.INK, -1,
+                     sum(r.area for r in regs),
+                     min(r.x0 for r in regs), min(r.y0 for r in regs),
+                     max(r.x1 for r in regs), max(r.y1 for r in regs))
+        total = None
+        for r in regs:
+            m = moms.get((r.x0, r.y0, r.x1, r.y1, r.area))
+            if m is None:
+                total = None
+                break
+            total = m if total is None else total + m
+        out.append((box, glyph_line(
+            box, pt, holes=sum(h for _, h in members),
+            components=len(regs), parts=sorted(r.id for r in regs),
+            axis=total.principal_axis if total is not None else None,
+            candidates=_candidates_for(mask, box, classifier, top_k))))
+    return out
 
 
 def _crop(mask, region):
@@ -420,22 +479,7 @@ def _glyphs_only(mask, pairs, pt: float, classifier=None,
     half of `nest` -- and returns the SAME ids, because an ink region's
     identity never depended on that sweep.
     """
-    by_geom = {}
-    for c in moments_per_component(
-            sweep(mask, conn=8, capture=Capture.GRAPH)).values():
-        key = (c.x0, c.y0, c.x1, c.y1, c.area)
-        by_geom[key] = None if key in by_geom else c
-    out = []
-    for region, cycles in sorted(pairs, key=lambda t: (t[0].y0, t[0].x0)):
-        if is_rule(region):
-            continue
-        c = by_geom.get((region.x0, region.y0, region.x1, region.y1,
-                         region.area))
-        out.append(glyph_line(
-            region, pt, holes=cycles,
-            axis=c.principal_axis if c is not None else None,
-            candidates=_candidates_for(mask, region, classifier, top_k)))
-    return out
+    return [ln for _, ln in _clustered(mask, pairs, pt, classifier, top_k)]
 
 
 def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
@@ -564,36 +608,15 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
                                               contains=held)]))
 
     if glyphs:
-        # The moments come from `sweep`, whose ids are `Component.root`
-        # and are NOT `Region.id`. Rather than carry two id spaces into
-        # one file, they are joined on exact geometry -- the two are the
-        # same partition, since `nest` labels with this very sweep --
-        # and a region with no unique match keeps its geometry and
-        # loses only the axis.
-        by_geom = {}
-        for c in moments_per_component(
-                sweep(mask, conn=8, capture=Capture.GRAPH)).values():
-            key = (c.x0, c.y0, c.x1, c.y1, c.area)
-            # DEFENSIVE and unasserted: two 8-connected components
-            # sharing an exact box AND area is possible in principle
-            # and no fixture here reaches it -- removing this line
-            # kills no test. It is kept because the failure it prevents
-            # is attaching one component's axis to another, which is a
-            # silently wrong value rather than an error. Recorded as a
-            # surviving mutant rather than defended by a contrived
-            # fixture.
-            by_geom[key] = None if key in by_geom else c
+        # One line per CLUSTER, not per component (A1). `_clustered`
+        # holds the id-space join and the moment sum; both paths use it
+        # so a page with a table and a page without cannot describe a
+        # glyph differently.
         done = {r.id for r, _ in out}
-        for region in sorted(inks, key=lambda r: (r.y0, r.x0)):
-            if region.id in done or region.id in rule_ids:
-                continue
-            c = by_geom.get((region.x0, region.y0, region.x1, region.y1,
-                             region.area))
-            out.append((region, [glyph_line(
-                region, pt, holes=len(n.holes_of(region.id)),
-                axis=c.principal_axis if c is not None else None,
-                candidates=_candidates_for(mask, region, classifier,
-                                           top_k))]))
+        rest = [(r, len(n.holes_of(r.id))) for r in inks
+                if r.id not in done and r.id not in rule_ids]
+        out.extend((box, [ln]) for box, ln in
+                   _clustered(mask, rest, pt, classifier, top_k))
 
     for region, lines in out:
         mine = [r for r in rules if _contains(region, r)]
@@ -620,7 +643,17 @@ def lines_json(pages, *, source: str = SOURCE, render_dpi: float) -> dict:
     pixel space and the consumer rescales; declaring the space removes
     the guess, and mixing the two conventions in one file is how a scale
     error hides.
+
+    `ocr.producer` and `ocr.version` say WHAT WROTE THIS (A2). Without
+    them, a consumer re-running inkdrill and getting identical bytes
+    cannot tell "nothing changed" from "the change could not reach this
+    path" -- and the second is not hypothetical: `group()` was fixed
+    while unreachable from the CLI, so a downstream re-run was
+    byte-identical and correctly so. `version` is the git commit, or
+    `"unknown"` outside a checkout; see `version.py` for why that is
+    not a fabricated constant.
     """
     return {"source": source,
-            "ocr": {"units": "pt", "render_dpi": float(render_dpi)},
+            "ocr": {"units": "pt", "render_dpi": float(render_dpi),
+                    "producer": source, "version": resolve_version()},
             "pages": list(pages)}

@@ -635,6 +635,46 @@ times, so it was not done. **The real bench is DocReal at a valley
 threshold**, where the ink is real and thin strokes are not a fixture
 parameter.
 
+### A1–A3 — the fix reaches the file, and the file says who wrote it
+
+**A1. `group()` was fixed while unreachable from the CLI.** Traced from
+`__main__`, 16 of 26 modules were off the path and `mathstruct` was one
+of them — so a downstream re-run was byte-identical and *correctly so*.
+`page_lines(..., glyphs=True)` now emits one line per **cluster**:
+
+| page | was (components) | now (glyphs) | multi-part |
+|---|---|---|---|
+| BH1-000274 | 2,125 | **1,869** | 213 |
+| BH1-000229 | 1,134 | **995** | 97 |
+
+`ink.components` carries the member count, `ink.parts` the member ids
+(absent when 1, where it would repeat `region_id` on every line), and
+`region_id` is the lowest member id. The cluster's box is the **union**
+of its members' and its axis comes from the **sum** of their moments —
+exact, because raw moment sums are integers and moments add. Taking the
+largest member's axis would be a proxy where an exact value exists.
+
+**A2. `lines.json` now says what wrote it**:
+`ocr.producer` and `ocr.version`, the version being the git commit read
+from `.git` directly — no subprocess in the emit path. Outside a
+checkout it is `"unknown"`, deliberately not a fabricated constant: two
+`"unknown"` values tell a consumer nothing, which is the truth, whereas
+a fake version would claim "same code" and be wrong. A re-run can now
+report *"version changed, output identical"* as a finding instead of a
+puzzle.
+
+**A3. Reachability is a test.** `tests/test_reachability.py` walks
+imports from `__main__` by AST and compares the unreachable set against
+a written list where **every module carries the reason it is off the
+path**. Adding a module forces the decision; wiring one in means
+deleting its reason. Verified to fail when `mathstruct` is unwired.
+
+Fifteen modules remain off the CLI path, each with a recorded reason —
+the font route (`type1`, `charstring`, `scan`), the maths layer
+(`relate`, `rewrite`), the benches (`warp`, `domains`), and the units
+that need a second input the CLI does not take (`coverage`, `gold`,
+`font`).
+
 ### `group()` chained down a text column — fixed, and it closed U14's defect too
 
 Reproduced first, on `BH1-000274` at 600 dpi: **2,125 components became
