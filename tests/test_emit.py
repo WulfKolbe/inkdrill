@@ -337,6 +337,26 @@ class T1_5_Rules(unittest.TestCase):
             id, area, x0, y0, x1, y1 = 0, 60, 0, 0, 99, 2
         self.assertFalse(is_rule(R))
 
+    def test_a_rule_attaches_to_the_INNERMOST_container_only(self):
+        """One measurement, one entry. The first form attached a rule to
+        every containing line, so a rule inside a frame inside a frame
+        arrived three times. Both sides asserted: exactly one entry in
+        total, and it sits on the SMALLER container."""
+        w, h = 600, 400
+        buf = bytearray(w * h)
+        frame(buf, w, 5, 5, 595, 395)
+        frame(buf, w, 100, 100, 500, 300)
+        hline(buf, w, 200, 130, 470, 3)
+        buf[50 * w + 50] = 0xFF              # content, so both frames
+        buf[150 * w + 150] = 0xFF            # survive containment
+        lines = page_lines(InkMask(bytes(buf), w, h), pt=PT, tol=1.0)
+        carrying = [l for l in lines if l.get("ink", {}).get("rules")]
+        self.assertEqual(len(carrying), 1)
+        self.assertEqual(len(carrying[0]["ink"]["rules"]), 1)
+        widths = [l["region"]["width"] for l in lines
+                  if l["type"] in ("diagram", "block")]
+        self.assertEqual(carrying[0]["region"]["width"], min(widths))
+
     def test_TWO_RULE_WEIGHTS_GIVE_DISTINCT_WIDTHS(self):
         """The acceptance criterion, on a BOOKTABS table.
 

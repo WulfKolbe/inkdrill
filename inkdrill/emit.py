@@ -814,8 +814,26 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
     white = _white_lines(mask, pt, [r for r, _ in out], white_route)
     out.extend((_box_of(l, pt), [l]) for l in white)
 
+    # Each rule attaches to the INNERMOST containing line only. The
+    # first form attached it to every container, so a rule inside a
+    # frame inside a frame arrived three times -- one measurement
+    # reported as three. Innermost is smallest containing box, and ties
+    # cannot arise: two distinct emitted regions with identical boxes
+    # would be the same component.
+    owner: dict[int, tuple] = {}
     for region, lines in out:
-        mine = [r for r in rules if _contains(region, r)]
+        size = ((region.x1 - region.x0 + 1) * (region.y1 - region.y0 + 1))
+        for r in rules:
+            if _contains(region, r):
+                cur = owner.get(r.id)
+                if cur is None or size < cur[0]:
+                    owner[r.id] = (size, lines)
+    by_target: dict[int, list] = {}
+    for r in rules:
+        if r.id in owner:
+            by_target.setdefault(id(owner[r.id][1]), []).append(r)
+    for region, lines in out:
+        mine = by_target.get(id(lines))
         if mine:
             lines[0].setdefault("ink", {})["rules"] = [
                 rule_record(r, pt) for r in
