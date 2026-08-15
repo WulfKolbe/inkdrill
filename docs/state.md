@@ -1004,6 +1004,28 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### `tools/fontmatch.py` — glyphs against a rendered font file
+
+Templates from an external renderer (`magick`), so no new font parser;
+page side is `group()` clusters filtered to glyph-sized (printed:
+kept 1,780, dropped 89). Closed set, so hit counts alone prove nothing
+— the distance columns are printed beside them because that is where
+junk assignments hide.
+
+On Heim `BH1-000274` (DejaVu Serif — **not** the book's font), the
+letter-frequency ordering is nearly German prose:
+
+    this page: c n i t r d s l h o a u m ...
+    reference: e n i s r a t d h u l c g ...
+
+with one loud anomaly the distance columns expose exactly as designed:
+`c` is #1 with 230 hits at the **worst** median distance in the top
+rows (35.8, vs `n` 13.4, `o` 10.0), and `e` — German's most common
+letter — is nearly absent. Runner-up of the `c` pile: `o` ×182, `e`
+×49. The scan's degraded round letters collapse onto the open ring `c`
+under this font. A hit count said `c`; the distances said don't
+believe it. That is the report shape working, not the matcher.
+
 ### The white-gap route is WIRED as a second route
 
 **Step 1, merge the fragments.** `emit.merge_boxes` unions gap blobs
