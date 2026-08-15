@@ -1100,6 +1100,47 @@ class T1_12_FreeRules(unittest.TestCase):
                           dpi=(400.0, 400.0), lines=[], rules=[])
         self.assertNotIn("ink", rec)
 
+    def test_G9_the_documented_key_path_holds_end_to_end(self):
+        """`page["ink"]["rules"]` -- the exact path the contract names,
+        asserted through the full document rather than on a helper's
+        return value. This key shipped undocumented and the consumer,
+        contractually correct, never looked for it; the contract now
+        names it and this test holds the contract to the file."""
+        from inkdrill.emit import lines_json
+        m = self._booktabs()
+        doc = lines_json([page_record(page=1, width_px=m.width,
+                                      height_px=m.height,
+                                      dpi=(400.0, 400.0), lines=[],
+                                      rules=free_rules(m, pt=PT))],
+                         render_dpi=400.0)
+        page = doc["pages"][0]
+        self.assertEqual(len(page["ink"]["rules"]), 3)
+        for r in page["ink"]["rules"]:
+            self.assertEqual(set(r), {"x0", "y0", "x1", "y1",
+                                      "width_pt", "orient"},
+                             "the page-level entry shape must equal the "
+                             "per-line one -- one shape, two locations")
+
+    def test_G9_a_rule_reaches_the_file_EXACTLY_once(self):
+        """Enclosed -> the line's `ink.rules[]` and NOT the page key;
+        free -> the page key and NOT any line. Both directions on one
+        fixture: a framed rule plus a free rule outside the frame."""
+        w, h = 700, 300
+        buf = bytearray(w * h)
+        frame(buf, w, 10, 10, 400, 290)
+        hline(buf, w, 150, 40, 370, 2)            # enclosed rule
+        buf[80 * w + 200] = 0xFF                  # content for the frame
+        hline(buf, w, 150, 430, 690, 2)           # free rule, outside
+        m = InkMask(bytes(buf), w, h)
+        lines = page_lines(m, pt=PT, tol=1.0)
+        attached = [r for l in lines
+                    for r in l.get("ink", {}).get("rules", [])]
+        free = free_rules(m, pt=PT)
+        self.assertEqual(len(attached), 1)
+        self.assertEqual(len(free), 1)
+        # and they are different rules, not one rule twice
+        self.assertNotEqual(attached[0]["x0"], free[0]["x0"])
+
     def test_a_page_with_rules_carries_them(self):
         m = self._booktabs()
         rec = page_record(page=1, width_px=m.width, height_px=m.height,

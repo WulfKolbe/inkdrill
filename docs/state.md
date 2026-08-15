@@ -643,7 +643,8 @@ in the attachment: `page_lines` attaches a rule to the innermost
 emitted object *containing* it, and a booktabs table **draws no frame**,
 so its rules are free-standing components that nothing contains.
 
-`free_rules()` reports rules no other ink region encloses, on the
+`page["ink"]["rules"]` (producer: `free_rules()`) carries rules no
+other ink region encloses, on the
 **page record** rather than as lines of their own — which keeps
 `emit`'s standing rule that a rule is a measurement attached to an
 object, not an object, while not dropping the only evidence a booktabs

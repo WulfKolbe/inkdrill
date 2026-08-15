@@ -35,6 +35,15 @@ not.** They are geometry of a parent object and live under `ink.*` on
 the enclosing line. One arXiv plot page carries 140 ticks; a consumer
 expecting readable regions would drown in them.
 
+A rule that NO emitted object encloses -- the booktabs case, where the
+table draws no frame and the rules are the only evidence it exists --
+appears at `page["ink"]["rules"]` on the page record, same entry shape
+as the per-line array. **A consumer must read both keys**; the split is
+structural, not stylistic, because an unenclosed rule has no line to
+carry it. This paragraph exists because the page-level key shipped
+undocumented and the consumer, contractually correct, never looked for
+it.
+
 `text` and `text_display` are `""` on every line. **inkdrill does not
 read text and must not appear to.**
 
@@ -850,7 +859,11 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
 
 
 def free_rules(mask, *, pt: float, regions=None) -> list[dict]:
-    """Drawn rules that no other ink region encloses (A4).
+    """Rules bound for `page["ink"]["rules"]` -- enclosed by nothing (A4).
+
+    Name the KEY, not this function, when talking to a consumer: a
+    report that said "the free_rules array" sent the consumer looking
+    for a JSON key that does not exist.
 
     A `|l|l|` table's rules ARE the frame -- one connected component --
     so they are not regions and never appear here. **A booktabs table
