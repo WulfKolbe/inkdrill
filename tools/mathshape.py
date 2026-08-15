@@ -15,10 +15,29 @@ TOC-LEADER     >= 20 near-identical small blobs evenly spaced on one
                row
 
     python3 tools/mathshape.py <dir-of-pgm> [--threshold 200]
+    python3 tools/mathshape.py --original crop.jpg --candidate out.pdf
 
 Fraction count = stacked - centred - offset. The two discriminators are
 one-bit questions the ink answers directly: Fraction vs Stack is a
 rule's existence, Limits vs SupSub is horizontal centring.
+
+COMPARE MODE. An original crop against a candidate PDF (a pix2tex or
+hand-written reconstruction): the candidate is rendered by ghostscript
+and both sides are reduced to (components, holes, stacked, centred,
+offset). The per-feature difference is the report -- zero everywhere
+says the candidate has the original's STRUCTURE, which is exactly what
+a wrong-but-plausible transcription (stacked scripts on an ordinary
+symbol where the ink says limits) fails.
+
+SCALE INVARIANCE IS ASSERTED, NOT ASSUMED -- at THREE resolutions,
+and the third is measured necessity, not caution. On the first test
+candidate the stacked count flapped 6,5,6,6,5,6 across 200-800 dpi,
+and the original two-point assertion sampled 300 and 600: the two
+agreeing outliers. It passed on a vector that is not invariant, which
+is the exact failure the assertion exists to catch. Three points with
+the flap between them fire; a candidate that fails is reported per
+resolution, because a comparison that moves with a rendering choice is
+not a comparison.
 """
 from __future__ import annotations
 
@@ -34,12 +53,25 @@ from inkdrill.nest import ink_only         # noqa: E402
 from inkdrill.pnmio import load_mask       # noqa: E402
 
 
-def measure(p: pathlib.Path, threshold: int):
-    m = load_mask(p, dpi=72, threshold=threshold)
-    regs = ink_only(m).regions
+def features(mask) -> dict:
+    """(components, holes, stacked, centred, offset) of one mask.
+
+    RULES STAY IN THE PAIR POPULATION. Excluding them was the first
+    form, and it made the features scale-DEPENDENT: `is_rule`'s 20:1
+    aspect floor was set on page-scale booktabs, and a maths-scale bar
+    (`=`, minus) sits near it -- at 300 dpi one bar of a test render
+    passed, at 400 none did, and each flip moved a component out of the
+    population and a centred pair with it (stacked flapped 6,5,6,6,5,6
+    across 200-800 dpi). With bars kept, the same render is invariant
+    across the whole sweep. A pair whose only between-ink is a rule is
+    the Fraction case and is excluded from centred/offset.
+    """
+    ik = ink_only(mask)
+    regs = ik.regions
+    holes = sum(ik.cycles)
     rules = [r for r in regs if is_rule(r) and (r.x1 - r.x0) >= (r.y1 - r.y0)]
     rids = {r.id for r in rules}
-    comps = [r for r in regs if r.id not in rids]
+    comps = list(regs)
     stacked = centred = offset = 0
     for i, a in enumerate(comps):
         for b in comps[i + 1:]:
@@ -52,20 +84,30 @@ def measure(p: pathlib.Path, threshold: int):
             if ov < 0.5 * min(wa, wb):
                 continue
             bx0, bx1 = min(top.x0, bot.x0), max(top.x1, bot.x1)
-            if any(c is not top and c is not bot and c.y0 > top.y1
-                   and c.y1 < bot.y0 and c.x1 >= bx0 and c.x0 <= bx1
-                   for c in comps):
-                continue
+            between = [c for c in comps if c is not top and c is not bot
+                       and c.y0 > top.y1 and c.y1 < bot.y0
+                       and c.x1 >= bx0 and c.x0 <= bx1]
+            if any(c.id not in rids for c in between):
+                continue                              # a third component
             stacked += 1
-            if any(r.y0 > top.y1 and r.y1 < bot.y0
-                   and r.x1 >= bx0 and r.x0 <= bx1 for r in rules):
-                continue                              # Fraction
+            if between:
+                continue                              # only a rule: Fraction
             ca = (top.x0 + top.x1) / 2
             cb = (bot.x0 + bot.x1) / 2
             if abs(ca - cb) <= 0.15 * max(wa, wb):
                 centred += 1
             else:
                 offset += 1
+    return {"components": len(regs), "holes": holes, "stacked": stacked,
+            "centred": centred, "offset": offset}
+
+
+def measure(p: pathlib.Path, threshold: int):
+    m = load_mask(p, dpi=72, threshold=threshold)
+    f = features(m)
+    regs = ink_only(m).regions
+    rules = [r for r in regs if is_rule(r) and (r.x1 - r.x0) >= (r.y1 - r.y0)]
+    comps = [r for r in regs if r.id not in {x.id for x in rules}]
     leader = False
     if len(comps) >= 20:
         mw = statistics.median(r.x1 - r.x0 + 1 for r in comps)
@@ -84,14 +126,68 @@ def measure(p: pathlib.Path, threshold: int):
                 if mg > 0 and sum(1 for g in gaps
                                   if abs(g - mg) <= 0.5 * mg) >= 0.8 * len(gaps):
                     leader = True
-    return len(regs), len(rules), stacked, centred, offset, leader
+    return (f["components"], len(rules), f["stacked"], f["centred"],
+            f["offset"], leader)
+
+
+def _any_image_mask(path: pathlib.Path, threshold: int):
+    """Any raster `magick` can read, as a mask. PGM goes straight in."""
+    import subprocess
+    if path.suffix.lower() in (".pgm", ".pnm"):
+        return load_mask(path, dpi=72, threshold=threshold)
+    r = subprocess.run(["magick", str(path), "-colorspace", "gray",
+                        "-depth", "8", "pgm:-"], capture_output=True)
+    if r.returncode:
+        sys.exit(f"magick cannot read {path}")
+    return load_mask(r.stdout, dpi=72, threshold=threshold)
+
+
+def _render_pdf_mask(pdf: pathlib.Path, dpi: int, threshold: int):
+    import subprocess
+    r = subprocess.run(
+        ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=pgmraw",
+         f"-r{dpi}", "-dFirstPage=1", "-dLastPage=1",
+         "-sOutputFile=%stdout", str(pdf)], capture_output=True)
+    if r.returncode or not r.stdout.startswith(b"P5"):
+        sys.exit(f"ghostscript cannot render {pdf}")
+    return load_mask(r.stdout, dpi=dpi, threshold=threshold)
+
+
+def compare(original: pathlib.Path, candidate: pathlib.Path,
+            threshold: int) -> int:
+    """Original crop vs rendered candidate, per feature."""
+    fo = features(_any_image_mask(original, threshold))
+    # Identical at three resolutions, or the comparison would depend on
+    # a rendering choice. Three because two agreed by luck on a vector
+    # that flaps -- see the module docstring.
+    per = {d: features(_render_pdf_mask(candidate, d, threshold))
+           for d in (300, 400, 600)}
+    if len({tuple(sorted(f.items())) for f in per.values()}) != 1:
+        print("SCALE-INVARIANCE FAILED: candidate features move with dpi")
+        for d, f in per.items():
+            print(f"  {d} dpi: {f}")
+        return 1
+    f_hi = per[600]
+    print(f"{'feature':<12} {'original':>9} {'candidate':>10} {'diff':>6}")
+    for k in fo:
+        print(f"{k:<12} {fo[k]:>9} {f_hi[k]:>10} {f_hi[k] - fo[k]:>+6}")
+    print("(candidate identical at 300, 400 and 600 dpi)")
+    return 0 if fo == f_hi else 2
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("directory", type=pathlib.Path)
+    ap.add_argument("directory", type=pathlib.Path, nargs="?")
+    ap.add_argument("--original", type=pathlib.Path)
+    ap.add_argument("--candidate", type=pathlib.Path)
     ap.add_argument("--threshold", type=int, default=200)
     args = ap.parse_args(argv)
+    if args.original or args.candidate:
+        if not (args.original and args.candidate):
+            ap.error("--original and --candidate go together")
+        return compare(args.original, args.candidate, args.threshold)
+    if args.directory is None:
+        ap.error("a directory, or --original with --candidate")
     print(f"{'name':<38} {'comps':>5} {'rules':>5} {'stacked':>7} "
           f"{'centred':>7} {'offset':>6}  flag")
     for p in sorted(args.directory.glob("*.pgm")):
