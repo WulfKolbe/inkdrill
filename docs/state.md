@@ -1004,6 +1004,44 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### fontmatch across dpi — the umlaut dots hold, and the `e` anomaly resolves
+
+Same page (`BH1-000274`), native 600 dpi scan resampled to 400/300/200
+by area-averaging (`magick -resize`), threshold 200 throughout.
+**Caveat first: a resample of a clean 600 dpi scan is not a native
+low-dpi scan** — scanner MTF and noise differ — so this measures the
+pipeline's resolution dependence, not a scanner's.
+
+**The umlaut dots do not get lost.** Structurally (before any
+classification): two-dots-above-a-base clusters are 24 / 24 / 24 / 23
+at 600/400/300/200, one-dot 151/150/150/150. In the match, `ä` holds
+18–23 hits and `ü` 18–21 at every resolution. Tesseract's docs
+recommend lower dpi to reduce noise, and the observed Tesseract/Infty
+failure was umlaut points lost below 400 — this pipeline does not
+reproduce that loss, because `group()` attaches dots geometrically
+within a text row and the crop keeps the whole ink. Dot survival here
+is a property of the grouping, not of the resolution.
+
+**The 600 dpi `e`→`c` anomaly resolves as dpi drops:**
+
+| dpi | top of the ordering | `e` rank |
+|---|---|---|
+| 600 | c n i t r | ~24th |
+| 400 | c n o t i | ~15th |
+| **300** | **e i n t d** | **1st** |
+| 200 | n i e d o | 3rd |
+
+At 600 the sharp threshold breaks the scan's `e` (eye fills or crossbar
+thins) and the wreck lands nearest the open ring `c`; area-averaging
+down to 300 repairs the letterform and `e` takes its German-frequency
+place at #1. The high resolution was *adding* threshold noise for this
+matcher — which is Tesseract's stated rationale for its 200–300 dpi
+recommendation, measured here on our own pipeline.
+
+So the two recommendations are not in tension in this pipeline: match
+at ~300, but nothing is lost at any tested dpi that the grouping did
+not already protect.
+
 ### `tools/fontmatch.py` — glyphs against a rendered font file
 
 Templates from an external renderer (`magick`), so no new font parser;

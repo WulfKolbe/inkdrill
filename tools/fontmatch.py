@@ -138,7 +138,12 @@ def main(argv=None) -> int:
                     help="rows to print; 0 = every char with a hit")
     args = ap.parse_args(argv)
 
-    mask = load_mask(args.page, threshold=args.threshold)
+    if args.page.suffix.lower() in (".pgm", ".pnm"):
+        # dpi is a formality of the PNM reader; nothing downstream
+        # reads coordinates back out in points.
+        mask = pnm_load(args.page, dpi=72, threshold=args.threshold)
+    else:
+        mask = load_mask(args.page, threshold=args.threshold)
     regions = ink_only(mask).regions
     if not regions:
         sys.exit("no ink on the page")
