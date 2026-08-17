@@ -45,6 +45,8 @@ OFF_THE_CLI_PATH = {
     "trace": "boundary contours; nothing in lines.json carries a "
              "polygon yet, and the consumer has not asked for one",
     "type1": "the font route -- reads a font program from a file",
+    "typeface": "weight/slant/serif signals; measured, and no lines.json "
+                "field carries them yet -- same standing as qc",
     "warp": "the transport-vs-resample bench; a measurement, not a step",
 }
 

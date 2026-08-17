@@ -1004,6 +1004,41 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### `typeface.py` — weight, slant, serifs, outline faces (T6–T10)
+
+Four signals, every premise measured before its test was written:
+
+- **`stroke_width` = 2·area/perimeter** (perimeter exact, from
+  `trace.contours`). Bold/regular on TeX Gyre: **1.43–1.58×** in both
+  Termes and Heros — the 1.4× floor holds with margin.
+- **`slant` = |Moments.shear|**: italic medians **3.2×** (Termes) and
+  **11.9×** (Heros) the roman — the 1.7× floor holds widely.
+- **`serif_excess`** = total termini − 2·(Reeb births+closes): **weak
+  and recorded as such** — per-glyph ranges overlap (Termes −2..+1,
+  Heros −4..+1); only the page median is directional (0 vs −1). Exact
+  values pin the formula (`o`=0, `n`=1 on Termes), because the
+  directional test alone cannot see the 2× constant.
+- **`hollow`**: cycles ≥ 3 AND fill < 0.35, both conditions needed and
+  both branches now have fixtures that reach them — the first thin
+  frame was 0.63 fill, so both conditions failed together and the
+  cycles floor could be deleted unnoticed.
+
+**T7's page-level acceptance test is REFUTED by measurement and the
+refutation is pinned.** `font_weight_class` clusters
+stroke_width/height, and on a real mixed-alphabet page the
+distributions **interleave**: regular `u` at 0.121 equals bold `t`,
+regular `m`/`n` sit above bold `s`/`i`. No 1-D cut separates
+interleaved distributions. Weight separates **per character** (≥1.4×
+for the same letter) and on uniform-ratio pages (the hermetic case);
+the mixed-alphabet page claim is not deliverable by this feature, and
+the pinning test will fail the day the distributions stop
+interleaving.
+
+Two fixture generations failed structurally before the outline-B held:
+disjoint nested rings are separate components (no single component
+reaches 3 cycles), and at 14×8 the fill is 0.54 — stroke thickness
+only thins *relative* to size.
+
 ### `trace.py` — boundary contours, held by two oracles
 
 Crack-following with ink on the left of travel, integer corners, per
