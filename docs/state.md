@@ -1004,6 +1004,36 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### T22 — the channels identify the face: 88.3%, and every error is within-class
+
+`tools/facebench.py`: 20 known Type 1 faces (six TeX Gyre families
+with weights/italics, Chorus script, five Computer Modern) × the
+lowercase alphabet × three sizes. One alphabet-pooled vector per
+(face, size) — pooling averages character identity out — of seven
+numbers: stem/height, col/row contrast, mean termini 4-tuple, median
+|shear|. **Leave-one-size-out 1-NN**: every sample classified against
+other sizes only, so a hit means the vector carried the *face* across
+a rendering change.
+
+**53/60 = 88.3% (chance 5%).** The seven errors, which are the
+product:
+
+| mistaken | for |
+|---|---|
+| Pagella (0/3) | Termes ×2, cmr10 |
+| Pagella-B | Termes-B, cmbx10 |
+| cmbx10 | Pagella-B |
+| Heros-B | Adventor-B |
+
+Every confusion is **within typographic class** — moderate serif for
+moderate serif (Palatino-clone ↔ Times-clone ↔ Computer Modern), bold
+serif for bold serif, bold sans for bold sans. Class-level accuracy is
+**60/60**. The channels resolve the taxonomy exactly and blur only
+inside its cells, which is the same structure the deck measurements
+found from the other side: contrast + terminals + slant carry class
+cleanly, and separating Palatino from Times needs a channel these
+seven numbers do not contain.
+
 ### T21 — containment exclusion measured: it does NOT sharpen
 
 The hypothesis: badges, buttons and photo bands are glyph-sized by
