@@ -63,7 +63,8 @@ from typing import Iterator
 
 from .raster import InkMask, binarize, looks_inverted
 
-__all__ = ["CorruptPNG", "UnsupportedPNG", "PngImage", "read_png", "load_mask"]
+__all__ = ["auto_mask",
+           "CorruptPNG", "UnsupportedPNG", "PngImage", "read_png", "load_mask"]
 
 
 class CorruptPNG(ValueError):
@@ -375,14 +376,46 @@ def load_mask(src: bytes | bytearray | str | os.PathLike, *,
                           threshold, ink_is_dark)
 
 
+def auto_mask(gray, width, height, threshold):
+    """The polarity decision, in ONE place: `(mask, flipped)`.
+
+    Two conditions, and the second exists because the first alone was
+    REFUTED by a measured page. The fraction gate (`looks_inverted`,
+    more ink than background) fires on true inverted slides -- but also
+    on a magazine page whose top 60% is a nebula photograph over normal
+    dark-on-light text (62.2% dark, `discovered-012018` p30). Flipping
+    that page turns its body text into holes. The component comparison
+    separates the cases in every measured instance:
+
+        Typography deck p5    76.5% dark    5 -> 14 comps   FLIP
+        Typography deck p120  73.0% dark   20 -> 145        FLIP
+        chalkboard frame      77.7% dark  109 -> 223        FLIP
+        magazine + photo p30  62.2% dark 1825 -> 769        KEEP
+        stage photo p167      94.5% dark   34 -> 24         KEEP
+
+    A true inverted page GAINS components when read light-on-dark (the
+    letters separate from the merged background); a photo-dark page
+    LOSES them (the real text merges away). A photograph has no
+    document polarity at all, and keeping the default there is the
+    conservative harmless call.
+    """
+    dark = binarize(gray, width, height, threshold=threshold,
+                    ink_is_dark=True)
+    if not looks_inverted(dark):
+        return dark, False
+    from .sweep import Capture, sweep
+    light = binarize(gray, width, height, threshold=threshold,
+                     ink_is_dark=False)
+    n_dark = len(sweep(dark, conn=8, capture=Capture.NONE).components)
+    n_light = len(sweep(light, conn=8, capture=Capture.NONE).components)
+    if n_light > n_dark:
+        return light, True
+    return dark, False
+
+
 def _auto_binarize(gray, width, height, threshold, ink_is_dark):
-    """Shared by the PNG and PNM readers, so the cut lives once."""
+    """Shared by the PNG and PNM readers, so the rule lives once."""
     if ink_is_dark == "auto":
-        m = binarize(gray, width, height, threshold=threshold,
-                     ink_is_dark=True)
-        if looks_inverted(m):
-            return binarize(gray, width, height, threshold=threshold,
-                            ink_is_dark=False)
-        return m
+        return auto_mask(gray, width, height, threshold)[0]
     return binarize(gray, width, height,
                     threshold=threshold, ink_is_dark=ink_is_dark)

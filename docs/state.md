@@ -1004,6 +1004,43 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### T11/T12 — the polarity rule is a CONJUNCTION, and the cut has no valley
+
+**The fraction-only rule was refuted by a measured page.**
+`discovered-012018` p30 is a magazine page: normal dark-on-light text
+under a nebula photograph filling 60% of the page — 62.2% dark, the
+gate fires, and flipping it turns the body text into holes. The rule
+is now **fraction gate AND component comparison**: flip only when the
+page is majority-dark *and* the light reading has more components. A
+true inverted page GAINS components when flipped (letters separate
+from the merged board); a photo-dark page LOSES them.
+
+| page | dark frac | comps dark→light | verdict |
+|---|---|---|---|
+| Typography deck p5 | 76.5% | 5 → 14 | FLIP |
+| Typography deck p120 | 73.0% | 20 → 145 | FLIP |
+| chalkboard frame 246 | 77.7% | 109 → 223 | FLIP |
+| magazine+photo p30 | 62.2% | 1825 → 769 | **KEEP** |
+| stage photo p167 | 94.5% | 34 → 24 | KEEP |
+
+The instructed T11 pages hold exactly on the named deck: p5/p120 flip
+to ≤ 30% ink with more components, p60/p150 come back byte-identical.
+
+**T12: the distribution is a CONTINUUM, not a valley.** All 200 deck
+pages, threshold 128: every decile is populated and pages sit at 49.8%
+and 50.3% — against the cut from both sides. The fraction cannot
+classify; it is a conservative *gate*, and the comparison decides.
+
+**Both directions of loosening were then measured and rejected.**
+Below the gate, 11 of 31 pages at 35–50% would flip on the comparison
+alone — inspected, they are Photoshop-window screenshots and mockups
+(dark UI chrome; the light reading's 147 "components" are palette
+swatches, not text). The comparison alone over-fires on screenshots;
+the gate alone wrecks photo-magazine pages; the conjunction survives
+every measured case. The fraction gate is also a performance gate —
+zero extra sweeps on a normal page, asserted by counting (the T4
+lesson: a performance mutant is invisible to output tests).
+
 ### The polarity guard — measured cut, one definition, three levels
 
 A 720p chalkboard video frame read at the default polarity becomes one

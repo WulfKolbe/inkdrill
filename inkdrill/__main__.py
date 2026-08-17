@@ -22,24 +22,26 @@ import json
 import pathlib
 import sys
 
-from .raster import looks_inverted
 import time
 
 
-def _apply_polarity(args, mask, reload_light):
-    """The guard. `auto` flips a page the cut calls inverted; a forced
-    `--ink` is never second-guessed -- never guess also means never
-    overrule a statement."""
+def _apply_polarity(args, mask, auto):
+    """The guard. `auto` defers to `pngio.auto_mask` -- the ONE
+    definition of the decision, fraction gate plus component
+    comparison; a forced `--ink` is never second-guessed, because never
+    guess also means never overrule a statement."""
     if args.ink == "light":
         return mask, "light-on-dark"
     if args.ink == "dark":
         return mask, None
-    if looks_inverted(mask):
+    new_mask, flipped = auto()
+    if flipped:
         frac = mask.ink_count / (mask.width * mask.height)
         print(f"polarity: {frac:.0%} of the page is dark at this "
-              f"threshold; reading as light-on-dark (--ink dark to "
-              f"override)", file=sys.stderr)
-        return reload_light(), "light-on-dark"
+              f"threshold and the light reading has more components; "
+              f"reading as light-on-dark (--ink dark to override)",
+              file=sys.stderr)
+        return new_mask, "light-on-dark"
     return mask, None
 
 
@@ -123,10 +125,12 @@ def main(argv=None) -> int:
         from .pnmio import load_mask
         mask = load_mask(args.page, dpi=args.dpi, threshold=args.threshold,
                          ink_is_dark=args.ink != "light")
+        from .pngio import auto_mask
+        from .pnmio import read_pnm
+        img = read_pnm(args.page, dpi=args.dpi)
         mask, polarity = _apply_polarity(
-            args, mask, lambda: load_mask(args.page, dpi=args.dpi,
-                                          threshold=args.threshold,
-                                          ink_is_dark=False))
+            args, mask, lambda: auto_mask(img.gray, img.width, img.height,
+                                          args.threshold))
         dpi = (args.dpi, args.dpi)
     elif suffix == ".png":
         from .pngio import load_mask, read_png
@@ -149,10 +153,10 @@ def main(argv=None) -> int:
                      f"e12s39 fixture")
         mask = load_mask(args.page, threshold=args.threshold,
                          ink_is_dark=args.ink != "light")
+        from .pngio import auto_mask
         mask, polarity = _apply_polarity(
-            args, mask, lambda: load_mask(args.page,
-                                          threshold=args.threshold,
-                                          ink_is_dark=False))
+            args, mask, lambda: auto_mask(img.gray, img.width, img.height,
+                                          args.threshold))
         dpi = img.dpi if declared else (args.dpi, args.dpi)
     else:
         ap.error(f"unsupported input {suffix!r}; this reads .png (png16m) "

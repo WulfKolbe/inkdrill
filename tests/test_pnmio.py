@@ -231,6 +231,48 @@ class T0b_10_AutoPolarity(unittest.TestCase):
                                    ink_is_dark="auto"),
                          load_mask(page, dpi=72, threshold=128))
 
+    def test_a_PHOTO_DARK_page_is_NOT_flipped(self):
+        """The refutation that reshaped the rule: a magazine page whose
+        top is a big dark photograph over normal dark-on-light text is
+        62% dark -- the fraction gate fires -- but flipping it turns
+        the text into holes. The component comparison protects it: the
+        dark reading has MORE components (the text), the light one
+        fewer. Fixture: a solid photo block over three text marks."""
+        W, H = 30, 20
+        g = bytearray([240] * (W * H))            # white page
+        for y in range(0, 12):                    # dark photo, 60%
+            for x in range(W):
+                g[y * W + x] = 30
+        for x0 in (4, 14, 24):                    # dark text below
+            for y in range(14, 18):
+                for x in range(x0, x0 + 3):
+                    g[y * W + x] = 20
+        raw = bytes(b"P5\n30 20\n255\n") + bytes(g)
+        dark = load_mask(raw, dpi=72, threshold=128)
+        self.assertGreater(dark.ink_count * 2, W * H,
+                           "the gate must fire or this tests nothing")
+        auto = load_mask(raw, dpi=72, threshold=128, ink_is_dark="auto")
+        self.assertEqual(auto, dark, "the photo page was flipped")
+
+    def test_a_normal_page_never_pays_for_a_sweep(self):
+        """The fraction gate is an OPTIMISATION and no output test can
+        see its removal -- a normal page's light reading never wins the
+        component comparison, so always-compare is behaviourally
+        equivalent and merely costs a sweep per page. Asserted by
+        counting, the T4 lesson: zero sweeps on a light page, some on a
+        dark one."""
+        from unittest import mock
+        import inkdrill.sweep as SW
+        page = bytes(b"P5\n10 6\n255\n") + bytes(
+            [20 if i % 7 == 0 else 240 for i in range(60)])
+        with mock.patch.object(SW, "sweep", wraps=SW.sweep) as spy:
+            load_mask(page, dpi=72, threshold=128, ink_is_dark="auto")
+        self.assertEqual(spy.call_count, 0)
+        with mock.patch.object(SW, "sweep", wraps=SW.sweep) as spy:
+            load_mask(self._slide(), dpi=72, threshold=128,
+                      ink_is_dark="auto")
+        self.assertGreater(spy.call_count, 0)
+
     def test_the_png_route_shares_the_same_cut(self):
         """One definition (raster.looks_inverted); the PNG reader must
         flip on the same fixture the PNM reader flips on."""
@@ -244,3 +286,46 @@ class T0b_10_AutoPolarity(unittest.TestCase):
         png = build_png(rows)
         auto = png_load(png, threshold=128, ink_is_dark="auto")
         self.assertLessEqual(auto.ink_count / (30 * 12), 0.20)
+
+
+import pathlib as _pl
+
+_DECK = _pl.Path.home() / "Downloads/yauu-slides/Ultimate-Guide-Typography.slides.pdf"
+
+
+@unittest.skipUnless(_DECK.is_file(), "Typography deck not present")
+class T0b_11_DeckPolarity(unittest.TestCase):
+    """T11's instructed pages, on the deck they name. Rendered through
+    ghostscript at 48 dpi; p5/p120 are dark slides and must flip with
+    ink <= 30% and MORE components; p60/p150 are light and must come
+    back byte-identical to the plain read."""
+
+    @classmethod
+    def _page(cls, n):
+        import subprocess
+        r = subprocess.run(
+            ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=pgmraw",
+             "-r48", f"-dFirstPage={n}", f"-dLastPage={n}",
+             "-sOutputFile=%stdout", str(_DECK)], capture_output=True)
+        if r.returncode or not r.stdout.startswith(b"P5"):
+            raise unittest.SkipTest("ghostscript unavailable")
+        return r.stdout
+
+    def test_dark_slides_flip_light_slides_do_not(self):
+        from inkdrill.sweep import sweep
+        for n, should_flip in ((5, True), (120, True),
+                               (60, False), (150, False)):
+            raw = self._page(n)
+            plain = load_mask(raw, dpi=48, threshold=128)
+            auto = load_mask(raw, dpi=48, threshold=128,
+                             ink_is_dark="auto")
+            if should_flip:
+                self.assertNotEqual(auto, plain, f"p{n} did not flip")
+                self.assertLessEqual(
+                    auto.ink_count / (auto.width * auto.height), 0.30,
+                    f"p{n}")
+                self.assertGreater(
+                    len(sweep(auto, conn=8).components),
+                    len(sweep(plain, conn=8).components), f"p{n}")
+            else:
+                self.assertEqual(auto, plain, f"p{n} flipped")
