@@ -42,6 +42,8 @@ OFF_THE_CLI_PATH = {
     "sched": "multi-page scheduling; the CLI is serial by design",
     "seam": "curved gutters; measured and not wired into `page_lines`",
     "space": "affine algebra used by the units above, not by emit",
+    "trace": "boundary contours; nothing in lines.json carries a "
+             "polygon yet, and the consumer has not asked for one",
     "type1": "the font route -- reads a font program from a file",
     "warp": "the transport-vs-resample bench; a measurement, not a step",
 }
