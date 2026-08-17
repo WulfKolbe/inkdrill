@@ -1004,6 +1004,38 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### I1 on the bh2 report — the compare loop closes end to end
+
+First real run: page 1 of `bh2/report.pdf` (8 display equations,
+EQ0001–EQ0008), A=300 dpi vs B=600 dpi, threshold 200. Three changes
+it forced, each from a measured failure:
+
+- **Per-column reporting.** The artifact settled what "report for
+  both" meant: both COLUMNS (Rendered | Scan), side by side — not the
+  two input pages summed, which is what the first commit built.
+- **Cells are median-lattice spans, not hole bboxes.** The row-1 scan
+  JPEG overprinted a stretch of the header rule WHITE, merging the two
+  cells' background holes — the header cell read 42 components for
+  the two words "Scan image". A median over conforming cells is
+  immune to the one merged hole. The fixture lesson cost a surviving
+  mutant: a blob merely CROSSING an intact rule merges nothing; the
+  mechanism is the white overprint, and only a fixture containing it
+  (plus neighbour content to leak) kills `median -> max`.
+- **The dpi ladder, measured per column.** 150 vs 300: scan cells
+  lose up to 25 components at 150 (broken strokes reconnect).
+  300 vs 600: scan is converged (±1 stacked in 2 of 9 cells) but
+  RENDERED holes flap both directions (anti-aliased counters seal and
+  open). **Components are the scale-invariant channel** — identical
+  300↔600 in every cell of both columns; holes and the pair counts
+  are threshold-sensitive at every dpi tried.
+
+The product, per row (Rendered vs Scan components at 300 dpi):
+24=24, 115≠123, 52=52, 68≠71, 43≠46, 31≠30, 66≠67, 12=12 — no gross
+structural mismatch on page 1. The two rows worth the deferred
+formula-line discussion are EQ0002 (scan +8 components) and EQ0007
+(stacked 48 vs 33 — the rendered aligned block pairs more than the
+scan crop lays out).
+
 ### I1 — `python3 -m inkdrill compare A.png B.png`
 
 Per table row, the structural five-tuple (components, holes, stacked,

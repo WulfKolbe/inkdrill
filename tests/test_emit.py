@@ -1194,11 +1194,11 @@ class T1_14_CompareCLI(unittest.TestCase):
     """`python3 -m inkdrill compare A.png B.png` (I1): per table row,
     the structural five-tuple of the last two columns of each page.
 
-    Hermetic: pages are built as png16m bytes. Every asserted class
-    fires -- centred pairs on A, an offset pair on B (shifted by 4 px:
-    at 8 the x-overlap drops below 0.5 and the pair VANISHES instead of
-    reading offset, which the first fixture demonstrated), and the
-    stable column present on every row.
+    Hermetic: pages are built as png16m bytes. The two columns are
+    reported SIDE BY SIDE (L/R five-tuples), and `A=B` is the
+    scale-invariance assertion between the two input computations --
+    asserted in both directions: differing inputs read NO, identical
+    inputs read yes.
     """
 
     @staticmethod
@@ -1226,27 +1226,76 @@ class T1_14_CompareCLI(unittest.TestCase):
             box(204 + shift, y0 + 14, 216 + shift, y0 + 22)
         return build_png(g)
 
-    def test_compare_reports_the_offset_difference(self):
-        import io, tempfile, pathlib as pl
+    def _run(self, a, b):
+        import io
         from contextlib import redirect_stdout
         from inkdrill.__main__ import main
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = main(["compare", str(a), str(b),
+                       "--threshold", "128", "--tol", "6"])
+        self.assertEqual(rc, 0)
+        return [[c.strip() for c in l.split("|")[1:-1]]
+                for l in buf.getvalue().splitlines() if l.startswith("| 1 |")]
+
+    def test_both_columns_reported_and_the_difference_lands_in_A_eq_B(self):
+        import tempfile, pathlib as pl
         tmp = pl.Path(tempfile.mkdtemp())
         (tmp / "A.png").write_bytes(self._page(0))
         (tmp / "B.png").write_bytes(self._page(4))
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            rc = main(["compare", str(tmp / "A.png"), str(tmp / "B.png"),
-                       "--threshold", "128", "--tol", "6"])
-        self.assertEqual(rc, 0)
-        rows = [l for l in buf.getvalue().splitlines()
-                if l.startswith("| 1 |")]
+        rows = self._run(tmp / "A.png", tmp / "B.png")
         self.assertEqual(len(rows), 3)
-        for l in rows:
-            cells = [c.strip() for c in l.split("|")[1:-1]]
-            # A: 2 stacked both centred; B: 2 stacked, 1 centred 1 offset
-            self.assertEqual(cells[5:8], ["2", "2", "0"], l)
-            self.assertEqual(cells[10:13], ["2", "1", "1"], l)
+        for cells in rows:
+            # L and R are A's per-column five-tuples, side by side
+            self.assertEqual(cells[3:8], ["2", "0", "1", "1", "0"], cells)
+            self.assertEqual(cells[8:13], ["2", "0", "1", "1", "0"], cells)
+            self.assertEqual(cells[13], "NO")     # B's R pair reads offset
+            self.assertEqual(cells[14], "yes")
+
+    def test_identical_inputs_agree_so_the_assert_can_pass_too(self):
+        import tempfile, pathlib as pl
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(self._page(0))
+        rows = self._run(tmp / "A.png", tmp / "A.png")
+        for cells in rows:
             self.assertEqual(cells[13], "yes")
+
+    def test_a_broken_rule_does_not_leak_the_neighbour_into_the_cell(self):
+        """bh2 report p1: the scan JPEG overprinted a stretch of the
+        rule below the header WHITE, so the two cells' background
+        holes MERGED and the header cell read 42 components for two
+        words. (A blob merely crossing an intact rule does not merge
+        holes -- the first version of this fixture proved that by
+        killing nothing.) Cells are median-lattice spans now, immune
+        to the one merged hole; the row-1 content behind the gap must
+        not be counted in row 0."""
+        import tempfile, pathlib as pl
+        from tests.test_pngio import build_png
+        g = [list(r) for r in
+             [[(255, 255, 255)] * 260 for _ in range(160)]]
+
+        def box(x0, y0, x1, y1, v=(0, 0, 0)):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    g[y][x] = v
+        for x in (0, 64, 128, 192):
+            box(x, 0, x + 2, 160)
+        box(254, 0, 256, 160)
+        for y in (0, 52, 104):
+            box(0, y, 256, y + 2)
+        box(0, 156, 256, 158)
+        for r in range(3):
+            box(20, 14 + r * 52, 40, 30 + r * 52)
+            box(140, 14 + r * 52, 160, 30 + r * 52)
+        box(210, 10, 222, 20)                     # row 0 own content
+        box(200, 52, 240, 54, (255, 255, 255))    # rule OVERPRINTED white
+        box(210, 70, 222, 95)                     # row 1 content that must
+        #                                           NOT leak into row 0
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(build_png(g))
+        rows = self._run(tmp / "A.png", tmp / "A.png")
+        # row 0's R column: exactly its own 1 blob
+        self.assertEqual(rows[0][8], "1", rows[0])
 
     def test_a_page_without_a_table_is_an_error_not_a_guess(self):
         import tempfile, pathlib as pl

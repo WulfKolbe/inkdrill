@@ -38,8 +38,12 @@ def _cell_crop(mask, x0, y0, x1, y1):
 
 def _table_cells(mask, tol):
     """The page's table as {(row, col): hole bbox}. The table is the
-    ink region with the most holes; a page without one is an error the
-    caller reports, not a silent empty answer."""
+    ink region with the most holes. A lattice slot whose hole is
+    FRAGMENTED (cell content touching a rule splits the background
+    region, so no single hole matches the cell) is filled from the
+    intersection of its row's y-span and its column's x-span -- on the
+    bh2 report page 1, two of eight scan cells were lost exactly this
+    way before the fill existed."""
     from .emit import cell_grid
     from .nest import nest
     n = nest(mask)
@@ -55,22 +59,42 @@ def _table_cells(mask, tol):
     boxes = [(n.regions[h].x0, n.regions[h].y0,
               n.regions[h].x1 + 1, n.regions[h].y1 + 1) for h in holes]
     grid = cell_grid(boxes, tol=tol)
-    return {(r, c): boxes[i] for i, (r, c, _, _) in enumerate(grid)}
+    cells = {(r, c): boxes[i] for i, (r, c, _, _) in enumerate(grid)}
+    nrows = max(r for r, _ in cells) + 1
+    ncols = max(c for _, c in cells) + 1
+    # Every cell is defined by the lattice's MEDIAN row/col spans, not
+    # by its own hole bbox. A cell whose content touches a rule merges
+    # its hole with a neighbour's (bh2 report p1: the row-1 scan JPEG
+    # crossed the header rule, so the header cell's hole spanned both
+    # rows and read 42 components for the two words "Scan image"), and
+    # a median over the conforming cells is immune to the merged one.
+    from statistics import median
+    colx = {c: (median(cells[k][0] for k in cells if k[1] == c),
+                median(cells[k][2] for k in cells if k[1] == c))
+            for c in range(ncols)}
+    rowy = {r: (median(cells[k][1] for k in cells if k[0] == r),
+                median(cells[k][3] for k in cells if k[0] == r))
+            for r in range(nrows)}
+    return {(r, c): (int(colx[c][0]), int(rowy[r][0]),
+                     int(colx[c][1]), int(rowy[r][1]))
+            for r in range(nrows) for c in range(ncols)}
 
 
 def cmd_compare(argv) -> int:
     """`compare A.png B.png` -- per table row, the structural five-tuple
-    of the LAST TWO columns of each page (I1).
+    (components, holes, stacked, centred, offset) of TWO columns,
+    reported side by side (I1).
 
-    No point coordinates are emitted, so no dpi is required -- the five
-    numbers are counts. The first column is each row\'s label; inkdrill
-    reads no text (emit G6), so with `-o` the label cells are saved as
-    crops next to the output and referenced by filename, and without it
-    the label column is the row index alone.
+    `--cols i j` names the columns; the default is the last two. A and
+    B are the SAME page at two resolutions, and the `A=B` column is
+    the scale-invariance assertion -- rows where the two computations
+    disagree are reported, never averaged. `B stable` additionally
+    checks B against its own half-scale resample.
 
-    Scale invariance of B is asserted per cell: features at native and
-    at a half-scale resample must agree, and the `B stable` column says
-    where they do not -- reported, not silently averaged.
+    The label column reads no text (emit G6): with `-o` the
+    first-column cells are saved as crops beside the output and
+    referenced by filename; without it the label is the row index.
+    No dpi is required -- the five numbers are counts.
     """
     import argparse
     ap = argparse.ArgumentParser(prog="python3 -m inkdrill compare")
@@ -79,6 +103,8 @@ def cmd_compare(argv) -> int:
     ap.add_argument("--threshold", type=int, default=200)
     ap.add_argument("--tol", type=float, default=4.0,
                     help="cell-lattice clustering tolerance, px")
+    ap.add_argument("--cols", type=int, nargs=2, default=None,
+                    help="the two columns to compare (default: last two)")
     ap.add_argument("--page-number", type=int, default=1)
     ap.add_argument("-o", "--out", type=pathlib.Path)
     args = ap.parse_args(argv)
@@ -107,11 +133,22 @@ def cmd_compare(argv) -> int:
               file=sys.stderr)
 
     keys = ("components", "holes", "stacked", "centred", "offset")
+
+    def feats_of(k, r, col):
+        nc = ncols[k]
+        pick = tuple(args.cols) if args.cols else (nc - 2, nc - 1)
+        cell = cells[k].get((r, pick[col]))
+        if cell is None:
+            return None
+        crop = _cell_crop(masks[k], cell[0], cell[1],
+                          cell[2] - 1, cell[3] - 1)
+        return pair_stats(crop), crop
+
     header = (["page", "line", "label"]
-              + [f"A {k}" for k in keys] + [f"B {k}" for k in keys]
-              + ["B stable"])
+              + [f"L {k}" for k in keys] + [f"R {k}" for k in keys]
+              + ["A=B", "B stable"])
     rows_out = []
-    unstable = 0
+    mismatch = unstable = 0
     for r in range(min(nrows.values())):
         row = [str(args.page_number), str(r)]
         lab = cells["A"].get((r, 0))
@@ -124,27 +161,25 @@ def cmd_compare(argv) -> int:
             row.append(f.name)
         else:
             row.append(f"row {r}")
-        stable = True
-        for k in ("A", "B"):
-            nc = ncols[k]
-            feats = {}
-            for col in (nc - 2, nc - 1):
-                cell = cells[k].get((r, col))
-                if cell is None:
-                    continue
-                crop = _cell_crop(masks[k], cell[0], cell[1],
-                                  cell[2] - 1, cell[3] - 1)
-                st = pair_stats(crop)
-                for kk in keys:
-                    feats[kk] = feats.get(kk, 0) + st[kk]
-                if k == "B":
-                    hw, hh = max(1, crop.width // 2), max(1, crop.height // 2)
-                    half = resample(crop, (0.5, 0.0, 0.0, 0.5, 0.0, 0.0),
-                                    width=hw, height=hh)
-                    if pair_stats(half) != st:
-                        stable = False
-            row.extend(str(feats.get(kk, 0)) for kk in keys)
+        agree, stable = True, True
+        for col in (0, 1):
+            fa = feats_of("A", r, col)
+            fb = feats_of("B", r, col)
+            sta = fa[0] if fa else {}
+            row.extend(str(sta.get(kk, 0)) for kk in keys)
+            if (sta or {}) != ((fb[0] if fb else {}) or {}):
+                agree = False
+            if fb:
+                crop = fb[1]
+                hw = max(1, crop.width // 2)
+                hh = max(1, crop.height // 2)
+                half = resample(crop, (0.5, 0.0, 0.0, 0.5, 0.0, 0.0),
+                                width=hw, height=hh)
+                if pair_stats(half) != fb[0]:
+                    stable = False
+        row.append("yes" if agree else "NO")
         row.append("yes" if stable else "NO")
+        mismatch += not agree
         unstable += not stable
         rows_out.append(row)
 
@@ -157,6 +192,9 @@ def cmd_compare(argv) -> int:
         print(f"{len(rows_out)} rows -> {args.out}", file=sys.stderr)
     else:
         sys.stdout.write(text)
+    if mismatch:
+        print(f"WARNING: {mismatch} of {len(rows_out)} rows differ "
+              f"between A and B", file=sys.stderr)
     if unstable:
         print(f"WARNING: {unstable} of {len(rows_out)} rows change "
               f"features at half scale", file=sys.stderr)
