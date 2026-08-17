@@ -1004,6 +1004,18 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### `trace.py` — boundary contours, held by two oracles
+
+Crack-following with ink on the left of travel, integer corners, per
+component: outer first (positive winding), then one contour per hole
+(negative). The saddle rule carries the 8/4 connectivity pairing — a
+checkerboard pair is one loop visiting the shared corner twice. Two
+oracles share no code with the walk: contours per component equal
+`1 + cycle_count` (`sweep`), and signed areas sum to the **exact** ink
+count — which caught the first draft's sign flip on the spot. Rendered
+`O`: two contours, opposite winding; `8`: three. Off the CLI path with
+its reason recorded: no `lines.json` field carries a polygon yet.
+
 ### `sweep.termini` — stroke-end counts, and they separate the mirrors
 
 `termini(result)` counts runs with no neighbour on the previous line

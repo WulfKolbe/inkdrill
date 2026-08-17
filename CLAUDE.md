@@ -228,6 +228,10 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   survives 92.7%) and `emit` does not call it. The bitmap channel alone reaches 99.1%; the
   confusion matrix says do not escalate. The signature is a verifier
   (`agrees`), not a discriminator.
+- **`inkdrill/trace.py`** — mask -> ordered boundary contours.
+  `contours`, `signed_area`. Outer first, positive winding; holes
+  negative. Oracles: `1 + cycle_count` loops per component, and signed
+  areas sum to the exact ink count.
 - **`inkdrill/mathstruct.py`** — rows, reference lines, script detection,
   component grouping. `rows`, `reference_lines`, `detect_scripts`,
   `group`. Rows seed tallest-first; grouping needs stacking, not width.
