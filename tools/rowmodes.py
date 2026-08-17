@@ -25,7 +25,12 @@ from inkdrill.nest import ink_only
 from inkdrill.mathstruct import Glyph, rows
 pdf=pathlib.Path(sys.argv[1])
 DPI=int(sys.argv[2]) if len(sys.argv)>2 else 120
-ratios=[]; rows_used=0; rows_skipped=0; pages_flipped=0
+EXCLUDE="--exclude-graphics" in sys.argv
+# T21 measured the exclusion and REJECTED it as a default: block regions
+# include paragraph text (emit's own record), so diagram+block drops the
+# core (-25%) almost as fast as the noise tail (-31%) and the valley
+# does not deepen. Kept as a flag so the measurement is re-runnable.
+ratios=[]; rows_used=0; rows_skipped=0; pages_flipped=0; rows_in_graphics=0
 CHUNK = 25 if DPI <= 150 else 6      # a 300 dpi page is ~17 MB of gray
 for lo in range(1, 201, CHUNK):
     hi=min(lo+CHUNK-1, 200)
@@ -46,6 +51,28 @@ for lo in range(1, 201, CHUNK):
         gl=[Glyph(x.id,float(x.x0),float(x.y0),float(x.x1),float(x.y1))
             for x in regs]
         by={g.id:g for g in gl}
+        # T21: rows inside a GRAPHIC region leave the population.
+        # Badges, buttons and photo bands are glyph-sized by
+        # construction, so no size filter reaches them -- containment
+        # does. The graphic detectors are emit's own: the ink-route
+        # `diagram` and the white-route `block`.
+        graphics=[]
+        if EXCLUDE:
+            from inkdrill.emit import page_lines
+            pt=72.0/DPI
+            for ln in page_lines(m, pt=pt, tol=1.0):
+                if ln["type"] in ("diagram","block"):
+                    r=ln["region"]
+                    graphics.append((r["top_left_x"]/pt, r["top_left_y"]/pt,
+                                     (r["top_left_x"]+r["width"])/pt,
+                                     (r["top_left_y"]+r["height"])/pt))
+        def in_graphic(x0,y0,x1,y1):
+            area=(x1-x0+1)*(y1-y0+1)
+            for gx0,gy0,gx1,gy1 in graphics:
+                ox=min(x1,gx1)-max(x0,gx0); oy=min(y1,gy1)-max(y0,gy0)
+                if ox>0 and oy>0 and ox*oy >= 0.5*area:
+                    return True
+            return False
         for row in rows(gl):
             mem=row.members
             hs=sorted(g.height for g in mem)
@@ -53,6 +80,11 @@ for lo in range(1, 201, CHUNK):
             # T15 floor: stems >= 5px needs glyphs >= ~50px at 0.1 ratio
             if len(mem) < 6 or med_h < 45:
                 rows_skipped+=1
+                continue
+            rx0=min(g.x0 for g in mem); rx1=max(g.x1 for g in mem)
+            ry0=min(g.top for g in mem); ry1=max(g.bottom for g in mem)
+            if in_graphic(rx0,ry0,rx1,ry1):
+                rows_in_graphics+=1
                 continue
             # pool run lengths over the row's glyph crops, both axes
             from inkdrill.raster import iter_runs
@@ -81,7 +113,8 @@ for lo in range(1, 201, CHUNK):
           f"skipped {rows_skipped}, flipped {pages_flipped}", flush=True)
 ratios.sort()
 n=len(ratios)
-print(f"\nROWS: {n} used, {rows_skipped} skipped (short/small/sub-floor); "
+print(f"\nROWS: {n} used, {rows_skipped} skipped (short/small/sub-floor), "
+      f"{rows_in_graphics} DROPPED inside graphics; "
       f"{pages_flipped} pages flipped")
 hist=collections.Counter(min(int(x*5),15) for x in ratios)   # 0.2-wide bins
 for b in range(0,16):

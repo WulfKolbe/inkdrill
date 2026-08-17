@@ -1004,6 +1004,34 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### T21 — containment exclusion measured: it does NOT sharpen
+
+The hypothesis: badges, buttons and photo bands are glyph-sized by
+construction, so no size filter reaches them — but containment does.
+Rows overlapping an emitted `diagram` or `block` region by ≥ 50% were
+excluded and T18 re-run.
+
+**Result: 110 of 394 candidate rows dropped, and the structure did not
+sharpen.** The noise tail (> 1.4) fell 68 → 47 (−31%) while the
+typographic core (0.0–1.2) fell 312 → 235 (−25%) — the exclusion
+removes real text almost as readily as graphics, and the valley depth
+is unchanged (36 between 63/78, was 39 between 91/98).
+
+**The cause is already in `emit`'s contract**: the white-route `block`
+detector returns *paragraph blocks* on text pages — that was the Heim
+measurement when the route was wired — so `diagram ∪ block` is a
+CONTENT mask, not a graphics mask. Meanwhile the deck's actual
+contamination (badges, button bars) is free-standing and unenclosed:
+invisible to the ink-route `diagram` for exactly the reason p10's plot
+was. The class that defeats size filters also defeats these two
+containment detectors; separating "a block of text" from "a block of
+badges" is the is-it-a-figure question `page_lines` already declines
+to answer, met again one level up.
+
+Recorded as measured-and-rejected: the T18 distribution stands
+UN-excluded, with its noise tail named (T20) rather than filtered by
+an instrument that cannot distinguish it from paragraphs.
+
 ### T19/T20 — the channels are complementary, and the fourth class is noise
 
 **T19, the correction.** "The ratio supersedes serif_excess" was wrong,
