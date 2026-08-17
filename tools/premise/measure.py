@@ -81,7 +81,8 @@ from inkdrill.gold import (Component as GComp, Glyph as GGlyph,  # noqa: E402
                            MatchKind, match, page_transform)
 from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
-from inkdrill.sweep import Capture, sweep                   # noqa: E402
+from inkdrill.sweep import (Capture, sweep,                  # noqa: E402
+                            termini as sweep_termini)
 from inkdrill.type1 import load as t1_load                  # noqa: E402
 from inkdrill.charstring import outline as cs_outline       # noqa: E402
 from inkdrill.scan import render as scan_render             # noqa: E402
@@ -1390,6 +1391,7 @@ def m_alphabet(root, n, rng):
 
 def _alphabet_one(font, fname, pop, px_em):
     chans = {"(components, cycles)": defaultdict(list),
+             "termini 4-tuple": defaultdict(list),
              "reeb signature, row": defaultdict(list),
              "reeb signature, row+col": defaultdict(list)}
     for ch, nm in sorted(_AGL.items()):
@@ -1409,6 +1411,8 @@ def _alphabet_one(font, fname, pop, px_em):
         chans["(components, cycles)"][
             (len(row.components),
              sum(c.cycle_count for c in row.components))].append(ch)
+        chans["termini 4-tuple"][
+            sweep_termini(row) + sweep_termini(col)].append(ch)
         sr = signature(contract(row))
         chans["reeb signature, row"][sr].append(ch)
         chans["reeb signature, row+col"][

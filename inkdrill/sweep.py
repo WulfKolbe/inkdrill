@@ -72,6 +72,7 @@ from typing import Iterator
 from .raster import InkMask, InvalidAxis, Run, iter_runs
 
 __all__ = ["Capture", "Conn", "EventKind", "Event", "RunNode", "Component",
+           "termini",
            "SweepResult", "sweep", "InvalidConnectivity"]
 
 
@@ -392,3 +393,32 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
     events.sort(key=lambda e: (e.line, _KIND_ORDER[e.kind], e.node))
     return SweepResult(axis=axis, conn=conn, capture=capture, nodes=nodes,
                        components=comps, events=events)
+
+
+def termini(result: SweepResult) -> tuple[int, int]:
+    """Runs with no neighbour on the previous line, and on the next.
+
+    A run with an empty `up` list is a local FIRST along the sweep axis
+    -- the top of a stroke on a row sweep -- and an empty `down` list a
+    local LAST. `m` has three leg ends, `n` two, and `u` is `n` upside
+    down, so the pair (first, last) is a cheap stroke-end count that
+    (components, cycles) cannot see: all three letters are (1, 0).
+
+    Axis names follow the sweep: on `axis="row"` the pair is
+    (top, bottom); on `axis="col"` it is (left, right) -- a column
+    sweep IS the transposed-mask sweep, so no transpose is needed to
+    get the horizontal pair. Running both gives the 4-tuple
+    (top, bottom, left, right).
+
+    Requires `Capture.GRAPH` and raises otherwise, because at lower
+    capture the adjacency lists exist and are EMPTY -- every run would
+    silently count as both a first and a last, which is a wrong answer
+    rather than an error.
+    """
+    if result.capture is not Capture.GRAPH:
+        raise ValueError(
+            f"termini needs Capture.GRAPH; got {result.capture.value!r} "
+            f"whose empty adjacency would count every run as a terminus")
+    first = sum(1 for n in result.nodes if not n.up)
+    last = sum(1 for n in result.nodes if not n.down)
+    return first, last

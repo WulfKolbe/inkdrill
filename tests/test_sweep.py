@@ -401,3 +401,76 @@ class T3_6_Rejections(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class T3_9_Termini(unittest.TestCase):
+    """`termini`: runs with no neighbour on the previous / next line.
+
+    A cheap stroke-end count that (components, cycles) cannot see --
+    `m`, `n` and `u` are all (1, 0). Hermetic fixtures here are IDEAL
+    sans-serif strokes; the rendered-font test asserts the measured
+    values instead, because real serifs add termini (cmr10's `u` grows
+    a second bottom from its right stem's serif, its `L` a second right
+    terminus from the top serif).
+    """
+
+    @staticmethod
+    def _mask(rows):
+        w = len(rows[0])
+        data = bytes(0xFF if c == "#" else 0
+                     for row in rows for c in row)
+        return InkMask(data, w, len(rows))
+
+    @staticmethod
+    def _t(mask, axis="row"):
+        from inkdrill.sweep import termini
+        return termini(sweep(mask, axis=axis, conn=8,
+                             capture=Capture.GRAPH))
+
+    def test_an_arch_n_has_one_top_and_two_bottoms(self):
+        n = self._mask(["..####..",
+                        ".##..##.",
+                        ".##..##.",
+                        ".##..##."])
+        self.assertEqual(self._t(n), (1, 2))
+
+    def test_u_is_n_upside_down_and_the_pair_flips(self):
+        u = self._mask([".##..##.",
+                        ".##..##.",
+                        ".##..##.",
+                        "..####.."])
+        self.assertEqual(self._t(u), (2, 1))
+
+    def test_m_has_three_bottoms(self):
+        m = self._mask(["####################",
+                        ".##....##....##.....",
+                        ".##....##....##.....",
+                        ".##....##....##....."])
+        self.assertEqual(self._t(m)[1], 3)
+
+    def test_the_column_axis_gives_left_and_right(self):
+        """E: three arms end right -> 3 right termini; L: one arm -> 1.
+        A column sweep IS the transposed sweep, so no transpose."""
+        E = self._mask(["########",
+                        "##......",
+                        "######..",
+                        "##......",
+                        "########"])
+        L = self._mask(["##......",
+                        "##......",
+                        "##......",
+                        "########"])
+        self.assertEqual(self._t(E, axis="col")[1], 3)
+        self.assertEqual(self._t(L, axis="col")[1], 1)
+        self.assertEqual(self._t(E, axis="col")[0], 1)
+
+    def test_lower_capture_RAISES_rather_than_counting_everything(self):
+        """At NONE/EVENTS the adjacency lists exist and are EMPTY, so
+        every run would silently read as both a first and a last. Both
+        sides asserted: the refusal and the accepting path."""
+        from inkdrill.sweep import termini
+        box = self._mask(["####", "####"])
+        for cap in (Capture.NONE, Capture.EVENTS):
+            with self.assertRaises(ValueError):
+                termini(sweep(box, conn=8, capture=cap))
+        self.assertEqual(self._t(box), (1, 1))

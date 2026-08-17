@@ -1004,6 +1004,45 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### `sweep.termini` — stroke-end counts, and they separate the mirrors
+
+`termini(result)` counts runs with no neighbour on the previous line
+and on the next — stroke tops and bottoms on a row sweep, lefts and
+rights on a column sweep (a column sweep IS the transposed-mask sweep;
+no transpose exists or is needed). Requires `Capture.GRAPH` and raises
+below it, where the empty adjacency would silently count every run as
+both.
+
+**Measured values beat the ideal ones the task assumed.** On cmr10,
+`m` = 3 bottoms and `n` = 2 as predicted, but `u` = **2** (the right
+stem's serif descends past the bowl) and `L` = **2** right termini
+(the top serif protrudes). The ideal 1s hold on hermetic sans strokes
+and are pinned there; the serif values are pinned on the font.
+
+**Discriminative power (`measure.py alphabet`), four integers:**
+
+| channel | sans ASCII | serif ASCII |
+|---|---|---|
+| (components, cycles) | 22% | 22% |
+| **termini 4-tuple** | **66%** | **79%** |
+| reeb signature, row | 56% | 63% |
+| reeb signature, row+col | 75% | 89% |
+
+Four integers beat the full single-axis Reeb signature and sit just
+under the two-axis one.
+
+**Every mirror pair separates, with the mechanism visible:** ⊂/⊃
+(1,1,1,2)↔(1,1,2,1), ≤/≥ (2,2,2,3)↔(2,2,3,2), ∪/∩
+(2,1,1,1)↔(1,2,1,1), E/Ǝ (3,3,2,3)↔(1,1,3,1). A horizontal mirror
+swaps (left, right), a vertical one (top, bottom) — asserted as the
+swap, not merely as inequality. **±/∓ remains blind**, (1,1,2,2) both:
+each half's terminus count is itself symmetric, so counts cannot carry
+which half is where. The one survivor of the (components, cycles)
+blind set.
+
+A–Z on cmr10 leaves five duplicate groups: F/R, G/S, H/K/X, I/P,
+J/L/U/V — 20 distinct classes over 26.
+
 ### fontmatch across dpi — the umlaut dots hold, and the `e` anomaly resolves
 
 Same page (`BH1-000274`), native 600 dpi scan resampled to 400/300/200
