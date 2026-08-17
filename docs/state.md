@@ -1004,6 +1004,38 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### T18 — the same measurement at body size: a valley appears
+
+Same harness, 300 dpi — the 5 px stem floor now admits ~12 pt text, so
+the population becomes **body rows**: 384 survive (2.8× the display
+sample), 39 pages flipped as before.
+
+**A valley appears where the display measurement had none**: 0.8–1.0
+holds 39 rows between peaks of 91 (0.6–0.8) and 98 (1.0–1.2). The
+integer mode pairs say the structure is typographic, not
+lattice-artifact — the recurring stems are 9/13/17/26/30 px, the
+deck's rendering sizes, and the clusters are stroke-contrast classes:
+
+| class | signature pairs | ratio | rows |
+|---|---|---|---|
+| hairline-serif | (9,4) (13,4) (17,4) — col mode IS the 4 px serif | ≤ 0.45 | 42 |
+| moderate contrast | (13,9) (17,13) (26,17) | 0.6–0.8 | 91 |
+| **uniform stroke** | (9,9) (13,13) (17,17) (30,30) | exactly 1.00 | 86 |
+| reverse contrast | (9,13) (9,17) | > 1.4 | ~30 |
+
+**Two refinements on the anchor picture.** The split this detector
+delivers is *modulated vs uniform*, not classic serif vs sans — and
+the humanist-sans anchor (Heros, 0.88) lands **in the valley**:
+geometric/mono faces sit at exactly 1.0, humanist sans with slight
+modulation between the classes. The exact-1.0 pileup is also
+quantisation-assisted (integer equality), stated rather than hidden.
+
+**So the T17 conditional resolves as the auditor put it: the
+no-detector claim was about display faces, not about the corpus.** At
+body sizes the deck separates; at display sizes its faces form a
+contrast continuum. One instrument, two populations, two truths —
+quote the population with the claim.
+
 ### T17 — col/row mode over the deck: a continuum that fills the gap
 
 `tools/rowmodes.py`, all 200 pages, polarity-corrected (39 flipped),

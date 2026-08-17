@@ -26,8 +26,9 @@ from inkdrill.mathstruct import Glyph, rows
 pdf=pathlib.Path(sys.argv[1])
 DPI=int(sys.argv[2]) if len(sys.argv)>2 else 120
 ratios=[]; rows_used=0; rows_skipped=0; pages_flipped=0
-for lo in range(1, 201, 25):
-    hi=min(lo+24, 200)
+CHUNK = 25 if DPI <= 150 else 6      # a 300 dpi page is ~17 MB of gray
+for lo in range(1, 201, CHUNK):
+    hi=min(lo+CHUNK-1, 200)
     r=subprocess.run(["gs","-q","-dNOPAUSE","-dBATCH","-sDEVICE=pgmraw",
         f"-r{DPI}", f"-dFirstPage={lo}", f"-dLastPage={hi}",
         "-sOutputFile=%stdout", str(pdf)], capture_output=True)
