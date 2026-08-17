@@ -1004,6 +1004,38 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### I5 — the stacked count was measuring line spacing
+
+`pair_stats` gains the bound: a stacked pair's vertical gap must be
+<= 1.5x the median component height. Measured on bh2 EQ0007 (an
+aligned two-line block), rendered vs scan at 300 dpi: the raw pair
+loop reads **53 vs 36** stacked where bounded reads **8 vs 7** — on
+visually identical content, so the excess was the line gap, not
+structure. Bounded is also the steadier instrument across dpi
+(8→9 / 7→7 at 600, where unbounded moves by 3).
+
+Page 1 re-run and re-sorted by five-tuple disagreement:
+
+| identifier | L c/h/s/c/o | R c/h/s/c/o | dis |
+|---|---|---|---|
+| EQ0004 | 68/19/33/13/17 | 71/14/27/18/9 | 27 |
+| EQ0002 | 115/29/29/15/14 | 123/29/35/21/13 | 21 |
+| EQ0007 | 66/11/8/4/4 | 67/18/7/5/2 | 12 |
+| EQ0003 | 52/14/22/11/11 | 52/13/22/14/8 | 7 |
+| EQ0005 | 43/16/10/8/2 | 46/14/11/9/2 | 7 |
+| EQ0006 | 31/10/5/1/4 | 30/10/4/3/1 | 7 |
+| EQ0008 | 12/4/0/0/0 | 12/3/0/0/0 | 1 |
+| EQ0001 | 24/3/3/3/0 | 24/3/3/3/0 | 0 |
+
+The order changed exactly as the bound predicts: EQ0007 fell from the
+top (its 48-vs-33 was the tool error, not the conversion) and the
+list collapsed — five of eight rows within threshold-channel noise,
+EQ0001 identical. The rows still standing are **EQ0004** and
+**EQ0002**, and both disagree at the COMPONENT level (68≠71,
+115≠123), the scale-invariant channel — those are the two for the
+formula-line discussion. The first visual inspection finding held: a
+tool error, fixed once, moved every row at once.
+
 ### I1 on the bh2 report — the compare loop closes end to end
 
 First real run: page 1 of `bh2/report.pdf` (8 display equations,

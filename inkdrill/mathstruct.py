@@ -404,13 +404,21 @@ def pair_stats(mask) -> dict:
     prevention.
 
     Stacked: two components, x-overlap >= 0.5 of the narrower, one
-    strictly above the other, nothing between them except possibly a
-    RULE (`is_rule`); a rule between makes the pair a Fraction, counted
-    in `stacked` and in neither split. Centred: x-centres within 15%
-    of the wider width; else offset. Rules stay in the pair population
-    -- excluding them made the features scale-dependent (measured:
-    stacked flapped 6,5,6,6,5,6 across 200-800 dpi).
+    strictly above the other, vertical gap <= 1.5x the MEDIAN component
+    height, nothing between them except possibly a RULE (`is_rule`); a
+    rule between makes the pair a Fraction, counted in `stacked` and in
+    neither split. Centred: x-centres within 15% of the wider width;
+    else offset. Rules stay in the pair population -- excluding them
+    made the features scale-dependent (measured: stacked flapped
+    6,5,6,6,5,6 across 200-800 dpi).
+
+    The gap bound is I5: without it the count measures LINE SPACING,
+    not structure -- on bh2 EQ0007 (an aligned two-line block) the raw
+    pair loop reads 53 vs 36 stacked (rendered vs scan, 300 dpi) and
+    bounded reads 8 vs 7, on visually identical content. Bounded is
+    also the steadier instrument across dpi (8->9 vs 7->7 at 600).
     """
+    import statistics
     from .emit import is_rule
     from .nest import ink_only
     ik = ink_only(mask)
@@ -419,6 +427,8 @@ def pair_stats(mask) -> dict:
     rids = {r.id for r in regs
             if is_rule(r) and (r.x1 - r.x0) >= (r.y1 - r.y0)}
     comps = list(regs)
+    med_h = (statistics.median(c.y1 - c.y0 + 1 for c in comps)
+             if comps else 0)
     stacked = centred = offset = 0
     for i, a in enumerate(comps):
         for b in comps[i + 1:]:
@@ -429,6 +439,8 @@ def pair_stats(mask) -> dict:
             ov = min(top.x1, bot.x1) - max(top.x0, bot.x0) + 1
             wa, wb = top.x1 - top.x0 + 1, bot.x1 - bot.x0 + 1
             if ov < 0.5 * min(wa, wb):
+                continue
+            if bot.y0 - top.y1 - 1 > 1.5 * med_h:
                 continue
             bx0, bx1 = min(top.x0, bot.x0), max(top.x1, bot.x1)
             between = [c for c in comps if c is not top and c is not bot

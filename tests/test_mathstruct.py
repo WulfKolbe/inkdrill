@@ -496,3 +496,23 @@ class T14_7_PairStats(unittest.TestCase):
         self.assertEqual((centred["stacked"], centred["centred"]), (1, 1))
         self.assertEqual((offset["stacked"], offset["offset"]), (1, 1))
         self.assertEqual(gone["stacked"], 0)
+
+    def test_the_gap_bound_separates_structure_from_line_spacing(self):
+        """I5: gap 18 px over median height 8 px exceeds 1.5x, so the
+        pair is line spacing and must NOT count; the same pair at gap
+        6 px is structure and must. Without the bound, EQ0007's aligned
+        block read 53 stacked pairs for 8 real ones."""
+        from inkdrill.mathstruct import pair_stats
+        from inkdrill.raster import InkMask
+        def pair(gap):
+            W = 40; H = 12 + gap + 8 + 4
+            buf = bytearray(W * H)
+            for y in range(4, 12):
+                for x in range(10, 22):
+                    buf[y * W + x] = 0xFF
+            for y in range(12 + gap, 20 + gap):
+                for x in range(10, 22):
+                    buf[y * W + x] = 0xFF
+            return InkMask(bytes(buf), W, H)
+        self.assertEqual(pair_stats(pair(6))["stacked"], 1)
+        self.assertEqual(pair_stats(pair(18))["stacked"], 0)
