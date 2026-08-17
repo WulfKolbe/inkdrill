@@ -392,3 +392,58 @@ def _join_within(order, parent, find, share, max_gap, stack) -> None:
             ra, rb = find(ga.id), find(gb.id)
             if ra != rb:
                 parent[rb] = ra
+
+
+def pair_stats(mask) -> dict:
+    """(components, holes, stacked, centred, offset) of one mask (I1).
+
+    The structural five-tuple the expression-compare loop runs on,
+    moved here from `tools/mathshape.py` so the CLI and the tool share
+    ONE definition -- the feature vector drifted at two call sites
+    once before (`classify.signature_features`), and this is the same
+    prevention.
+
+    Stacked: two components, x-overlap >= 0.5 of the narrower, one
+    strictly above the other, nothing between them except possibly a
+    RULE (`is_rule`); a rule between makes the pair a Fraction, counted
+    in `stacked` and in neither split. Centred: x-centres within 15%
+    of the wider width; else offset. Rules stay in the pair population
+    -- excluding them made the features scale-dependent (measured:
+    stacked flapped 6,5,6,6,5,6 across 200-800 dpi).
+    """
+    from .emit import is_rule
+    from .nest import ink_only
+    ik = ink_only(mask)
+    regs = ik.regions
+    holes = sum(ik.cycles)
+    rids = {r.id for r in regs
+            if is_rule(r) and (r.x1 - r.x0) >= (r.y1 - r.y0)}
+    comps = list(regs)
+    stacked = centred = offset = 0
+    for i, a in enumerate(comps):
+        for b in comps[i + 1:]:
+            top, bot = ((a, b) if a.y1 < b.y0 else
+                        ((b, a) if b.y1 < a.y0 else (None, None)))
+            if top is None:
+                continue
+            ov = min(top.x1, bot.x1) - max(top.x0, bot.x0) + 1
+            wa, wb = top.x1 - top.x0 + 1, bot.x1 - bot.x0 + 1
+            if ov < 0.5 * min(wa, wb):
+                continue
+            bx0, bx1 = min(top.x0, bot.x0), max(top.x1, bot.x1)
+            between = [c for c in comps if c is not top and c is not bot
+                       and c.y0 > top.y1 and c.y1 < bot.y0
+                       and c.x1 >= bx0 and c.x0 <= bx1]
+            if any(c.id not in rids for c in between):
+                continue
+            stacked += 1
+            if between:
+                continue                          # only a rule: Fraction
+            ca = (top.x0 + top.x1) / 2
+            cb = (bot.x0 + bot.x1) / 2
+            if abs(ca - cb) <= 0.15 * max(wa, wb):
+                centred += 1
+            else:
+                offset += 1
+    return {"components": len(regs), "holes": holes, "stacked": stacked,
+            "centred": centred, "offset": offset}

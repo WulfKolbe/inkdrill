@@ -54,52 +54,9 @@ from inkdrill.pnmio import load_mask       # noqa: E402
 
 
 def features(mask) -> dict:
-    """(components, holes, stacked, centred, offset) of one mask.
-
-    RULES STAY IN THE PAIR POPULATION. Excluding them was the first
-    form, and it made the features scale-DEPENDENT: `is_rule`'s 20:1
-    aspect floor was set on page-scale booktabs, and a maths-scale bar
-    (`=`, minus) sits near it -- at 300 dpi one bar of a test render
-    passed, at 400 none did, and each flip moved a component out of the
-    population and a centred pair with it (stacked flapped 6,5,6,6,5,6
-    across 200-800 dpi). With bars kept, the same render is invariant
-    across the whole sweep. A pair whose only between-ink is a rule is
-    the Fraction case and is excluded from centred/offset.
-    """
-    ik = ink_only(mask)
-    regs = ik.regions
-    holes = sum(ik.cycles)
-    rules = [r for r in regs if is_rule(r) and (r.x1 - r.x0) >= (r.y1 - r.y0)]
-    rids = {r.id for r in rules}
-    comps = list(regs)
-    stacked = centred = offset = 0
-    for i, a in enumerate(comps):
-        for b in comps[i + 1:]:
-            top, bot = ((a, b) if a.y1 < b.y0 else
-                        ((b, a) if b.y1 < a.y0 else (None, None)))
-            if top is None:
-                continue
-            ov = min(top.x1, bot.x1) - max(top.x0, bot.x0) + 1
-            wa, wb = top.x1 - top.x0 + 1, bot.x1 - bot.x0 + 1
-            if ov < 0.5 * min(wa, wb):
-                continue
-            bx0, bx1 = min(top.x0, bot.x0), max(top.x1, bot.x1)
-            between = [c for c in comps if c is not top and c is not bot
-                       and c.y0 > top.y1 and c.y1 < bot.y0
-                       and c.x1 >= bx0 and c.x0 <= bx1]
-            if any(c.id not in rids for c in between):
-                continue                              # a third component
-            stacked += 1
-            if between:
-                continue                              # only a rule: Fraction
-            ca = (top.x0 + top.x1) / 2
-            cb = (bot.x0 + bot.x1) / 2
-            if abs(ca - cb) <= 0.15 * max(wa, wb):
-                centred += 1
-            else:
-                offset += 1
-    return {"components": len(regs), "holes": holes, "stacked": stacked,
-            "centred": centred, "offset": offset}
+    """One definition lives in the package now: `mathstruct.pair_stats`."""
+    from inkdrill.mathstruct import pair_stats
+    return pair_stats(mask)
 
 
 def measure(p: pathlib.Path, threshold: int):

@@ -1188,3 +1188,73 @@ class T1_13_PolarityGuard(unittest.TestCase):
         rec2 = page_record(page=1, width_px=10, height_px=10,
                            dpi=(400.0, 400.0), lines=[])
         self.assertNotIn("ink", rec2)
+
+
+class T1_14_CompareCLI(unittest.TestCase):
+    """`python3 -m inkdrill compare A.png B.png` (I1): per table row,
+    the structural five-tuple of the last two columns of each page.
+
+    Hermetic: pages are built as png16m bytes. Every asserted class
+    fires -- centred pairs on A, an offset pair on B (shifted by 4 px:
+    at 8 the x-overlap drops below 0.5 and the pair VANISHES instead of
+    reading offset, which the first fixture demonstrated), and the
+    stable column present on every row.
+    """
+
+    @staticmethod
+    def _page(shift=0):
+        from tests.test_pngio import build_png
+        W, H = 260, 160
+        g = [[(255, 255, 255)] * W for _ in range(H)]
+
+        def box(x0, y0, x1, y1):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    g[y][x] = (0, 0, 0)
+        for x in (0, 64, 128, 192):
+            box(x, 0, x + 2, H)
+        box(254, 0, 256, H)
+        for y in (0, 52, 104):
+            box(0, y, 256, y + 2)
+        box(0, 156, 256, 158)
+        for r in range(3):
+            box(20, 14 + r * 52, 40, 30 + r * 52)          # label marks
+            y0 = 10 + r * 52
+            box(140, y0, 152, y0 + 8)                       # col2 pair
+            box(140, y0 + 14, 152, y0 + 22)
+            box(204, y0, 216, y0 + 8)                       # col3 pair
+            box(204 + shift, y0 + 14, 216 + shift, y0 + 22)
+        return build_png(g)
+
+    def test_compare_reports_the_offset_difference(self):
+        import io, tempfile, pathlib as pl
+        from contextlib import redirect_stdout
+        from inkdrill.__main__ import main
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(self._page(0))
+        (tmp / "B.png").write_bytes(self._page(4))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = main(["compare", str(tmp / "A.png"), str(tmp / "B.png"),
+                       "--threshold", "128", "--tol", "6"])
+        self.assertEqual(rc, 0)
+        rows = [l for l in buf.getvalue().splitlines()
+                if l.startswith("| 1 |")]
+        self.assertEqual(len(rows), 3)
+        for l in rows:
+            cells = [c.strip() for c in l.split("|")[1:-1]]
+            # A: 2 stacked both centred; B: 2 stacked, 1 centred 1 offset
+            self.assertEqual(cells[5:8], ["2", "2", "0"], l)
+            self.assertEqual(cells[10:13], ["2", "1", "1"], l)
+            self.assertEqual(cells[13], "yes")
+
+    def test_a_page_without_a_table_is_an_error_not_a_guess(self):
+        import tempfile, pathlib as pl
+        from tests.test_pngio import build_png
+        from inkdrill.__main__ import main
+        tmp = pl.Path(tempfile.mkdtemp())
+        blank = build_png([[(255, 255, 255)] * 40 for _ in range(30)])
+        (tmp / "A.png").write_bytes(blank)
+        (tmp / "B.png").write_bytes(blank)
+        rc = main(["compare", str(tmp / "A.png"), str(tmp / "B.png")])
+        self.assertEqual(rc, 1)

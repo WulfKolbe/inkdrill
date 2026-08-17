@@ -33,8 +33,6 @@ OFF_THE_CLI_PATH = {
                "a dimension, not a per-page step",
     "font": "font inventory from a PDF; the CLI reads a raster",
     "gold": "pdfminer alignment; needs the PDF, not the page image",
-    "qc": "screen signals -- built, classifies nothing, and no field in "
-          "`lines.json` carries them yet",
     "relate": "the maths layer; candidate edges need symbol identity "
               "downstream and nothing consumes them",
     "rewrite": "the maths layer; consumes `relate` output",
@@ -47,7 +45,6 @@ OFF_THE_CLI_PATH = {
     "type1": "the font route -- reads a font program from a file",
     "typeface": "weight/slant/serif signals; measured, and no lines.json "
                 "field carries them yet -- same standing as qc",
-    "warp": "the transport-vs-resample bench; a measurement, not a step",
 }
 
 

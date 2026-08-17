@@ -465,3 +465,34 @@ class T14_6_GroupingIsBoundedToOneRow(unittest.TestCase):
         components must not become a handful of clusters."""
         glyphs = self._prose()
         self.assertGreaterEqual(len(group(glyphs)), int(0.8 * len(glyphs)))
+
+
+class T14_7_PairStats(unittest.TestCase):
+    """`pair_stats` moved here from tools/mathshape.py (one definition,
+    I1). The overlap floor gets its own fixture: at a 4 px shift the
+    12 px boxes still overlap 8 >= 6 and read OFFSET; at 8 px they
+    overlap 4 < 6 and the pair VANISHES -- both outcomes asserted, so
+    the floor cannot be deleted (the CLI fixture alone could not kill
+    that mutant)."""
+
+    @staticmethod
+    def _pair(shift):
+        from inkdrill.raster import InkMask
+        W, H = 40, 34
+        buf = bytearray(W * H)
+        for y in range(4, 12):
+            for x in range(10, 22):
+                buf[y * W + x] = 0xFF
+        for y in range(18, 26):
+            for x in range(10 + shift, 22 + shift):
+                buf[y * W + x] = 0xFF
+        return InkMask(bytes(buf), W, H)
+
+    def test_the_overlap_floor_separates_offset_from_nothing(self):
+        from inkdrill.mathstruct import pair_stats
+        centred = pair_stats(self._pair(0))
+        offset = pair_stats(self._pair(4))
+        gone = pair_stats(self._pair(8))
+        self.assertEqual((centred["stacked"], centred["centred"]), (1, 1))
+        self.assertEqual((offset["stacked"], offset["offset"]), (1, 1))
+        self.assertEqual(gone["stacked"], 0)

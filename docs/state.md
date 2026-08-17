@@ -1004,6 +1004,35 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### I1 — `python3 -m inkdrill compare A.png B.png`
+
+Per table row, the structural five-tuple (components, holes, stacked,
+centred, offset) of the **last two columns** of each page, as a
+markdown table: page, line, label, ten value columns, and a
+`B stable` column asserting scale-invariance per cell (features at
+native and half-scale resample must agree; disagreement is reported,
+not averaged).
+
+Decisions worth naming:
+
+- **`pair_stats` moved into the package** (`mathstruct`) so the CLI
+  and `tools/mathshape.py` share one definition — the
+  `signature_features` lesson. The move is faithful; the ES₃
+  regression row differs from the recorded table only by the already-
+  committed rules-in-population fix (+1 stacked, +1 centred).
+- **The label column reads no text** (emit G6). With `-o` the
+  first-column cells are saved as crops next to the output and
+  referenced by filename; without it the label is the row index.
+- **No dpi required**: the five numbers are counts, nothing is emitted
+  in points.
+- The fixture taught the overlap floor's failure shape: a pair shifted
+  by 8 of 12 px does not read "offset" — it **vanishes** (x-overlap
+  4 < 6). Both outcomes are pinned in `pair_stats`' own tests, since
+  the CLI fixture alone could not kill the floor's deletion.
+- Wiring `warp.resample` into the CLI made `warp` (and `qc`, which it
+  imports) CLI-reachable — the reachability test fired and their
+  off-path reasons are deleted, exactly as that test intends.
+
 ### T22 — the channels identify the face: 88.3%, and every error is within-class
 
 `tools/facebench.py`: 20 known Type 1 faces (six TeX Gyre families

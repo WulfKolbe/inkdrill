@@ -25,6 +25,144 @@ import sys
 import time
 
 
+def _cell_crop(mask, x0, y0, x1, y1):
+    from .raster import InkMask
+    w = x1 - x0 + 1
+    h = y1 - y0 + 1
+    buf = bytearray(w * h)
+    for j in range(h):
+        src = (y0 + j) * mask.width + x0
+        buf[j * w:(j + 1) * w] = mask.data[src:src + w]
+    return InkMask(bytes(buf), w, h)
+
+
+def _table_cells(mask, tol):
+    """The page's table as {(row, col): hole bbox}. The table is the
+    ink region with the most holes; a page without one is an error the
+    caller reports, not a silent empty answer."""
+    from .emit import cell_grid
+    from .nest import nest
+    n = nest(mask)
+    best, holes = None, []
+    for r in n.regions.values():
+        if r.kind.value != "ink":
+            continue
+        hs = n.holes_of(r.id)
+        if len(hs) > len(holes):
+            best, holes = r, hs
+    if best is None or len(holes) < 2:
+        return None
+    boxes = [(n.regions[h].x0, n.regions[h].y0,
+              n.regions[h].x1 + 1, n.regions[h].y1 + 1) for h in holes]
+    grid = cell_grid(boxes, tol=tol)
+    return {(r, c): boxes[i] for i, (r, c, _, _) in enumerate(grid)}
+
+
+def cmd_compare(argv) -> int:
+    """`compare A.png B.png` -- per table row, the structural five-tuple
+    of the LAST TWO columns of each page (I1).
+
+    No point coordinates are emitted, so no dpi is required -- the five
+    numbers are counts. The first column is each row\'s label; inkdrill
+    reads no text (emit G6), so with `-o` the label cells are saved as
+    crops next to the output and referenced by filename, and without it
+    the label column is the row index alone.
+
+    Scale invariance of B is asserted per cell: features at native and
+    at a half-scale resample must agree, and the `B stable` column says
+    where they do not -- reported, not silently averaged.
+    """
+    import argparse
+    ap = argparse.ArgumentParser(prog="python3 -m inkdrill compare")
+    ap.add_argument("a", type=pathlib.Path)
+    ap.add_argument("b", type=pathlib.Path)
+    ap.add_argument("--threshold", type=int, default=200)
+    ap.add_argument("--tol", type=float, default=4.0,
+                    help="cell-lattice clustering tolerance, px")
+    ap.add_argument("--page-number", type=int, default=1)
+    ap.add_argument("-o", "--out", type=pathlib.Path)
+    args = ap.parse_args(argv)
+
+    from .mathstruct import pair_stats
+    from .pngio import read_png, auto_mask
+    from .warp import resample
+
+    def load(path):
+        img = read_png(path)
+        return auto_mask(img.gray, img.width, img.height,
+                         args.threshold)[0]
+
+    masks = {"A": load(args.a), "B": load(args.b)}
+    cells = {k: _table_cells(m, args.tol) for k, m in masks.items()}
+    for k, c in cells.items():
+        if c is None:
+            print(f"{k}: no table found (no ink region with >= 2 holes)",
+                  file=sys.stderr)
+            return 1
+    nrows = {k: max(r for r, _ in c) + 1 for k, c in cells.items()}
+    ncols = {k: max(cc for _, cc in c) + 1 for k, c in cells.items()}
+    if nrows["A"] != nrows["B"]:
+        print(f"row counts differ: A {nrows['A']} vs B {nrows['B']}; "
+              f"comparing the first {min(nrows.values())}",
+              file=sys.stderr)
+
+    keys = ("components", "holes", "stacked", "centred", "offset")
+    header = (["page", "line", "label"]
+              + [f"A {k}" for k in keys] + [f"B {k}" for k in keys]
+              + ["B stable"])
+    rows_out = []
+    unstable = 0
+    for r in range(min(nrows.values())):
+        row = [str(args.page_number), str(r)]
+        lab = cells["A"].get((r, 0))
+        if lab and args.out:
+            crop = _cell_crop(masks["A"], lab[0], lab[1],
+                              lab[2] - 1, lab[3] - 1)
+            f = args.out.with_name(f"{args.out.stem}_row{r}_label.pgm")
+            f.write_bytes(b"P5\n%d %d\n255\n"
+                          % (crop.width, crop.height) + crop.data)
+            row.append(f.name)
+        else:
+            row.append(f"row {r}")
+        stable = True
+        for k in ("A", "B"):
+            nc = ncols[k]
+            feats = {}
+            for col in (nc - 2, nc - 1):
+                cell = cells[k].get((r, col))
+                if cell is None:
+                    continue
+                crop = _cell_crop(masks[k], cell[0], cell[1],
+                                  cell[2] - 1, cell[3] - 1)
+                st = pair_stats(crop)
+                for kk in keys:
+                    feats[kk] = feats.get(kk, 0) + st[kk]
+                if k == "B":
+                    hw, hh = max(1, crop.width // 2), max(1, crop.height // 2)
+                    half = resample(crop, (0.5, 0.0, 0.0, 0.5, 0.0, 0.0),
+                                    width=hw, height=hh)
+                    if pair_stats(half) != st:
+                        stable = False
+            row.extend(str(feats.get(kk, 0)) for kk in keys)
+        row.append("yes" if stable else "NO")
+        unstable += not stable
+        rows_out.append(row)
+
+    lines = ["| " + " | ".join(header) + " |",
+             "|" + "|".join("---" for _ in header) + "|"]
+    lines += ["| " + " | ".join(r) + " |" for r in rows_out]
+    text = "\n".join(lines) + "\n"
+    if args.out:
+        args.out.write_text(text)
+        print(f"{len(rows_out)} rows -> {args.out}", file=sys.stderr)
+    else:
+        sys.stdout.write(text)
+    if unstable:
+        print(f"WARNING: {unstable} of {len(rows_out)} rows change "
+              f"features at half scale", file=sys.stderr)
+    return 0
+
+
 def _apply_polarity(args, mask, auto):
     """The guard. `auto` defers to `pngio.auto_mask` -- the ONE
     definition of the decision, fraction gate plus component
@@ -46,6 +184,10 @@ def _apply_polarity(args, mask, auto):
 
 
 def main(argv=None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "compare":
+        return cmd_compare(argv[1:])
     ap = argparse.ArgumentParser(
         prog="python3 -m inkdrill",
         description="A rendered page to a MathPix-shaped lines.json.")
