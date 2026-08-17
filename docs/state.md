@@ -1004,6 +1004,36 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### T13–T15 — `raster.profile` and `raster.stroke_mode`, with scopes
+
+**`profile(mask, axis)`** — per scan line `(coverage, extent,
+run_count)` in one `iter_runs` pass, indexed by line with `(0, 0, 0)`
+on empty lines. The three differ exactly where a line has gaps, and
+`extent − coverage` is the line's internal white. Total coverage
+equals `ink_count` on both axes — the axis-invariance oracle at the
+profile level.
+
+**`stroke_mode(mask, axis)`** — the mode of run lengths plus sample
+size, and it is **family-independent where `2·area/perimeter` is
+not**: TeX Gyre Termes and Heros both read mode **10 regular / 17
+bold** at 120 px/em, while the perimeter estimate gives 5.3 vs 6.6 for
+the same two regulars. Ties break toward the smaller length.
+
+Two scopes, both measured and in the docstring:
+
+- **Axis**: the signal lives on the ROW axis (horizontal runs crossing
+  vertical stems). Termes' *column* mode is 4 — its serif thickness —
+  so a column mode answers a different question. Pinned so the scope
+  cannot rot into "any axis".
+- **Resolution (T15)**: weight classification needs stems ≥ 5 px. On a
+  150-dpi slide regular read 2 px and bold 3 px — one integer apart —
+  and height-normalising inverted the order (2/38 > 3/60, demonstrated
+  in a test). With stems near a tenth of glyph height, the floor is
+  ~10 pt text at 400 dpi and ~27 pt at 150 dpi.
+
+(T16 as instructed is T11, already landed: the deck pages p5/p120 flip
+to ≤ 30% with more components, p60/p150 byte-identical.)
+
 ### T11/T12 — the polarity rule is a CONJUNCTION, and the cut has no valley
 
 **The fraction-only rule was refuted by a measured page.**

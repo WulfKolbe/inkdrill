@@ -100,5 +100,50 @@ class TT_1_SerifTermini(unittest.TestCase):
                          self._t4(self.sym, "minusplus"))
 
 
+@unittest.skipUnless((_TREE / "public" / "tex-gyre").is_dir(),
+                     "needs tex-gyre")
+class TT_4_StrokeModeGyre(unittest.TestCase):
+    """T14's pin: mode 10 regular / 17 bold at 120 px/em in BOTH
+    families -- family-independent, unlike 2*area/perimeter (5.3 vs
+    6.6 for the same regulars). A ROW-axis claim; the column axis is
+    serif-contaminated (Termes col mode is 4, the serif thickness)."""
+
+    @staticmethod
+    def _alphabet(fname, px=120.0):
+        from inkdrill.charstring import outline
+        from inkdrill.raster import InkMask
+        from inkdrill.scan import render
+        from inkdrill.type1 import load
+        f = load(_TREE / "public" / "tex-gyre" / fname)
+        glyphs = [render(outline(f, ch), f.units_per_em, px)[0]
+                  for ch in "abcdefghijklmnopqrstuvwxyz"]
+        W = sum(g.width + 4 for g in glyphs)
+        H = max(g.height for g in glyphs)
+        buf = bytearray(W * H)
+        x = 0
+        for g in glyphs:
+            for y in range(g.height):
+                buf[y * W + x:y * W + x + g.width] = \
+                    g.data[y * g.width:(y + 1) * g.width]
+            x += g.width + 4
+        return InkMask(bytes(buf), W, H)
+
+    def test_mode_10_regular_17_bold_in_both_families(self):
+        from inkdrill.raster import stroke_mode
+        for fname, want in (("qtmr.pfb", 10), ("qtmb.pfb", 17),
+                            ("qhvr.pfb", 10), ("qhvb.pfb", 17)):
+            mode, n = stroke_mode(self._alphabet(fname))
+            self.assertEqual(mode, want, fname)
+            self.assertGreater(n, 2000, fname)
+
+    def test_the_column_axis_answers_a_DIFFERENT_question(self):
+        """Asserted so the row-axis scope cannot rot into 'any axis':
+        Termes' column mode is its serif thickness, far below the stem."""
+        from inkdrill.raster import stroke_mode
+        row, _ = stroke_mode(self._alphabet("qtmr.pfb"), "row")
+        col, _ = stroke_mode(self._alphabet("qtmr.pfb"), "col")
+        self.assertLess(col, row)
+
+
 if __name__ == "__main__":
     unittest.main()

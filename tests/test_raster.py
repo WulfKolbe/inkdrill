@@ -4,7 +4,8 @@ import random
 import unittest
 
 from inkdrill.raster import (BG, INK, InkMask, InvalidAxis, Rect, Run,
-                             binarize, iter_runs)
+                             binarize, iter_runs,
+                             profile, stroke_mode)
 
 
 def pixels_from_runs(mask, axis):
@@ -264,3 +265,65 @@ class T2_5_RegionOfInterest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class T2_9_Profile(unittest.TestCase):
+    """T13: per-line (coverage, extent, run_count), one iter_runs pass."""
+
+    def test_coverage_extent_and_count_differ_on_a_gapped_line(self):
+        """The three numbers are distinct exactly when a line has gaps
+        -- a fixture without a gap could not tell them apart."""
+        m = InkMask(bytes([0xFF] * 2 + [0] * 3 + [0xFF] * 3), 8, 1)
+        self.assertEqual(profile(m), [(5, 8, 2)])
+
+    def test_an_empty_line_is_data_not_a_hole(self):
+        m = InkMask(bytes([0xFF] * 4 + [0] * 4 + [0xFF] * 4), 4, 3)
+        self.assertEqual(profile(m), [(4, 4, 1), (0, 0, 0), (4, 4, 1)])
+
+    def test_the_column_axis_profiles_columns(self):
+        m = InkMask(bytes([0xFF, 0,
+                           0xFF, 0,
+                           0, 0xFF]), 2, 3)
+        self.assertEqual(profile(m, "col"), [(2, 2, 1), (1, 1, 1)])
+
+    def test_row_and_col_totals_agree(self):
+        """Axis invariance at the profile level: total coverage is the
+        ink count on both axes, the package's standing oracle shape."""
+        import random
+        rng = random.Random(20260817)
+        d = bytes(0xFF if rng.random() < 0.4 else 0 for _ in range(15 * 11))
+        m = InkMask(d, 15, 11)
+        for axis in ("row", "col"):
+            self.assertEqual(sum(c for c, _, _ in profile(m, axis)),
+                             m.ink_count)
+
+    def test_a_bad_axis_raises(self):
+        with self.assertRaises(InvalidAxis):
+            profile(InkMask(b"\xff", 1, 1), "diag")
+
+
+class T2_10_StrokeMode(unittest.TestCase):
+    """T14/T15 hermetic side; the TeX Gyre pins are in the gated class."""
+
+    def test_the_mode_and_sample_size(self):
+        m = InkMask(bytes([0xFF, 0xFF, 0, 0xFF, 0xFF,
+                           0xFF, 0xFF, 0, 0xFF, 0,
+                           0, 0, 0, 0, 0]), 5, 3)
+        self.assertEqual(stroke_mode(m), (2, 4))
+
+    def test_a_tie_breaks_toward_the_SMALLER_length(self):
+        m = InkMask(bytes([0xFF, 0, 0xFF, 0xFF, 0]), 5, 1)
+        self.assertEqual(stroke_mode(m), (1, 2))
+
+    def test_an_empty_mask_is_zero_zero(self):
+        self.assertEqual(stroke_mode(InkMask(b"\x00" * 6, 3, 2)), (0, 0))
+
+    def test_the_INTEGER_COLLAPSE_inverts_height_normalised_order(self):
+        """T15's mechanism, demonstrated rather than cited: at 2 vs 3 px
+        the stems are one integer apart, and dividing by glyph height
+        can invert which face reads heavier. Regular 2 px / 38 px tall
+        gives ratio 0.0526; bold 3 px / 60 px gives 0.0500 -- the BOLD
+        ratio is smaller. Why the docstring floor is 5 px."""
+        reg = 2 / 38
+        bold = 3 / 60
+        self.assertLess(bold, reg)

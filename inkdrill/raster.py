@@ -49,7 +49,7 @@ from __future__ import annotations
 
 from typing import Iterable, Iterator, NamedTuple
 
-__all__ = ["InkMask", "Run", "Rect", "AXES", "binarize", "looks_inverted", "iter_runs",
+__all__ = ["InkMask", "Run", "Rect", "AXES", "binarize", "looks_inverted", "profile", "stroke_mode", "iter_runs",
            "InvalidAxis"]
 
 INK = 0xFF
@@ -370,3 +370,74 @@ def iter_runs(mask: InkMask, axis: str = "row") -> Iterator[Run]:
     if axis == "col":
         return _iter_runs_col(mask)
     raise InvalidAxis(axis)
+
+
+def profile(mask: InkMask, axis: str = "row"):
+    """Per scan line: `(coverage, extent, run_count)` (T13).
+
+    `coverage` is the summed run length on that line, `extent` is
+    `max(hi) - min(lo) + 1`, `run_count` the number of runs. The three
+    differ exactly when a line has gaps: two 10-px runs 5 px apart are
+    coverage 20, extent 25, count 2 -- and `extent - coverage` is the
+    line's internal white, which is what a caller reads a profile for.
+
+    One list entry per scan line, INDEXED BY LINE -- length `height`
+    for axis "row", `width` for "col" -- with `(0, 0, 0)` on lines that
+    carry no ink, so a caller can index without an existence check and
+    an empty line is data rather than a hole in the list.
+
+    One pass over `iter_runs`; no sweep, no adjacency. `iter_runs`
+    yields in scan order (its G-contract), which is what lets this be
+    a single append-or-update walk.
+    """
+    if axis not in AXES:
+        raise InvalidAxis(axis)
+    limit = mask.height if axis == "row" else mask.width
+    out = [(0, 0, 0)] * limit
+    first_lo = [0] * limit
+    for r in iter_runs(mask, axis):
+        cov, _, cnt = out[r.line]
+        if not cnt:
+            first_lo[r.line] = r.lo
+        # Runs arrive in scan order (iter_runs' contract), so the
+        # line's extent is always current-hi minus its first lo.
+        out[r.line] = (cov + (r.hi - r.lo + 1),
+                       r.hi - first_lo[r.line] + 1, cnt + 1)
+    return out
+
+
+def stroke_mode(mask: InkMask, axis: str = "row"):
+    """The MODE of run lengths, with its sample size: `(mode, n)` (T14).
+
+    The dominant run length across text is the stem thickness, and it
+    is FAMILY-INDEPENDENT where `2*area/perimeter` is not: TeX Gyre
+    Termes and Heros both read mode 10 for regular and 17 for bold at
+    120 px/em, while the perimeter estimate gives 5.3 vs 6.6 for the
+    same two regulars. `(0, 0)` for an empty mask.
+
+    AXIS SCOPE, measured: the signal lives on the ROW axis (horizontal
+    runs crossing vertical stems). The column axis is serif- and
+    hairline-contaminated -- Termes col mode is 4, its serif
+    thickness, not its stem -- so a column-axis mode answers a
+    different question and the 10/17 claim is a row-axis claim.
+
+    RESOLUTION SCOPE (T15), measured on a 150-dpi slide: weight
+    classification needs stems of >= 5 px. Below that the mode
+    collapses onto adjacent integers -- regular read 2 px and bold
+    3 px, one integer apart, and height-normalising INVERTED the
+    order. With stems near a tenth of the glyph height, 5 px of stem
+    is roughly 10 pt text at 400 dpi and 27 pt at 150 dpi; below those
+    sizes this function still returns a mode, and it does not carry
+    weight.
+
+    Ties break toward the SMALLER length, so a repeated run is
+    deterministic rather than dict-order.
+    """
+    counts: dict[int, int] = {}
+    for r in iter_runs(mask, axis):
+        n = r.hi - r.lo + 1
+        counts[n] = counts.get(n, 0) + 1
+    if not counts:
+        return 0, 0
+    mode = min(counts, key=lambda k: (-counts[k], k))
+    return mode, sum(counts.values())
