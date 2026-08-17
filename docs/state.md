@@ -1004,6 +1004,30 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### T17 — col/row mode over the deck: a continuum that fills the gap
+
+`tools/rowmodes.py`, all 200 pages, polarity-corrected (39 flipped),
+120 dpi. Population, printed: rows with ≥ 6 glyphs, median glyph
+height ≥ 45 px, row-mode ≥ 5 px (the T15 floor) — **138 rows survive
+of ~22,000**; this is a display-size-text measurement by construction.
+
+**Anchors first** (same procedure, pure faces): Termes 0.38 / bold
+0.25, Heros 0.88 / bold 0.77 — a clean serif/sans gap at 0.4–0.75.
+On conventional text faces the ratio is a real family detector, and a
+far stronger one than `serif_excess` (anchor separation 0.38 vs 0.88
+against page medians of 0 vs −1): **for book faces it supersedes T9**.
+
+**On this deck it is a CONTINUUM, and the modal bin sits inside the
+anchor gap**: 0.6–0.8 holds 32 of 138 rows, exactly where the valley
+would need to be. p25 0.60, median 0.81, p75 1.00, with a low tail
+(16 rows ≤ 0.4, strong-serif candidates) and a degenerate high tail
+(14 rows > 1.4, up to 62 — dot-leader/graphic rows, population
+contamination worth naming). A typography guide's display faces —
+slabs, scripts, intermediate-contrast types — fill the space between
+the classes. **No corpus-level serif/sans detector from this deck**,
+and that is the deck telling the truth about itself: variety is its
+subject.
+
 ### T13–T15 — `raster.profile` and `raster.stroke_mode`, with scopes
 
 **`profile(mask, axis)`** — per scan line `(coverage, extent,
