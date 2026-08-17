@@ -1004,6 +1004,41 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### T19/T20 — the channels are complementary, and the fourth class is noise
+
+**T19, the correction.** "The ratio supersedes serif_excess" was wrong,
+and one face proves it. Six TeX Gyre faces, same procedure:
+
+| face | ratio (contrast) | termini/glyph (terminals) |
+|---|---|---|
+| Termes serif | 0.38 | 8.3 |
+| Pagella serif | 0.38 | 7.9 |
+| Schola serif | 0.44 | 8.6 |
+| Bonum serif | 0.44 | 8.3 |
+| Heros sans | 0.88 | 6.3 |
+| Adventor sans | 0.86 | 6.2 |
+| **Cursor slab-mono** | **1.00** | **8.0** |
+
+Cursor reads **1.00 on contrast — indistinguishable from the sans
+faces — while its termini land inside the serif cluster** (8.0 against
+7.9–8.6, sans at 6.2–6.3). A slab-serif monospace has uniform strokes
+AND serifs: contrast and terminals are different AXES, and a face can
+sit anywhere in the plane. Neither channel supersedes the other; the
+pair is the detector. (The serif ratio cluster is also tight — four
+faces within 0.38–0.44 against 0.86–0.88 — so each axis is clean on
+its own question.)
+
+**T20, the fourth class inspected: noise, in two costumes.** Three
+reverse-contrast rows ((9,13)/(9,17), col mode > row mode) cropped and
+looked at: vintage **badge/logo graphics** (ribbon lockups, anchor
+emblems — outline strokes at 9, filled ribbon masses at 13), a row of
+**"Download" buttons** (solid pill bars with knocked-out text — the
+predicted rule-in-a-row, filled variant), and photo-band fragments.
+None is reverse-contrast typography. **The taxonomy is three-class —
+hairline-serif / moderate / uniform — and the fourth class is
+contamination** the glyph-size row filter admits because badge
+elements are glyph-sized.
+
 ### T18 — the same measurement at body size: a valley appears
 
 Same harness, 300 dpi — the 5 px stem floor now admits ~12 pt text, so
@@ -1045,9 +1080,10 @@ of ~22,000**; this is a display-size-text measurement by construction.
 
 **Anchors first** (same procedure, pure faces): Termes 0.38 / bold
 0.25, Heros 0.88 / bold 0.77 — a clean serif/sans gap at 0.4–0.75.
-On conventional text faces the ratio is a real family detector, and a
-far stronger one than `serif_excess` (anchor separation 0.38 vs 0.88
-against page medians of 0 vs −1): **for book faces it supersedes T9**.
+On conventional text faces the ratio is a real family detector with
+anchor separation 0.38 vs 0.88. ~~For book faces it supersedes T9~~ —
+**RETRACTED by T19's six-face measurement**: the two channels are
+different axes, not one axis at two strengths. See the T19 section.
 
 **On this deck it is a CONTINUUM, and the modal bin sits inside the
 anchor gap**: 0.6–0.8 holds 32 of 138 rows, exactly where the valley
