@@ -1004,6 +1004,36 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### The 54-page check — the compare loop at corpus scale
+
+Population: the display-equation rows on report pages 1–53 of the
+regenerated bh2 report (cropped scan images), 333 of 344 rows — the
+last 11 share page 54 with the inline-formula table and the driver
+measures only the largest table per page. A = 300 dpi, B = 600 dpi,
+threshold 200. The inline table (from page 54) has FOUR columns and
+no scan image, so "compare the last two" does not apply to it.
+
+- **The overprint leakage is gone.** Every one of the 53 header cells
+  reads ≤ 15 components; EQ0077, the previously leaking row, reads
+  127 vs 133 components — noise-band.
+- **Rank by the component channel.** The pair counts are
+  LEADING-sensitive: EQ0170 matches the scan line for line (312 vs
+  318 components) yet reads 55 vs 161 stacked, because the scan's
+  tighter leading slips under the 1.5x gap bound. Components are the
+  channel that survived every scale test, and the ranking below is
+  theirs.
+- Component Δ over 333 rows: **0 for 71 rows, ≤2 for 185, >10 for
+  23.** The head of the list, each confirmed by eye:
+  - **EQ0123 (Δ388), EQ0082 (Δ195)** — the report has `--- & ---`:
+    NO MathPix LaTeX exists for these two display equations. The
+    1-component "rendered" cell is the em-dash placeholder.
+  - **EQ0105 (Δ69)** — a real conversion error: the rendered version
+    drops the display's entire middle line (the ∞ bounds, two
+    bracketed matrices, the λ̄ x (1 + sp²Q̄ x ()) factor) and misreads
+    −+/μν as −μ/−μ.
+  - **EQ0273 (Δ50), EQ0131 (Δ37)** — next candidates, not yet
+    inspected.
+
 ### I5 — the stacked count was measuring line spacing
 
 `pair_stats` gains the bound: a stacked pair's vertical gap must be
