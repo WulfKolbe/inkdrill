@@ -902,7 +902,7 @@ def free_rules(mask, *, pt: float, regions=None) -> list[dict]:
 
 
 def page_record(*, page: int, width_px: int, height_px: int, dpi,
-                lines=(), rules=()) -> dict:
+                lines=(), rules=(), polarity=None) -> dict:
     """One page, with every coordinate in pt (G1, G2).
 
     `ink.rules` holds rules no emitted object encloses -- the booktabs
@@ -916,8 +916,18 @@ def page_record(*, page: int, width_px: int, height_px: int, dpi,
     rec = {"page": page, "image_id": None,
            "page_width": width_px * pt, "page_height": height_px * pt,
            "lines": list(lines)}
+    ink = {}
     if rules:
-        rec["ink"] = {"rules": list(rules)}
+        ink["rules"] = list(rules)
+    if polarity is not None:
+        # `page["ink"]["polarity"]` -- present ONLY when the page was
+        # read light-on-dark, absent for the print convention. A
+        # consumer that maps coordinates back to the source image needs
+        # to know the mask was inverted; the contract-gap lesson says
+        # name the key, so: page["ink"]["polarity"] == "light-on-dark".
+        ink["polarity"] = polarity
+    if ink:
+        rec["ink"] = ink
     return rec
 
 

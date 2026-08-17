@@ -21,7 +21,26 @@ import argparse
 import json
 import pathlib
 import sys
+
+from .raster import looks_inverted
 import time
+
+
+def _apply_polarity(args, mask, reload_light):
+    """The guard. `auto` flips a page the cut calls inverted; a forced
+    `--ink` is never second-guessed -- never guess also means never
+    overrule a statement."""
+    if args.ink == "light":
+        return mask, "light-on-dark"
+    if args.ink == "dark":
+        return mask, None
+    if looks_inverted(mask):
+        frac = mask.ink_count / (mask.width * mask.height)
+        print(f"polarity: {frac:.0%} of the page is dark at this "
+              f"threshold; reading as light-on-dark (--ink dark to "
+              f"override)", file=sys.stderr)
+        return reload_light(), "light-on-dark"
+    return mask, None
 
 
 def main(argv=None) -> int:
@@ -41,6 +60,15 @@ def main(argv=None) -> int:
     ap.add_argument("--page-number", type=int, default=1)
     ap.add_argument("--tol", type=float, default=2.0,
                     help="cell-lattice clustering tolerance, px")
+    ap.add_argument("--ink", choices=("auto", "dark", "light"),
+                    default="auto",
+                    help="which tone is ink. `dark` is the print "
+                         "convention, `light` a slide/chalkboard. "
+                         "`auto` measures: a page whose dark fraction "
+                         "exceeds half is read as light-on-dark, "
+                         "because no measured document page comes "
+                         "near that and every measured inverted frame "
+                         "exceeds it.")
     ap.add_argument("--glyphs", action="store_true",
                     help="also emit one `glyph` line per ink component -- "
                          "bbox, area, holes and principal axis, with no "
@@ -93,7 +121,12 @@ def main(argv=None) -> int:
                      "record it, and guessing is wrong by 0.071 pt on the "
                      "e12s39 fixture")
         from .pnmio import load_mask
-        mask = load_mask(args.page, dpi=args.dpi, threshold=args.threshold)
+        mask = load_mask(args.page, dpi=args.dpi, threshold=args.threshold,
+                         ink_is_dark=args.ink != "light")
+        mask, polarity = _apply_polarity(
+            args, mask, lambda: load_mask(args.page, dpi=args.dpi,
+                                          threshold=args.threshold,
+                                          ink_is_dark=False))
         dpi = (args.dpi, args.dpi)
     elif suffix == ".png":
         from .pngio import load_mask, read_png
@@ -114,7 +147,12 @@ def main(argv=None) -> int:
                      f"--dpi is required. Guessing 72, or deriving it from "
                      f"a nominal page size, is wrong by 0.071 pt on the "
                      f"e12s39 fixture")
-        mask = load_mask(args.page, threshold=args.threshold)
+        mask = load_mask(args.page, threshold=args.threshold,
+                         ink_is_dark=args.ink != "light")
+        mask, polarity = _apply_polarity(
+            args, mask, lambda: load_mask(args.page,
+                                          threshold=args.threshold,
+                                          ink_is_dark=False))
         dpi = img.dpi if declared else (args.dpi, args.dpi)
     else:
         ap.error(f"unsupported input {suffix!r}; this reads .png (png16m) "
@@ -127,6 +165,7 @@ def main(argv=None) -> int:
     doc = lines_json([page_record(page=args.page_number,
                                   width_px=mask.width,
                                   height_px=mask.height, dpi=dpi,
+                                  polarity=polarity,
                                   lines=lines,
                                   rules=free_rules(mask, pt=pt))],
                      render_dpi=dpi[0])

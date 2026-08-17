@@ -1151,3 +1151,40 @@ class T1_12_FreeRules(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class T1_13_PolarityGuard(unittest.TestCase):
+    """The ink-fraction polarity guard (CLI level, function here).
+
+    The failure it prevents is not an exception but a confident wrong
+    STRUCTURE: on a chalkboard video frame the dark board becomes one
+    component with 250 holes and page_lines emits a table with 121
+    cells -- the letter counters as a cell lattice. The cut is 0.5:
+    the densest measured legitimate pages are ~8% ink (figure-heavy
+    Infineon scans) and every measured inverted frame is 68-100%.
+    """
+
+    def test_a_mostly_dark_page_reads_inverted(self):
+        from inkdrill.raster import looks_inverted
+        dark = InkMask(b"\xff" * 70 + b"\x00" * 30, 10, 10)
+        self.assertTrue(looks_inverted(dark))
+
+    def test_a_normal_page_does_NOT(self):
+        """Both sides. A dense figure page at 40% must not flip --
+        flipping a legitimate page is the same failure in the other
+        direction."""
+        from inkdrill.raster import looks_inverted
+        page = InkMask(b"\xff" * 40 + b"\x00" * 60, 10, 10)
+        self.assertFalse(looks_inverted(page))
+
+    def test_the_record_carries_the_polarity_key_only_when_flipped(self):
+        """`page["ink"]["polarity"]` -- named, per the contract-gap
+        lesson. Present only for light-on-dark; absent for the print
+        convention, where it would restate the default on every page."""
+        rec = page_record(page=1, width_px=10, height_px=10,
+                          dpi=(400.0, 400.0), lines=[],
+                          polarity="light-on-dark")
+        self.assertEqual(rec["ink"]["polarity"], "light-on-dark")
+        rec2 = page_record(page=1, width_px=10, height_px=10,
+                           dpi=(400.0, 400.0), lines=[])
+        self.assertNotIn("ink", rec2)

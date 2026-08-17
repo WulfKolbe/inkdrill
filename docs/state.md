@@ -1004,6 +1004,44 @@ and the unpadding.
 `load_mask` is now the dominant cost at 8–11 s — the PNG decode, which
 is the already-recorded 85–95% and the reason the PNM route exists.
 
+### The polarity guard — measured cut, one definition, three levels
+
+A 720p chalkboard video frame read at the default polarity becomes one
+component with 250 holes, and `page_lines` emits **a table with 121
+cells** — the letter counters as a cell lattice. Confidently wrong,
+nothing raises. The edge-case folder that exposed it also came with
+Tesseract sandwich PDFs, and the cross-check on those is the project's
+purpose statement working: scene 246, **86% of the ink unclaimed or
+straddling** Tesseract's boxes; scene 249, **Tesseract's text layer
+empty** against 197 real components.
+
+**The cut is measured and sits in a wide gap.** Document pages run
+≤ ~10% ink at threshold 128 (densest observed: figure-heavy scans
+7.7–9.8%); known light-on-dark frames run 68–100% dark. Half is
+mid-gap and also the semantic line — a page with more ink than
+background is not a page. And the corpus sample itself surfaced an
+inverted page (`locdfbfa3ed9e0_slides` p167 at **94.5%**): inverted
+input is already in the library, not exotic.
+
+**One definition, `raster.looks_inverted`** (the two-copies drift was
+caught the day it appeared), used at three levels:
+
+- `load_mask(..., ink_is_dark="auto")` in BOTH readers (T11) — opt-in,
+  never the default: a silent flip would re-polarity every measurement
+  harness. On the slide fixture: ink ≤ 20% and MORE components than
+  the unflipped read (3 marks vs 1 board).
+- the CLI: `--ink auto|dark|light`, auto flips with a stderr note; a
+  forced value is never second-guessed (never guess includes never
+  overruling a statement).
+- the file: `page["ink"]["polarity"] == "light-on-dark"`, present only
+  when flipped — the key named in the contract, per the contract-gap
+  lesson.
+
+Scene 249 through the guarded CLI: flips at 90%, emits 84 glyphs +
+blocks instead of a phantom cell lattice. e12s39 does not flip and
+carries no key. Five mutants (cut inverted, zeroed, moved, auto-never,
+auto-always), all killed.
+
 ### `typeface.py` — weight, slant, serifs, outline faces (T6–T10)
 
 Four signals, every premise measured before its test was written:

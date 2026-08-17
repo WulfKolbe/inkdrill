@@ -265,13 +265,14 @@ def load_masks(src, *, dpi=None, threshold: int = 128,
 
 
 def load_mask(src, *, dpi=None, threshold: int = 128,
-              ink_is_dark: bool = True) -> InkMask:
+              ink_is_dark: bool | str = True) -> InkMask:
     """A PGM straight to an `InkMask` (G6).
 
-    Mirrors `pngio.load_mask`, and binarizes through U2 rather than
-    duplicating it -- so the two routes cannot drift on the threshold or
-    on the `0xFF`/`0x00` encoding.
+    Mirrors `pngio.load_mask` -- including `ink_is_dark="auto"`, whose
+    cut lives in ONE place (`pngio._auto_binarize`) so the two routes
+    cannot drift on it, exactly as they cannot drift on the threshold.
     """
+    from .pngio import _auto_binarize
     img = read_pnm(src, dpi=dpi)
-    return binarize(img.gray, img.width, img.height,
-                    threshold=threshold, ink_is_dark=ink_is_dark)
+    return _auto_binarize(img.gray, img.width, img.height,
+                          threshold, ink_is_dark)

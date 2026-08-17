@@ -189,3 +189,58 @@ class T0b_9_ConcatenatedStream(unittest.TestCase):
         raw = self._pgm(4, 3, 0) + self._pgm(4, 3, 255)
         got = list(load_masks(raw, dpi=400, threshold=128))
         self.assertEqual([m.ink_count for m in got], [12, 0])
+
+
+class T0b_10_AutoPolarity(unittest.TestCase):
+    """`ink_is_dark="auto"` (T11): binarize dark-as-ink; more ink than
+    background flips. Opt-in, never the default -- a silent flip under
+    an existing caller would re-polarity every measurement harness.
+    """
+
+    @staticmethod
+    def _slide():
+        """Light-on-dark: three white marks on a dark ground -- the
+        chalkboard shape, where the dark board is one component and the
+        marks are many."""
+        W, H = 30, 12
+        g = bytearray([20] * (W * H))              # dark ground
+        for x0 in (4, 14, 24):
+            for y in range(3, 9):
+                for x in range(x0, x0 + 4):
+                    g[y * W + x] = 240             # light marks
+        return bytes(b"P5\n30 12\n255\n") + bytes(g)
+
+    def test_a_slide_flips_ink_below_20pc_and_MORE_components(self):
+        from inkdrill.sweep import Capture, sweep
+        unflipped = load_mask(self._slide(), dpi=72, threshold=128)
+        auto = load_mask(self._slide(), dpi=72, threshold=128,
+                         ink_is_dark="auto")
+        frac = auto.ink_count / (auto.width * auto.height)
+        self.assertLessEqual(frac, 0.20)
+        n_auto = len(sweep(auto, conn=8).components)
+        n_raw = len(sweep(unflipped, conn=8).components)
+        self.assertGreater(n_auto, n_raw)
+        self.assertEqual(n_auto, 3)
+
+    def test_a_normal_page_is_byte_identical_under_auto(self):
+        """The accepting side: auto must be a no-op on the print
+        convention, or every harness that adopts it drifts."""
+        page = bytes(b"P5\n10 6\n255\n") + bytes(
+            [20 if i % 7 == 0 else 240 for i in range(60)])
+        self.assertEqual(load_mask(page, dpi=72, threshold=128,
+                                   ink_is_dark="auto"),
+                         load_mask(page, dpi=72, threshold=128))
+
+    def test_the_png_route_shares_the_same_cut(self):
+        """One definition (raster.looks_inverted); the PNG reader must
+        flip on the same fixture the PNM reader flips on."""
+        from tests.test_pngio import build_png
+        from inkdrill.pngio import load_mask as png_load
+        rows = [[(20, 20, 20)] * 30 for _ in range(12)]
+        for x0 in (4, 14, 24):
+            for y in range(3, 9):
+                for x in range(x0, x0 + 4):
+                    rows[y][x] = (240, 240, 240)
+        png = build_png(rows)
+        auto = png_load(png, threshold=128, ink_is_dark="auto")
+        self.assertLessEqual(auto.ink_count / (30 * 12), 0.20)

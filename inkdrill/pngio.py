@@ -61,7 +61,7 @@ from dataclasses import dataclass
 from itertools import accumulate
 from typing import Iterator
 
-from .raster import InkMask, binarize
+from .raster import InkMask, binarize, looks_inverted
 
 __all__ = ["CorruptPNG", "UnsupportedPNG", "PngImage", "read_png", "load_mask"]
 
@@ -357,9 +357,32 @@ def read_png(src: bytes | bytearray | str | os.PathLike) -> PngImage:
 
 
 def load_mask(src: bytes | bytearray | str | os.PathLike, *,
-              threshold: int = 128, ink_is_dark: bool = True) -> InkMask:
+              threshold: int = 128,
+              ink_is_dark: bool | str = True) -> InkMask:
     """read_png then U2's binarize. The only place this unit crosses into
-    mask space, and it does so by calling U2 rather than duplicating it."""
+    mask space, and it does so by calling U2 rather than duplicating it.
+
+    `ink_is_dark="auto"` detects polarity: binarize dark-as-ink, and if
+    ink exceeds half the page, flip. The cut is measured, not chosen --
+    the densest legitimate pages observed are ~8-15% ink while
+    light-on-dark video frames run 68-100% dark -- and no page has more
+    ink than background. "auto" is OPT-IN, never the default: flipping
+    silently under an existing caller would re-polarity every measurement
+    harness in the repository.
+    """
     img = read_png(src)
-    return binarize(img.gray, img.width, img.height,
+    return _auto_binarize(img.gray, img.width, img.height,
+                          threshold, ink_is_dark)
+
+
+def _auto_binarize(gray, width, height, threshold, ink_is_dark):
+    """Shared by the PNG and PNM readers, so the cut lives once."""
+    if ink_is_dark == "auto":
+        m = binarize(gray, width, height, threshold=threshold,
+                     ink_is_dark=True)
+        if looks_inverted(m):
+            return binarize(gray, width, height, threshold=threshold,
+                            ink_is_dark=False)
+        return m
+    return binarize(gray, width, height,
                     threshold=threshold, ink_is_dark=ink_is_dark)

@@ -49,7 +49,7 @@ from __future__ import annotations
 
 from typing import Iterable, Iterator, NamedTuple
 
-__all__ = ["InkMask", "Run", "Rect", "AXES", "binarize", "iter_runs",
+__all__ = ["InkMask", "Run", "Rect", "AXES", "binarize", "looks_inverted", "iter_runs",
            "InvalidAxis"]
 
 INK = 0xFF
@@ -291,6 +291,19 @@ _INVERT = bytes(BG if v == INK else INK for v in range(256))
 # --------------------------------------------------------------------------
 # Binarization
 # --------------------------------------------------------------------------
+
+def looks_inverted(mask: "InkMask") -> bool:
+    """More ink than background: a light-on-dark read of a dark-on-light
+    rule, or vice versa. The ONE definition of the polarity cut.
+
+    Measured populations: the densest legitimate document pages are
+    ~8-15% ink (figure-heavy scans), known light-on-dark video frames
+    68-100% dark at the same threshold. Half is mid-gap and also the
+    semantic line -- a page with more ink than background is not a
+    page. The fraction is normalised, so dpi cannot retune it.
+    """
+    return mask.ink_count * 2 > mask.width * mask.height
+
 
 def binarize(gray, width: int, height: int, *, threshold: int = 128,
              ink_is_dark: bool = True) -> InkMask:
