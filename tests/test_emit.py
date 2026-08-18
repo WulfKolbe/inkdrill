@@ -1297,6 +1297,53 @@ class T1_14_CompareCLI(unittest.TestCase):
         # row 0's R column: exactly its own 1 blob
         self.assertEqual(rows[0][8], "1", rows[0])
 
+    def test_table_debug_marks_the_fragmented_cell(self):
+        """T28: the broken-rule page has exactly one lattice slot with
+        no conforming hole (the two merged cells yield ONE hole, which
+        backs one slot); --table-debug must mark it MEDIAN-FILLED and
+        count it, with every per-cell line carrying components, holes
+        and chi."""
+        import io, re, tempfile, pathlib as pl
+        from contextlib import redirect_stdout, redirect_stderr
+        from tests.test_pngio import build_png
+        from inkdrill.__main__ import main
+        g = [list(r) for r in
+             [[(255, 255, 255)] * 260 for _ in range(160)]]
+
+        def box(x0, y0, x1, y1, v=(0, 0, 0)):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    g[y][x] = v
+        for x in (0, 64, 128, 192):
+            box(x, 0, x + 2, 160)
+        box(254, 0, 256, 160)
+        for y in (0, 52, 104):
+            box(0, y, 256, y + 2)
+        box(0, 156, 256, 158)
+        for r in range(3):
+            box(20, 14 + r * 52, 40, 30 + r * 52)
+        box(200, 52, 240, 54, (255, 255, 255))    # rule overprinted
+        box(80, 115, 100, 135)                    # ring in cell (2,1):
+        box(85, 120, 95, 130, (255, 255, 255))    # 1 comp, 1 hole, chi 0
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(build_png(g))
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            rc = main(["compare", str(tmp / "A.png"), str(tmp / "A.png"),
+                       "--threshold", "128", "--tol", "6",
+                       "--table-debug"])
+        self.assertEqual(rc, 0)
+        text = err.getvalue()
+        self.assertIn("lattice 3 rows x 4 cols", text)
+        self.assertIn("11 hole-backed, 1 median-filled", text)
+        filled = re.findall(r"cell \((\d),(\d)\) MEDIAN-FILLED", text)
+        self.assertEqual(len(filled), 2)          # once per input A/B
+        self.assertEqual(filled[0][1], "3")       # last column
+        self.assertRegex(
+            text, r"MEDIAN-FILLED: components \d+ holes \d+ chi -?\d+")
+        self.assertIn("cell (2,1) hole-backed: components 1 holes 1 "
+                      "chi 0", text)
+
     def test_a_page_without_a_table_is_an_error_not_a_guess(self):
         import tempfile, pathlib as pl
         from tests.test_pngio import build_png

@@ -36,14 +36,19 @@ def _cell_crop(mask, x0, y0, x1, y1):
     return InkMask(bytes(buf), w, h)
 
 
-def _table_cells(mask, tol):
+def _table_cells(mask, tol, debug=None):
     """The page's table as {(row, col): hole bbox}. The table is the
     ink region with the most holes. A lattice slot whose hole is
     FRAGMENTED (cell content touching a rule splits the background
     region, so no single hole matches the cell) is filled from the
     intersection of its row's y-span and its column's x-span -- on the
     bh2 report page 1, two of eight scan cells were lost exactly this
-    way before the fill existed."""
+    way before the fill existed.
+
+    `debug` (T28), when a dict, receives `holes` (hole count of the
+    table region), `shape` (nrows, ncols) and `backed` (the lattice
+    slots a conforming hole was assigned to; every other emitted slot
+    exists only because the median spans say so)."""
     from .emit import cell_grid
     from .nest import nest
     n = nest(mask)
@@ -75,6 +80,10 @@ def _table_cells(mask, tol):
     rowy = {r: (median(cells[k][1] for k in cells if k[0] == r),
                 median(cells[k][3] for k in cells if k[0] == r))
             for r in range(nrows)}
+    if debug is not None:
+        debug["holes"] = len(holes)
+        debug["shape"] = (nrows, ncols)
+        debug["backed"] = set(cells)
     return {(r, c): (int(colx[c][0]), int(rowy[r][0]),
                      int(colx[c][1]), int(rowy[r][1]))
             for r in range(nrows) for c in range(ncols)}
@@ -184,6 +193,8 @@ def cmd_compare(argv) -> int:
     ap.add_argument("--cols", type=int, nargs=2, default=None,
                     help="the two columns to compare (default: last two)")
     ap.add_argument("--page-number", type=int, default=1)
+    ap.add_argument("--table-debug", action="store_true",
+                    help="dump lattice + per-cell stats to stderr")
     ap.add_argument("-o", "--out", type=pathlib.Path)
     args = ap.parse_args(argv)
 
@@ -197,12 +208,37 @@ def cmd_compare(argv) -> int:
                          args.threshold)[0]
 
     masks = {"A": load(args.a), "B": load(args.b)}
-    cells = {k: _table_cells(m, args.tol) for k, m in masks.items()}
+    dbg = {k: {} for k in masks} if args.table_debug else \
+        {k: None for k in masks}
+    cells = {k: _table_cells(m, args.tol, debug=dbg[k])
+             for k, m in masks.items()}
     for k, c in cells.items():
         if c is None:
             print(f"{k}: no table found (no ink region with >= 2 holes)",
                   file=sys.stderr)
             return 1
+    if args.table_debug:
+        from .nest import ink_only
+        for k in masks:
+            d = dbg[k]
+            nr, nc = d["shape"]
+            print(f"{k}: table region holes {d['holes']}, "
+                  f"lattice {nr} rows x {nc} cols, "
+                  f"{len(d['backed'])} hole-backed, "
+                  f"{nr * nc - len(d['backed'])} median-filled",
+                  file=sys.stderr)
+            for r in range(nr):
+                for c in range(nc):
+                    b = cells[k][(r, c)]
+                    ik = ink_only(_cell_crop(masks[k], b[0], b[1],
+                                             b[2] - 1, b[3] - 1))
+                    comps = len(ik.regions)
+                    hs = sum(ik.cycles)
+                    src = ("hole-backed" if (r, c) in d["backed"]
+                           else "MEDIAN-FILLED")
+                    print(f"{k} cell ({r},{c}) {src}: "
+                          f"components {comps} holes {hs} "
+                          f"chi {comps - hs}", file=sys.stderr)
     nrows = {k: max(r for r, _ in c) + 1 for k, c in cells.items()}
     ncols = {k: max(cc for _, cc in c) + 1 for k, c in cells.items()}
     if nrows["A"] != nrows["B"]:

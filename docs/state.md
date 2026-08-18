@@ -1057,6 +1057,18 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### T28 — `--table-debug` on the compare table path
+
+`compare ... --table-debug` dumps to stderr, per input: the table
+region's hole count, the lattice shape, and per cell its components,
+holes and chi — each slot marked **hole-backed** (a conforming hole
+was assigned to it) or **MEDIAN-FILLED** (it exists only because the
+median spans say so; the overprint-merge class). On the broken-rule
+fixture: 11 hole-backed, 1 median-filled, the filled slot in the
+overprinted column. The chi value is pinned by a ring cell
+(components 1, holes 1, chi 0) after the first mutation round showed
+the assertion was format-only — no fixture cell had holes.
+
 ### T27 — `python3 -m inkdrill template --font f.pfb --glyph name`
 
 The U9 chain from the shell: `type1.load` (a file, never a search) →
