@@ -80,6 +80,95 @@ def _table_cells(mask, tol):
             for r in range(nrows) for c in range(ncols)}
 
 
+def component_topology(mask):
+    """Per ink component: identity, geometry, and every topological
+    channel the units provide (T24). Read-only -- shares nothing with
+    the emit path.
+
+    `id` is `Component.root` (the ONE identity; `nodes[0]` is not it).
+    `holes` is the sweep's cycle rank; chi = 1 - holes for a single
+    component. Events are attributed via `component_of`. The Reeb
+    6-tuple and the termini 4-tuple are computed on a crop painted
+    from the component's OWN runs, so a neighbour overlapping the
+    bbox cannot leak in. `principal_axis` is a unit vector -- the
+    core stores no angles.
+    """
+    from .aggregate import moments_per_component
+    from .raster import InkMask
+    from .reeb import graph_of, signature
+    from .sweep import Capture, sweep, termini
+
+    res = sweep(mask, axis="row", conn=8, capture=Capture.GRAPH)
+    moms = moments_per_component(res)
+    ev = {}
+    for e in res.events:
+        root = res.component_of(e.node).root
+        ev.setdefault(root, {})[e.kind.value] =             ev.setdefault(root, {}).get(e.kind.value, 0) + 1
+    out = []
+    for comp in res.components:
+        m = moms[comp.root]
+        x0, y0, x1, y1 = m.x0, m.y0, m.x1, m.y1
+        w, h = x1 - x0 + 1, y1 - y0 + 1
+        buf = bytearray(w * h)
+        for nid in comp.nodes:
+            n = res.nodes[nid]
+            row = n.line - y0
+            buf[row * w + n.lo - x0:row * w + n.hi - x0 + 1] =                 b"\xff" * (n.hi - n.lo + 1)
+        crop = InkMask(bytes(buf), w, h)
+        rt = termini(sweep(crop, axis="row", conn=8,
+                           capture=Capture.GRAPH))
+        ct = termini(sweep(crop, axis="col", conn=8,
+                           capture=Capture.GRAPH))
+        sig = signature(graph_of(crop))
+        out.append({
+            "id": comp.root,
+            "bbox": [x0, y0, x1, y1],
+            "area": m.area,
+            "centroid": list(m.centroid),
+            "principal_axis": list(m.principal_axis),
+            "holes": comp.holes,
+            "chi": 1 - comp.holes,
+            "events": ev.get(comp.root, {}),
+            "reeb": list(sig),
+            "termini": [rt[0], rt[1], ct[0], ct[1]],
+        })
+    return out
+
+
+def cmd_topology(argv) -> int:
+    """`topology page.png [--dpi N]` -- the per-component record as
+    JSON (T24). `--dpi` is accepted for parity with the main CLI and
+    recorded; every coordinate here is in PIXELS."""
+    import argparse
+    import json
+    ap = argparse.ArgumentParser(prog="python3 -m inkdrill topology")
+    ap.add_argument("page", type=pathlib.Path)
+    ap.add_argument("--dpi", type=float, default=None)
+    ap.add_argument("--threshold", type=int, default=200)
+    ap.add_argument("-o", "--out", type=pathlib.Path)
+    args = ap.parse_args(argv)
+
+    from .pngio import read_png, auto_mask
+    img = read_png(args.page)
+    mask, flipped = auto_mask(img.gray, img.width, img.height,
+                              args.threshold)
+    doc = {
+        "page": str(args.page),
+        "width": mask.width, "height": mask.height,
+        "dpi": args.dpi if args.dpi else (img.dpi if img.dpi else None),
+        "polarity": "light-on-dark" if flipped else "dark-on-light",
+        "components": component_topology(mask),
+    }
+    text = json.dumps(doc, indent=1) + "\n"
+    if args.out:
+        args.out.write_text(text)
+        print(f"{len(doc['components'])} components -> {args.out}",
+              file=sys.stderr)
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
 def cmd_compare(argv) -> int:
     """`compare A.png B.png` -- per table row, the structural five-tuple
     (components, holes, stacked, centred, offset) of TWO columns,
@@ -226,6 +315,8 @@ def main(argv=None) -> int:
         argv = sys.argv[1:]
     if argv and argv[0] == "compare":
         return cmd_compare(argv[1:])
+    if argv and argv[0] == "topology":
+        return cmd_topology(argv[1:])
     ap = argparse.ArgumentParser(
         prog="python3 -m inkdrill",
         description="A rendered page to a MathPix-shaped lines.json.")

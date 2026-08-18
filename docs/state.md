@@ -1042,6 +1042,23 @@ no scan image, so "compare the last two" does not apply to it.
     migrates out of the exponent. Same 7-line structure, wrong
     indices — the class a human proofreader misses.
 
+### T24/T25 — `python3 -m inkdrill topology page.png`
+
+Read-only per-component record: id (`Component.root`), bbox, area,
+centroid, principal axis (a unit vector — the core stores no
+angles), holes (sweep cycle rank), chi = 1 − holes, the event
+counts, the Reeb 6-tuple and the termini 4-tuple. The Reeb and
+termini channels run on a crop painted from the component's OWN
+runs, so a neighbour inside the bbox cannot leak in — pinned by the
+dot-inside-the-ring test. Synthetic anchors: ring chi 0 / 1 hole,
+blob chi 1 / 0, and the two independent hole routes (sweep cycle
+rank, nest background count) agree on ring, blob and a two-hole
+eight. A mutation round caught the fixtures being too symmetric —
+swapping the col sweep for a second row sweep survived until a U
+(termini [2,1,1,1]) joined them. On the arXiv oracle page: 3564
+components, holes histogram {0: 2401, 1: 1062, 2: 98, 4,8,10: 1
+each}.
+
 ### I5 — the stacked count was measuring line spacing
 
 `pair_stats` gains the bound: a stacked pair's vertical gap must be
