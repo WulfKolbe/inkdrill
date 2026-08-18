@@ -1057,6 +1057,15 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### T27 — `python3 -m inkdrill template --font f.pfb --glyph name`
+
+The U9 chain from the shell: `type1.load` (a file, never a search) →
+`charstring.outline` → `scan.render`, with the mask written as a P5
+PGM (ink black — the polarity `pnmio.load_mask` reads back by
+default, asserted by a round-trip test on cmr10 `o`) and the glyph's
+per-component topology printed to stdout. cmex10 `summationdisplay`
+at 96 px/em: 130×136, one component, 0 holes, termini [2,2,2,3].
+
 ### T24/T25 — `python3 -m inkdrill topology page.png`
 
 Read-only per-component record: id (`Component.root`), bbox, area,

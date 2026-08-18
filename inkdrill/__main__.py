@@ -80,6 +80,49 @@ def _table_cells(mask, tol):
             for r in range(nrows) for c in range(ncols)}
 
 
+def cmd_template(argv) -> int:
+    """`template --font f.pfb --glyph name -o out.pgm` (T27).
+
+    The existing chain, from the shell: `type1.load` (a FILE, never a
+    search) -> `charstring.outline` -> `scan.render`. The mask goes
+    out as a P5 PGM with ink BLACK, which is the polarity
+    `pnmio.load_mask` reads back by default, so a written template
+    round-trips. The glyph's per-component topology prints to stdout
+    so a classification experiment is reproducible from the shell
+    without a driver script.
+    """
+    import argparse
+    import json
+    ap = argparse.ArgumentParser(prog="python3 -m inkdrill template")
+    ap.add_argument("--font", type=pathlib.Path, required=True,
+                    help="path to a Type 1 .pfb/.pfa file")
+    ap.add_argument("--glyph", required=True)
+    ap.add_argument("--px-em", type=float, default=96.0)
+    ap.add_argument("-o", "--out", type=pathlib.Path)
+    args = ap.parse_args(argv)
+
+    from .charstring import outline
+    from .emit import component_topology
+    from .scan import render
+    from .type1 import load
+
+    font = load(args.font)
+    mask, _ = render(outline(font, args.glyph), font.units_per_em,
+                     args.px_em)
+    if args.out:
+        args.out.write_bytes(b"P5\n%d %d\n255\n"
+                             % (mask.width, mask.height)
+                             + bytes(255 - v for v in mask.data))
+        print(f"{mask.width}x{mask.height} -> {args.out}",
+              file=sys.stderr)
+    doc = {"font": args.font.name, "glyph": args.glyph,
+           "px_em": args.px_em,
+           "width": mask.width, "height": mask.height,
+           "components": component_topology(mask)}
+    sys.stdout.write(json.dumps(doc, indent=1) + "\n")
+    return 0
+
+
 def cmd_topology(argv) -> int:
     """`topology page.png [--dpi N]` -- the per-component record as
     JSON (T24). `--dpi` is accepted for parity with the main CLI and
@@ -263,6 +306,8 @@ def main(argv=None) -> int:
         return cmd_compare(argv[1:])
     if argv and argv[0] == "topology":
         return cmd_topology(argv[1:])
+    if argv and argv[0] == "template":
+        return cmd_template(argv[1:])
     ap = argparse.ArgumentParser(
         prog="python3 -m inkdrill",
         description="A rendered page to a MathPix-shaped lines.json.")
