@@ -1,0 +1,180 @@
+{
+ "source": "inkdrill",
+ "ocr": {
+  "units": "pt",
+  "render_dpi": 299.9994,
+  "producer": "inkdrill",
+  "version": "0a5a64850856"
+ },
+ "pages": [
+  {
+   "page": 1,
+   "image_id": null,
+   "page_width": 612.0012240024481,
+   "page_height": 792.0015840031681,
+   "lines": [
+    {
+     "type": "diagram",
+     "region": {
+      "top_left_x": 395.7607915215831,
+      "top_left_y": 103.20020640041281,
+      "width": 103.68020736041473,
+      "height": 103.92020784041569
+     },
+     "text": "",
+     "text_display": "",
+     "cell_row": null,
+     "cell_column": null,
+     "ink": {
+      "region_id": 32,
+      "route": "ink",
+      "fill": 0.05385018390214695,
+      "contains": 143
+     }
+    },
+    {
+     "type": "table",
+     "region": {
+      "top_left_x": 261.36052272104547,
+      "top_left_y": 103.20020640041281,
+      "width": 103.92020784041569,
+      "height": 103.92020784041569
+     },
+     "text": "",
+     "text_display": "",
+     "cell_row": null,
+     "cell_column": null,
+     "ink": {
+      "region_id": 31,
+      "holes": 2,
+      "rows": 2,
+      "columns": 1
+     }
+    },
+    {
+     "type": "simple_cell",
+     "region": {
+      "top_left_x": 262.08052416104834,
+      "top_left_y": 103.92020784041569,
+      "width": 102.48020496040994,
+      "height": 24.48004896009792
+     },
+     "text": "",
+     "text_display": "",
+     "cell_row": 0,
+     "cell_column": 0,
+     "cell_row_span": 1,
+     "cell_col_span": 1
+    },
+    {
+     "type": "simple_cell",
+     "region": {
+      "top_left_x": 262.08052416104834,
+      "top_left_y": 129.84025968051938,
+      "width": 102.48020496040994,
+      "height": 76.56015312030625
+     },
+     "text": "",
+     "text_display": "",
+     "cell_row": 1,
+     "cell_column": 0,
+     "cell_row_span": 1,
+     "cell_col_span": 1
+    },
+    {
+     "type": "table",
+     "region": {
+      "top_left_x": 127.20025440050881,
+      "top_left_y": 103.20020640041281,
+      "width": 103.92020784041569,
+      "height": 103.92020784041569
+     },
+     "text": "",
+     "text_display": "",
+     "cell_row": null,
+     "cell_column": null,
+     "ink": {
+      "region_id": 30,
+      "holes": 2,
+      "rows": 2,
+      "columns": 1
+     }
+    },
+    {
+     "type": "simple_cell",
+     "region": {
+      "top_left_x": 127.9202558405117,
+      "top_left_y": 103.92020784041569,
+      "width": 102.48020496040994,
+      "height": 50.640101280202565
+     },
+     "text": "",
+     "text_display": "",
+     "cell_row": 0,
+     "cell_column": 0,
+     "cell_row_span": 1,
+     "cell_col_span": 1
+    },
+    {
+     "type": "simple_cell",
+     "region": {
+      "top_left_x": 127.9202558405117,
+      "top_left_y": 156.000312000624,
+      "width": 102.48020496040994,
+      "height": 50.400100800201606
+     },
+     "text": "",
+     "text_display": "",
+     "cell_row": 1,
+     "cell_column": 0,
+     "cell_row_span": 1,
+     "cell_col_span": 1
+    }
+   ],
+   "ink": {
+    "rules": [
+     {
+      "x0": 185.0403700807402,
+      "y0": 226.08045216090434,
+      "x1": 189.84037968075938,
+      "y1": 226.3204526409053,
+      "width_pt": 0.24000048000096003,
+      "orient": "h"
+     },
+     {
+      "x0": 319.4406388812778,
+      "y0": 226.08045216090434,
+      "x1": 324.240648481297,
+      "y1": 226.3204526409053,
+      "width_pt": 0.24000048000096003,
+      "orient": "h"
+     },
+     {
+      "x0": 453.60090720181444,
+      "y0": 226.08045216090434,
+      "x1": 458.40091680183366,
+      "y1": 226.3204526409053,
+      "width_pt": 0.24000048000096003,
+      "orient": "h"
+     },
+     {
+      "x0": 354.72070944141893,
+      "y0": 295.2005904011808,
+      "x1": 361.4407228814458,
+      "y1": 295.4405908811818,
+      "width_pt": 0.24000048000096003,
+      "orient": "h"
+     },
+     {
+      "x0": 354.72070944141893,
+      "y0": 297.1205942411885,
+      "x1": 361.4407228814458,
+      "y1": 297.3605947211895,
+      "width_pt": 0.24000048000096003,
+      "orient": "h"
+     }
+    ]
+   }
+  }
+ ]
+}

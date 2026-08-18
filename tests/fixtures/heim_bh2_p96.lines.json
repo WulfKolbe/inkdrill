@@ -1,0 +1,18 @@
+{
+ "source": "inkdrill",
+ "ocr": {
+  "units": "pt",
+  "render_dpi": 299.9994,
+  "producer": "inkdrill",
+  "version": "0a5a64850856"
+ },
+ "pages": [
+  {
+   "page": 1,
+   "image_id": null,
+   "page_width": 418.0808361616724,
+   "page_height": 639.1212782425565,
+   "lines": []
+  }
+ ]
+}
