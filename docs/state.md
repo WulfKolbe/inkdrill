@@ -1031,8 +1031,16 @@ no scan image, so "compare the last two" does not apply to it.
     drops the display's entire middle line (the ∞ bounds, two
     bracketed matrices, the λ̄ x (1 + sp²Q̄ x ()) factor) and misreads
     −+/μν as −μ/−μ.
-  - **EQ0273 (Δ50), EQ0131 (Δ37)** — next candidates, not yet
-    inspected.
+  - **EQ0273 (Δ50)** — a 12-entry particle assignment list; the
+    conversion DROPS three entries — (3)≙(μ⁻), (6)≙(Λ) and the
+    four-symbol (11) — and re-attaches content to the wrong labels:
+    the rendered (5) carries the scan's (3) content, and the
+    π⁺,π⁰,π⁻ triple is gone entirely. Δ50 ≈ the missing glyph mass.
+  - **EQ0131 (Δ37)** — index-level misreads through an otherwise
+    line-for-line conversion: Q loses its s̲ superscript, γ^s̲i
+    becomes γ^s̲ · i/2 (a superscript read as a factor), and the i
+    migrates out of the exponent. Same 7-line structure, wrong
+    indices — the class a human proofreader misses.
 
 ### I5 — the stacked count was measuring line spacing
 
