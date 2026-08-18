@@ -89,6 +89,129 @@ def _table_cells(mask, tol, debug=None):
             for r in range(nrows) for c in range(ncols)}
 
 
+def _page_components(page: pathlib.Path, threshold: int, dpi_key):
+    """The page's components as [(id, x0, y0, x1, y1, area, holes)],
+    through a sidecar cache (T30).
+
+    `locate` over 4,871 formulas must not re-sweep 300 pages 4,871
+    times. The sidecar `<page>.inkcache.json` holds one entry per
+    (threshold, dpi) key -- the page path is the file's own location
+    -- and an entry is valid only while the page's (mtime, size) both
+    match; a re-rendered page invalidates it. Corrupt or unreadable
+    caches are recomputed, never trusted.
+    """
+    import json
+    from .aggregate import moments_per_component
+    from .pngio import read_png, auto_mask
+    from .sweep import Capture, sweep
+
+    side = page.with_name(page.name + ".inkcache.json")
+    key = f"t{threshold}:d{dpi_key}"
+    st = page.stat()
+    try:
+        store = json.loads(side.read_text())
+        e = store.get(key)
+        if e and e["mtime"] == st.st_mtime and e["size"] == st.st_size:
+            return [tuple(c) for c in e["components"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        store = {}
+    if not isinstance(store, dict):
+        store = {}
+
+    img = read_png(page)
+    mask, _ = auto_mask(img.gray, img.width, img.height, threshold)
+    res = sweep(mask, axis="row", conn=8, capture=Capture.GRAPH)
+    moms = moments_per_component(res)
+    comps = [(c.root, moms[c.root].x0, moms[c.root].y0,
+              moms[c.root].x1, moms[c.root].y1, moms[c.root].area,
+              c.holes) for c in res.components]
+    store[key] = {"mtime": st.st_mtime, "size": st.st_size,
+                  "components": [list(c) for c in comps]}
+    try:
+        side.write_text(json.dumps(store))
+    except OSError:
+        pass                       # a read-only page dir still locates
+    return comps
+
+
+def cmd_locate(argv) -> int:
+    """`locate --page P.png --candidate C.png` (T29).
+
+    One page sweep (cached, T30), restricted to text rows; windows of
+    the candidate's component count +-2 slide along each row and are
+    scored by L1 distance over the structural five-tuple (components,
+    holes, stacked, centred, offset) -- `pair_counts` on the cached
+    boxes, the same measurement `compare` makes on pixels. The best
+    window's rectangle is reported in POINTS plus the distance.
+
+    NO MATCH is an explicit answer with exit code 1: when no row
+    holds a window within +-2 components, nothing is returned rather
+    than a best-of-bad -- the gate is the count, and reporting the
+    least-bad wrong window would be a confident wrong answer.
+    """
+    import argparse
+    import collections
+    import json
+    ap = argparse.ArgumentParser(prog="python3 -m inkdrill locate")
+    ap.add_argument("--page", type=pathlib.Path, required=True)
+    ap.add_argument("--candidate", type=pathlib.Path, required=True)
+    ap.add_argument("--threshold", type=int, default=200)
+    ap.add_argument("--dpi", type=float, default=None,
+                    help="points conversion when the page has no pHYs")
+    args = ap.parse_args(argv)
+
+    from .mathstruct import Glyph, pair_counts, pair_stats, rows
+    from .pngio import read_png, auto_mask
+
+    img = read_png(args.candidate)
+    cmask, _ = auto_mask(img.gray, img.width, img.height, args.threshold)
+    cand = pair_stats(cmask)
+    n = cand["components"]
+    cvec = (n, cand["holes"], cand["stacked"], cand["centred"],
+            cand["offset"])
+
+    pimg = read_png(args.page)
+    dpi = (pimg.dpi[0] if pimg.dpi else None) or args.dpi
+    if dpi is None:
+        print("no pHYs in page and no --dpi: points are required",
+              file=sys.stderr)
+        return 2
+    comps = _page_components(args.page, args.threshold,
+                             round(dpi, 3))
+    C = collections.namedtuple("C", "id x0 y0 x1 y1 area holes")
+    comps = [C(*c) for c in comps]
+    by_id = {c.id: c for c in comps}
+
+    best = None
+    for row in rows([Glyph(c.id, float(c.x0), float(c.y0),
+                           float(c.x1), float(c.y1)) for c in comps]):
+        members = sorted((by_id[g.id] for g in row.members),
+                         key=lambda c: (c.x0, c.id))
+        for k in range(max(1, n - 2), n + 3):
+            for i in range(len(members) - k + 1):
+                win = members[i:i + k]
+                st, ce, of = pair_counts(win)
+                vec = (k, sum(c.holes for c in win), st, ce, of)
+                d = sum(abs(a - b) for a, b in zip(vec, cvec))
+                if best is None or d < best[0]:
+                    box = (min(c.x0 for c in win), min(c.y0 for c in win),
+                           max(c.x1 for c in win), max(c.y1 for c in win))
+                    best = (d, box, k)
+    if best is None:
+        print("NO MATCH: no text-row window within +-2 of "
+              f"{n} components")
+        return 1
+    d, (x0, y0, x1, y1), k = best
+    sc = 72.0 / dpi
+    doc = {"rect_pt": [round(x0 * sc, 2), round(y0 * sc, 2),
+                       round((x1 + 1) * sc, 2), round((y1 + 1) * sc, 2)],
+           "rect_px": [x0, y0, x1, y1],
+           "distance": d, "components": k,
+           "candidate": list(cvec)}
+    sys.stdout.write(json.dumps(doc) + "\n")
+    return 0
+
+
 def cmd_template(argv) -> int:
     """`template --font f.pfb --glyph name -o out.pgm` (T27).
 
@@ -344,6 +467,8 @@ def main(argv=None) -> int:
         return cmd_topology(argv[1:])
     if argv and argv[0] == "template":
         return cmd_template(argv[1:])
+    if argv and argv[0] == "locate":
+        return cmd_locate(argv[1:])
     ap = argparse.ArgumentParser(
         prog="python3 -m inkdrill",
         description="A rendered page to a MathPix-shaped lines.json.")

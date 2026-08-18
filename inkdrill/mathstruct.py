@@ -418,15 +418,26 @@ def pair_stats(mask) -> dict:
     bounded reads 8 vs 7, on visually identical content. Bounded is
     also the steadier instrument across dpi (8->9 vs 7->7 at 600).
     """
-    import statistics
-    from .emit import is_rule
     from .nest import ink_only
     ik = ink_only(mask)
-    regs = ik.regions
+    regs = list(ik.regions)
     holes = sum(ik.cycles)
-    rids = {r.id for r in regs
+    stacked, centred, offset = pair_counts(regs)
+    return {"components": len(regs), "holes": holes, "stacked": stacked,
+            "centred": centred, "offset": offset}
+
+
+def pair_counts(comps):
+    """(stacked, centred, offset) over box-like items with id, x0, y0,
+    x1, y1 and area -- the pure-geometry core of `pair_stats`, split
+    out for T29/T30: `locate` runs it on CACHED components with no
+    pixel access, and the two callers sharing one body is what keeps
+    the window score and the compare five-tuple the same measurement.
+    """
+    import statistics
+    from .emit import is_rule
+    rids = {r.id for r in comps
             if is_rule(r) and (r.x1 - r.x0) >= (r.y1 - r.y0)}
-    comps = list(regs)
     med_h = (statistics.median(c.y1 - c.y0 + 1 for c in comps)
              if comps else 0)
     stacked = centred = offset = 0
@@ -457,5 +468,4 @@ def pair_stats(mask) -> dict:
                 centred += 1
             else:
                 offset += 1
-    return {"components": len(regs), "holes": holes, "stacked": stacked,
-            "centred": centred, "offset": offset}
+    return stacked, centred, offset

@@ -1057,6 +1057,25 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### T29/T30 — `locate`, with the page sweep cached
+
+`locate --page P.png --candidate C.png`: one page sweep, text rows
+via `rows()`, windows of the candidate's component count ±2 sliding
+along each row, scored by L1 over the structural five-tuple.
+`pair_stats` split into a pure box-logic core (`pair_counts`) so the
+window score runs on CACHED components — (id, bbox, area, holes) in
+a `<page>.inkcache.json` sidecar keyed by (threshold, dpi),
+validated by the page's (mtime, size) — with no pixel access after
+the first sweep of a page. 4,871 formulas over 300 pages sweep each
+page once. **NO MATCH is explicit** (exit 1) when no row holds a
+window within ±2: the count is the gate, and a best-of-bad would be
+a confident wrong answer. Scope: the five-tuple is order-blind
+along x, so mirrored arrangements tie; rows() bounds a candidate to
+one text row, so multi-line blocks report NO MATCH by construction.
+Cache tests assert BOTH directions (a corrupted cache moves the
+answer; a touched page moves it back), and the dropped points scale
+survived a 72-dpi-only fixture until a 144-dpi pin joined it.
+
 ### T28 — `--table-debug` on the compare table path
 
 `compare ... --table-debug` dumps to stderr, per input: the table
