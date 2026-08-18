@@ -1042,6 +1042,21 @@ no scan image, so "compare the last two" does not apply to it.
     migrates out of the exponent. Same 7-line structure, wrong
     indices — the class a human proofreader misses.
 
+### T26 — `ink.topology` on the `--glyphs` route
+
+Each glyph line's `ink` gains `topology`: {holes, chi, reeb 6-tuple,
+termini 4-tuple} for the CLUSTER, computed by `component_topology`
+on the bbox crop and member-filtered by (bbox, area) — the crop
+keeps neighbouring ink for the classifier by design, and a
+dot-inside-a-ring fixture pins that the neighbour's counts stay out
+of the cluster's record. `topology.holes` (sweep cycle rank) sits
+beside `ink.holes` (nest) deliberately: every emitted line carries
+the two independent hole routes checking each other, and the test
+asserts their equality. The default route does not carry the key,
+and the T23 non-glyph oracle stayed byte-identical; the two glyph
+oracles are re-captured in the same commit, as the oracle's contract
+requires. Classification and structure logic untouched.
+
 ### T24/T25 — `python3 -m inkdrill topology page.png`
 
 Read-only per-component record: id (`Component.root`), bbox, area,

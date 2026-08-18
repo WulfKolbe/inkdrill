@@ -39,7 +39,7 @@ def _blob(W=20, H=16):
 class T24_1_ComponentTopology(unittest.TestCase):
 
     def test_ring_chi_0_one_hole_blob_chi_1_none(self):
-        from inkdrill.__main__ import component_topology
+        from inkdrill.emit import component_topology
         ring, = component_topology(_ring())
         blob, = component_topology(_blob())
         self.assertEqual((ring["holes"], ring["chi"]), (1, 0))
@@ -50,7 +50,7 @@ class T24_1_ComponentTopology(unittest.TestCase):
         shared code. On the ring both must say 1; on the blob 0; and
         on a two-hole figure (8-shape) both must say 2, so agreement
         is not an artifact of small numbers."""
-        from inkdrill.__main__ import component_topology
+        from inkdrill.emit import component_topology
         from inkdrill.nest import nest
         W = 26
         eight = bytearray(W * 46)
@@ -79,7 +79,7 @@ class T24_1_ComponentTopology(unittest.TestCase):
         entry must be 1. Asserted so the crop painting cannot rot into
         bbox cropping: a neighbour painted into the crop would change
         these."""
-        from inkdrill.__main__ import component_topology
+        from inkdrill.emit import component_topology
         ring, = component_topology(_ring())
         self.assertEqual(ring["termini"], [1, 1, 1, 1])
         self.assertEqual(ring["reeb"][1], 1)      # cycles
@@ -88,7 +88,7 @@ class T24_1_ComponentTopology(unittest.TestCase):
         """A dot INSIDE the ring's hole shares the ring's bbox. The
         ring's record must be unchanged by its presence, and the dot
         is its own component."""
-        from inkdrill.__main__ import component_topology
+        from inkdrill.emit import component_topology
         m = _ring()
         buf = bytearray(m.data)
         buf[15 * 30 + 15] = 0xFF          # dot in the hole's centre
@@ -106,7 +106,7 @@ class T24_3_AxisDistinction(unittest.TestCase):
         sweep for a second row sweep survived the first mutation
         round. A U has (top, bottom) = (2, 1) and (left, right) =
         (1, 1): the 4-tuple carries the axis or this fails."""
-        from inkdrill.__main__ import component_topology
+        from inkdrill.emit import component_topology
         W, H = 20, 16
         buf = bytearray(W * H)
         for y in range(2, 14):
@@ -149,3 +149,55 @@ class T24_2_TopologyCLI(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class T26_1_GlyphTopology(unittest.TestCase):
+    """`ink.topology` on the --glyphs route: {holes, chi, reeb,
+    termini} per CLUSTER, member-filtered so foreign ink inside the
+    crop bbox stays out. The default route must not carry the key --
+    that is what keeps the T23 non-glyph oracle byte-identical."""
+
+    @staticmethod
+    def _run(flags):
+        import sys
+        sys.path.insert(0, str(pathlib.Path(__file__).parent))
+        from test_pngio import build_png
+        from inkdrill.__main__ import main
+        g = [[(255, 255, 255)] * 60 for _ in range(40)]
+        for y in range(8, 28):
+            for x in range(10, 30):
+                if not (13 <= y <= 23 and 15 <= x <= 25):
+                    g[y][x] = (0, 0, 0)               # ring
+        g[18][20] = (0, 0, 0)                          # dot in its hole
+        for y in range(10, 26):
+            for x in range(38, 50):
+                g[y][x] = (0, 0, 0)                    # blob
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        (tmp / "p.png").write_bytes(build_png(g))
+        out = tmp / "o.json"
+        rc = main([str(tmp / "p.png"), "--dpi", "96",
+                   "-o", str(out)] + flags)
+        assert rc == 0
+        d = json.loads(out.read_text())
+        pg = d["pages"][0] if "pages" in d else d
+        return pg["lines"]
+
+    def test_glyphs_route_carries_member_filtered_topology(self):
+        lines = self._run(["--glyphs"])
+        topos = {l["ink"]["area"]: l["ink"]["topology"]
+                 for l in lines if l.get("type") == "glyph"}
+        ring = topos[max(topos)]
+        self.assertEqual((ring["holes"], ring["chi"]), (1, 0))
+        # the dot shares the ring's crop; member filtering keeps it out
+        self.assertEqual(ring["termini"], [1, 1, 1, 1])
+        blob = topos[16 * 12]
+        self.assertEqual((blob["holes"], blob["chi"]), (0, 1))
+        # the two hole routes agree inside every emitted line
+        for l in lines:
+            if l.get("type") == "glyph":
+                self.assertEqual(l["ink"]["holes"],
+                                 l["ink"]["topology"]["holes"])
+
+    def test_default_route_carries_no_topology_key(self):
+        for l in self._run([]):
+            self.assertNotIn("topology", l.get("ink", {}))

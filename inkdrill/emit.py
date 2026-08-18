@@ -524,8 +524,63 @@ def _white_lines(mask, pt: float, known, enabled: bool):
     return out
 
 
+def component_topology(mask):
+    """Per ink component: identity, geometry, and every topological
+    channel the units provide (T24). Read-only -- shares nothing with
+    the emit path.
+
+    `id` is `Component.root` (the ONE identity; `nodes[0]` is not it).
+    `holes` is the sweep's cycle rank; chi = 1 - holes for a single
+    component. Events are attributed via `component_of`. The Reeb
+    6-tuple and the termini 4-tuple are computed on a crop painted
+    from the component's OWN runs, so a neighbour overlapping the
+    bbox cannot leak in. `principal_axis` is a unit vector -- the
+    core stores no angles.
+    """
+    from .reeb import graph_of, signature
+    from .sweep import termini
+
+    res = sweep(mask, axis="row", conn=8, capture=Capture.GRAPH)
+    moms = moments_per_component(res)
+    ev = {}
+    for e in res.events:
+        root = res.component_of(e.node).root
+        ev.setdefault(root, {})[e.kind.value] =             ev.setdefault(root, {}).get(e.kind.value, 0) + 1
+    out = []
+    for comp in res.components:
+        m = moms[comp.root]
+        x0, y0, x1, y1 = m.x0, m.y0, m.x1, m.y1
+        w, h = x1 - x0 + 1, y1 - y0 + 1
+        buf = bytearray(w * h)
+        for nid in comp.nodes:
+            n = res.nodes[nid]
+            row = n.line - y0
+            buf[row * w + n.lo - x0:row * w + n.hi - x0 + 1] =                 b"\xff" * (n.hi - n.lo + 1)
+        crop = InkMask(bytes(buf), w, h)
+        rt = termini(sweep(crop, axis="row", conn=8,
+                           capture=Capture.GRAPH))
+        ct = termini(sweep(crop, axis="col", conn=8,
+                           capture=Capture.GRAPH))
+        sig = signature(graph_of(crop))
+        out.append({
+            "id": comp.root,
+            "bbox": [x0, y0, x1, y1],
+            "area": m.area,
+            "centroid": list(m.centroid),
+            "principal_axis": list(m.principal_axis),
+            "holes": comp.holes,
+            "chi": 1 - comp.holes,
+            "events": ev.get(comp.root, {}),
+            "reeb": list(sig),
+            "termini": [rt[0], rt[1], ct[0], ct[1]],
+        })
+    return out
+
+
+
 def glyph_line(region, pt: float, *, holes: int = 0, axis=None,
-               components: int = 1, candidates=None, parts=None) -> dict:
+               components: int = 1, candidates=None, parts=None,
+               topology=None) -> dict:
     """One ink component, described and NOT named (T2).
 
     The blobs exist and nothing emitted them, so a page of text emitted
@@ -560,9 +615,19 @@ def glyph_line(region, pt: float, *, holes: int = 0, axis=None,
     single-component glyph, where it would repeat `region_id` on every
     line of a page. `region_id` is the lowest member id, so it remains
     a stable handle for the glyph as a whole.
+
+    `topology` (T26) is the per-cluster {holes, chi, reeb, termini}
+    from `component_topology`, present only on the `--glyphs` route --
+    the default path is pinned byte-identical by the T23 oracle. Its
+    `holes` comes from the SWEEP cycle rank where the sibling
+    `ink.holes` comes from `nest`; equal values are the two routes
+    checking each other in every emitted line, and a difference is a
+    finding, which is why the duplication is kept.
     """
     ink = {"region_id": region.id, "area": region.area, "holes": holes,
            "components": components}
+    if topology is not None:
+        ink["topology"] = topology
     if parts is not None and len(parts) > 1:
         ink["parts"] = list(parts)
     if axis is not None:
@@ -580,7 +645,7 @@ def glyph_line(region, pt: float, *, holes: int = 0, axis=None,
                  cell_column=None, ink=ink)
 
 
-def _clustered(mask, pairs, pt, classifier, top_k):
+def _clustered(mask, pairs, pt, classifier, top_k, topology=False):
     """Ink regions -> GLYPH lines, one per `group()` cluster (A1).
 
     A glyph is not a component: `i`, `j`, `:` and every umlaut are two
@@ -623,12 +688,44 @@ def _clustered(mask, pairs, pt, classifier, top_k):
                 total = None
                 break
             total = m if total is None else total + m
+        topo = _cluster_topology(mask, box, regs) if topology else None
         out.append((box, glyph_line(
             box, pt, holes=sum(h for _, h in members),
             components=len(regs), parts=sorted(r.id for r in regs),
             axis=total.principal_axis if total is not None else None,
-            candidates=_candidates_for(mask, box, classifier, top_k))))
+            candidates=_candidates_for(mask, box, classifier, top_k),
+            topology=topo)))
     return out
+
+
+def _cluster_topology(mask, box, regs):
+    """The cluster's {holes, chi, reeb, termini} (T26).
+
+    Runs `component_topology` on the bbox crop and keeps ONLY the
+    components whose offset bbox and area match a member region --
+    the crop deliberately contains neighbouring ink (`_crop`'s
+    convention, kept for the classifier), and a neighbour's topology
+    in this cluster's record would be the leak T24's dot-in-a-ring
+    test exists to forbid. Counts add over a disjoint union, so the
+    member sums ARE the cluster values."""
+    want = {}
+    for r in regs:
+        k = (r.x0, r.y0, r.x1, r.y1, r.area)
+        want[k] = want.get(k, 0) + 1
+    holes = chi = 0
+    reeb = [0] * 6
+    term = [0] * 4
+    for c in component_topology(_crop(mask, box)):
+        k = (c["bbox"][0] + box.x0, c["bbox"][1] + box.y0,
+             c["bbox"][2] + box.x0, c["bbox"][3] + box.y0, c["area"])
+        if not want.get(k):
+            continue
+        want[k] -= 1
+        holes += c["holes"]
+        chi += c["chi"]
+        reeb = [a + b for a, b in zip(reeb, c["reeb"])]
+        term = [a + b for a, b in zip(term, c["termini"])]
+    return {"holes": holes, "chi": chi, "reeb": reeb, "termini": term}
 
 
 def _crop(mask, region):
@@ -674,7 +771,8 @@ def _glyphs_only(mask, pairs, pt: float, classifier=None,
     half of `nest` -- and returns the SAME ids, because an ink region's
     identity never depended on that sweep.
     """
-    return [ln for _, ln in _clustered(mask, pairs, pt, classifier, top_k)]
+    return [ln for _, ln in _clustered(mask, pairs, pt, classifier,
+                                       top_k, topology=True)]
 
 
 def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
