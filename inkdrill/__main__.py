@@ -77,16 +77,24 @@ def _table_cells(mask, tol, debug=None):
     colx = {c: (median(cells[k][0] for k in cells if k[1] == c),
                 median(cells[k][2] for k in cells if k[1] == c))
             for c in range(ncols)}
-    # PHANTOM COLUMNS: a tall stroke touching both rules splits a
-    # cell's hole, and the narrow fragment clusters as its own
-    # column -- on 0803.2924's report a 1 mm "column" sat inside the
-    # Rendered column and shifted "last two columns" onto garbage.
-    # The floor is 2% of the table's span: scale-free, far below any
-    # real column (the narrowest, Page, is ~2.8%) and far above a
-    # fragment (~0.2%).
+    # PHANTOM COLUMNS (P15): a tall stroke touching both rules splits
+    # a cell's hole, and the fragment clusters as its own column -- on
+    # 0803.2924's report a 1 mm "column" sat inside the Rendered
+    # column and shifted "last two columns" onto garbage. The DECIDER
+    # is content: a lattice column is real when at least one
+    # glyph-sized ink region (area >= 4 px, both dims >= 2 px) has its
+    # centre inside the column's span within the table -- a fragment
+    # of background contains none. The 2% width floor stays as a
+    # cheap PRE-FILTER only: the measured margin (1.2% phantom vs
+    # 2.8% narrowest real) is 0.8 points either side, too thin to
+    # decide on, and a fragment can be arbitrarily wide (a 4.4% one
+    # existed before the content test did).
     span = max(v[1] for v in colx.values()) - min(v[0] for v in colx.values())
+    ty0, ty1 = best.y0, best.y1
     keep = [c for c in range(ncols)
-            if colx[c][1] - colx[c][0] >= 0.02 * span]
+            if colx[c][1] - colx[c][0] >= 0.02 * span
+            and _column_has_content(n, best, colx[c][0], colx[c][1],
+                                    ty0, ty1)]
     colx = {i: colx[c] for i, c in enumerate(keep)}
     remap = {c: i for i, c in enumerate(keep)}
     cells = {(r, remap[c]): v for (r, c), v in cells.items()
@@ -273,6 +281,23 @@ def cmd_template(argv) -> int:
            "components": component_topology(mask)}
     sys.stdout.write(json.dumps(doc, indent=1) + "\n")
     return 0
+
+
+def _column_has_content(n, table, x0, x1, y0, y1) -> bool:
+    """P15's decider: does any glyph-sized ink region centre inside
+    this column's span within the table? Background fragments hold
+    none. Glyph-sized = area >= 4 px and both dimensions >= 2 px, so
+    isolated dust cannot vouch for a phantom."""
+    for r in n.regions.values():
+        if r.kind.value != "ink" or r.id == table.id:
+            continue
+        if r.area < 4 or r.x1 - r.x0 < 1 or r.y1 - r.y0 < 1:
+            continue
+        cx = (r.x0 + r.x1) / 2
+        cy = (r.y0 + r.y1) / 2
+        if x0 <= cx <= x1 and y0 <= cy <= y1:
+            return True
+    return False
 
 
 def cmd_topology(argv) -> int:

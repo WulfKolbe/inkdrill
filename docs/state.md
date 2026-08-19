@@ -1057,6 +1057,23 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### P15 — content decides a column; width only pre-filters
+
+The 2% floor's measured margin was 1.2% (widest phantom seen in a
+fixture) against 2.8% (narrowest real column) — 0.8 points either
+side, too thin to rest on, and a background fragment can be
+arbitrarily wide. The decider is now CONTENT: a lattice column is
+real when at least one glyph-sized ink region (area ≥ 4 px, both
+dims ≥ 2 px) centres inside its span within the table; a fragment
+holds none. The width floor remains as a short-circuit pre-filter,
+asserted performance-only by a counting spy (a sub-2% fragment is
+dropped without a content lookup). Consequence pinned in two
+fixtures: a WIDE (4.4%) empty fragment is dropped, and a genuinely
+empty real column is dropped too — under this definition the two
+are indistinguishable, which is recorded rather than hidden (the
+T28 fixture gained content in every column for exactly that
+reason).
+
 ### Phantom sliver columns — the vertical analogue of sliver rows
 
 On 0803.2924's regenerated report a tall stroke touching both rules

@@ -1325,6 +1325,12 @@ class T1_14_CompareCLI(unittest.TestCase):
         box(200, 52, 240, 54, (255, 255, 255))    # rule overprinted
         box(80, 115, 100, 135)                    # ring in cell (2,1):
         box(85, 120, 95, 130, (255, 255, 255))    # 1 comp, 1 hole, chi 0
+        box(150, 20, 162, 32)                     # content in col 2 and
+        box(210, 120, 222, 132)                   # col 3 -- P15 drops a
+        #                                           column with NO glyphs,
+        #                                           as a real empty column
+        #                                           is indistinguishable
+        #                                           from a phantom
         tmp = pl.Path(tempfile.mkdtemp())
         (tmp / "A.png").write_bytes(build_png(g))
         err = io.StringIO()
@@ -1370,6 +1376,7 @@ class T1_14_CompareCLI(unittest.TestCase):
         box(0, 156, W - 6, 158)
         for r in range(3):
             box(30, 14 + r * 52, 60, 30 + r * 52)
+            box(200, 14 + r * 52, 220, 30 + r * 52)
             box(360, 10 + r * 52, 372, 18 + r * 52)
             box(360, 24 + r * 52, 372, 32 + r * 52)    # col2 pair
             box(520, 10 + r * 52, 532, 18 + r * 52)
@@ -1384,6 +1391,84 @@ class T1_14_CompareCLI(unittest.TestCase):
         for cells in rows:
             self.assertEqual(cells[3:8], ["2", "0", "1", "1", "0"], cells)
             self.assertEqual(cells[8:13], ["2", "0", "1", "1", "0"], cells)
+
+    def test_a_WIDE_phantom_with_no_content_is_dropped(self):
+        """P15: the width floor is a pre-filter, not the decider -- a
+        background fragment can be arbitrarily wide (this one is 4.4%
+        of the span, above the 2% floor) and only the content test
+        catches it: no glyph-sized region centres inside it."""
+        import tempfile, pathlib as pl
+        from tests.test_pngio import build_png
+        g = [list(r) for r in
+             [[(255, 255, 255)] * 260 for _ in range(160)]]
+
+        def box(x0, y0, x1, y1):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    g[y][x] = (0, 0, 0)
+        for x in (0, 64, 128, 192):
+            box(x, 0, x + 2, 160)
+        box(254, 0, 256, 160)
+        for y in (0, 52, 104):
+            box(0, y, 256, y + 2)
+        box(0, 156, 256, 158)
+        for r in range(3):
+            box(20, 14 + r * 52, 40, 30 + r * 52)
+            box(140, 10 + r * 52, 152, 18 + r * 52)
+            box(140, 24 + r * 52, 152, 32 + r * 52)    # col2 pair
+            box(204, 10 + r * 52, 216, 18 + r * 52)
+            box(204, 24 + r * 52, 216, 32 + r * 52)    # col3 pair
+        box(240, 0, 242, 160)      # stroke in the LAST column: leaves
+        #                            an 11 px (4.4%) EMPTY fragment
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(build_png(g))
+        rows = self._run(tmp / "A.png", tmp / "A.png")
+        self.assertEqual(len(rows), 3)
+        for cells in rows:
+            self.assertEqual(cells[3:8], ["2", "0", "1", "1", "0"], cells)
+            self.assertEqual(cells[8:13], ["2", "0", "1", "1", "0"], cells)
+
+    def test_the_width_prefilter_short_circuits_the_content_test(self):
+        """The 2% floor is performance-only under P15 (the content
+        test alone decides correctly), so it is asserted by counting:
+        a sub-2% fragment must be dropped WITHOUT a content lookup."""
+        import tempfile, pathlib as pl
+        from unittest import mock
+        from tests.test_pngio import build_png
+        import inkdrill.__main__ as M
+        W, H = 700, 160
+        g = [list(r) for r in [[(255, 255, 255)] * W for _ in range(H)]]
+
+        def box(x0, y0, x1, y1):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    g[y][x] = (0, 0, 0)
+        for x in (0, 164, 328, 492):
+            box(x, 0, x + 2, H)
+        box(692, 0, 694, H)
+        for y in (0, 52, 104):
+            box(0, y, W - 6, y + 2)
+        box(0, 156, W - 6, 158)
+        for r in range(3):
+            box(30, 14 + r * 52, 60, 30 + r * 52)
+            box(200, 14 + r * 52, 220, 30 + r * 52)   # col 1 content
+            box(360, 10 + r * 52, 372, 18 + r * 52)
+            box(360, 24 + r * 52, 372, 32 + r * 52)
+            box(520, 10 + r * 52, 532, 18 + r * 52)
+            box(520, 24 + r * 52, 532, 32 + r * 52)
+        box(682, 0, 684, H)                        # 8 px sliver, 1.2%
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(build_png(g))
+        from inkdrill.pngio import read_png, auto_mask
+        img = read_png(tmp / "A.png")
+        m = auto_mask(img.gray, img.width, img.height, 128)[0]
+        with mock.patch.object(M, "_column_has_content",
+                               wraps=M._column_has_content) as spy:
+            cells = M._table_cells(m, 6.0)
+            ncols = max(c for _, c in cells) + 1
+        self.assertEqual(ncols, 4)
+        # 4 surviving columns tested; the sub-2% sliver never was
+        self.assertEqual(spy.call_count, 4)
 
     def test_a_page_without_a_table_is_an_error_not_a_guess(self):
         import tempfile, pathlib as pl
