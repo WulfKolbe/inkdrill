@@ -1344,6 +1344,47 @@ class T1_14_CompareCLI(unittest.TestCase):
         self.assertIn("cell (2,1) hole-backed: components 1 holes 1 "
                       "chi 0", text)
 
+    def test_a_phantom_sliver_column_is_dropped(self):
+        """0803.2924's report: a tall stroke touching both rules split
+        a cell's hole and the 1 mm fragment (0.24% of the table span)
+        clustered as its own column, shifting "last two columns" onto
+        garbage. Columns narrower than 2% of the span are lattice
+        artifacts. Fixture proportions are derived from the measured
+        page (the first version's sliver was 4.4% of the span and sat
+        ABOVE the floor, killing nothing): the stroke leaves an 8 px
+        fragment in a ~690 px table, 1.2%."""
+        import tempfile, pathlib as pl
+        from tests.test_pngio import build_png
+        W, H = 700, 160
+        g = [list(r) for r in [[(255, 255, 255)] * W for _ in range(H)]]
+
+        def box(x0, y0, x1, y1):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    g[y][x] = (0, 0, 0)
+        for x in (0, 164, 328, 492):
+            box(x, 0, x + 2, H)
+        box(692, 0, 694, H)
+        for y in (0, 52, 104):
+            box(0, y, W - 6, y + 2)
+        box(0, 156, W - 6, 158)
+        for r in range(3):
+            box(30, 14 + r * 52, 60, 30 + r * 52)
+            box(360, 10 + r * 52, 372, 18 + r * 52)
+            box(360, 24 + r * 52, 372, 32 + r * 52)    # col2 pair
+            box(520, 10 + r * 52, 532, 18 + r * 52)
+            box(520, 24 + r * 52, 532, 32 + r * 52)    # col3 pair
+        box(682, 0, 684, H)      # stroke in the LAST column: leaves an
+        #                          8 px sliver that must not become the
+        #                          new last column
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(build_png(g))
+        rows = self._run(tmp / "A.png", tmp / "A.png")
+        self.assertEqual(len(rows), 3)
+        for cells in rows:
+            self.assertEqual(cells[3:8], ["2", "0", "1", "1", "0"], cells)
+            self.assertEqual(cells[8:13], ["2", "0", "1", "1", "0"], cells)
+
     def test_a_page_without_a_table_is_an_error_not_a_guess(self):
         import tempfile, pathlib as pl
         from tests.test_pngio import build_png

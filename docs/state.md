@@ -1057,6 +1057,21 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### Phantom sliver columns — the vertical analogue of sliver rows
+
+On 0803.2924's regenerated report a tall stroke touching both rules
+split a cell's hole, and the 1 mm fragment (11 px of a 4,648 px
+table, 0.24%) clustered as its own lattice column INSIDE the
+Rendered column's span — shifting "last two columns" onto garbage.
+`_table_cells` now drops columns narrower than **2% of the table
+span** (scale-free per the normalised-box rule; the narrowest real
+column, Page, is 2.8%) and renumbers rows left empty by the drop.
+The first fixture killed nothing because its sliver was 4.4% of the
+span — proportions must come from the measured page, and the
+committed fixture's are (8 px of ~690, 1.2%). Nine P13 reports had
+probed as 0-display because of exactly this class; they re-enter
+the population with the fix.
+
 ### T29/T30 — `locate`, with the page sweep cached
 
 `locate --page P.png --candidate C.png`: one page sweep, text rows

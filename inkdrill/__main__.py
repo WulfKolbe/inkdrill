@@ -77,6 +77,26 @@ def _table_cells(mask, tol, debug=None):
     colx = {c: (median(cells[k][0] for k in cells if k[1] == c),
                 median(cells[k][2] for k in cells if k[1] == c))
             for c in range(ncols)}
+    # PHANTOM COLUMNS: a tall stroke touching both rules splits a
+    # cell's hole, and the narrow fragment clusters as its own
+    # column -- on 0803.2924's report a 1 mm "column" sat inside the
+    # Rendered column and shifted "last two columns" onto garbage.
+    # The floor is 2% of the table's span: scale-free, far below any
+    # real column (the narrowest, Page, is ~2.8%) and far above a
+    # fragment (~0.2%).
+    span = max(v[1] for v in colx.values()) - min(v[0] for v in colx.values())
+    keep = [c for c in range(ncols)
+            if colx[c][1] - colx[c][0] >= 0.02 * span]
+    colx = {i: colx[c] for i, c in enumerate(keep)}
+    remap = {c: i for i, c in enumerate(keep)}
+    cells = {(r, remap[c]): v for (r, c), v in cells.items()
+             if c in remap}
+    ncols = len(keep)
+    # a row whose only hole sat in a dropped column vanishes with it
+    live = sorted({r for r, _ in cells})
+    rremap = {r: i for i, r in enumerate(live)}
+    cells = {(rremap[r], c): v for (r, c), v in cells.items()}
+    nrows = len(live)
     rowy = {r: (median(cells[k][1] for k in cells if k[0] == r),
                 median(cells[k][3] for k in cells if k[0] == r))
             for r in range(nrows)}
