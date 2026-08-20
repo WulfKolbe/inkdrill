@@ -1057,6 +1057,68 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### S3/S4/S5 — the residual CLI, evidence beside every type, and a floor
+
+**S3 `python3 -m inkdrill residual page.png --regions lines.json
+--region-page N`.** `coverage.check` gets its CLI surface: the four
+classes with their COMPONENT IDS (`inside`, `missed`, `straddle`,
+`overlapping`) plus `empty_region`, and `--png` paints them (grey /
+red / orange / blue) with a stdlib zlib PNG writer. Containment, not
+centres — a component crossing a region edge is `straddle`, a
+finding of its own, never silently counted as covered. A regions
+file that lacks the requested page RAISES: "no regions" and "page
+not in this file" are different findings, and the second reads as
+100% missed ink. First run (0802.3344 p9, 200 dpi): 1,890
+components against 67 regions — 1,265 inside, **625 overlapping**,
+0 missed; the overlap is MathPix's nested table/row/cell regions,
+visible at a glance in the overlay.
+
+Note the flag is `--region-page`, not `--page`: the latter collides
+with the positional page image and argparse silently overwrites the
+path with an int.
+
+**S4 — the type stays, the evidence travels with it.** Every
+`table`, `simple_cell` and `diagram` carries `ink.because`, a list
+of `name value test threshold` facts taken from the branch that
+fired: hole count before and after the cell floor, the floor itself,
+fill, rule widths inside the region, lattice shape, containment
+count. Example from the arXiv oracle page:
+
+    table   ['holes 2 >= 2', 'holes_before_cell_floor 8 >= 2',
+             'cell_floor_px 57 applied_to 8', 'fill 0.0537',
+             'rule_widths_px none', 'lattice 2x1']
+    diagram ['fill 0.0539 < 0.35', 'longest_side_px 433 >= 57',
+             'contains 143 >= 1', 'holes 1 < 2']
+
+The first version printed the RAW hole count on a diagram, so a
+region with ten glyph counters claimed `holes 10 < 2` — a FALSE
+statement in an evidence field, which is worse than no evidence.
+`lattice_holes()` is now the one definition of "holes that pass the
+cell floor", used by the table test and the diagram evidence alike.
+Both oracles re-captured in the same commit, as their contract
+requires.
+
+**S5 — the noise floor, measured before any ranked candidate.**
+Same page, same dpi, two rasterizers (ghostscript vs poppler's
+pdftoppm): every distance they disagree by is instrument noise.
+Over **208 display expressions at 300 dpi**:
+
+| | |
+|---|---|
+| distance zero | 79 of 208 (38%) |
+| median | 1 |
+| p95 | 6 |
+| max | 19 |
+| component delta zero | **205 of 208**, max 2 |
+
+**Nothing below distance 6 is a finding** — the p95 of pure
+rasterizer noise. The component channel is far quieter: 98.6% of
+expressions agree exactly, so a component delta of 1 is already
+near the edge of noise and 2 is its measured ceiling. This retires
+the "soft" flag class as evidence: a soft row (nonzero distance,
+zero component delta) sits inside the noise band by construction.
+`tools/noisefloor.py` re-runs it.
+
 ### P18/P19, Q1–Q5 — the harnesses get rails, and a refuted premise
 
 **P18/Q5 — no harness sweeps a corpus by accident.** `--limit` is

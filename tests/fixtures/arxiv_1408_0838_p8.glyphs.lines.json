@@ -4,7 +4,7 @@
   "units": "pt",
   "render_dpi": 299.9994,
   "producer": "inkdrill",
-  "version": "cb75ee3ec568"
+  "version": "b6ba2920b201"
  },
  "pages": [
   {
@@ -29,7 +29,13 @@
       "region_id": 32,
       "route": "ink",
       "fill": 0.05385018390214695,
-      "contains": 143
+      "contains": 143,
+      "because": [
+       "fill 0.0539 < 0.35",
+       "longest_side_px 433 >= 57",
+       "contains 143 >= 1",
+       "holes 1 < 2"
+      ]
      }
     },
     {
@@ -48,7 +54,15 @@
       "region_id": 31,
       "holes": 2,
       "rows": 2,
-      "columns": 1
+      "columns": 1,
+      "because": [
+       "holes 2 >= 2",
+       "holes_before_cell_floor 8 >= 2",
+       "cell_floor_px 57 applied_to 8",
+       "fill 0.0537",
+       "rule_widths_px none",
+       "lattice 2x1"
+      ]
      }
     },
     {
@@ -64,7 +78,15 @@
      "cell_row": 0,
      "cell_column": 0,
      "cell_row_span": 1,
-     "cell_col_span": 1
+     "cell_col_span": 1,
+     "ink": {
+      "because": [
+       "width_px 427 >= 57",
+       "height_px 102 >= 57",
+       "contains 37",
+       "hole_of_table 31"
+      ]
+     }
     },
     {
      "type": "simple_cell",
@@ -79,7 +101,15 @@
      "cell_row": 1,
      "cell_column": 0,
      "cell_row_span": 1,
-     "cell_col_span": 1
+     "cell_col_span": 1,
+     "ink": {
+      "because": [
+       "width_px 427 >= 57",
+       "height_px 319 >= 57",
+       "contains 89",
+       "hole_of_table 31"
+      ]
+     }
     },
     {
      "type": "table",
@@ -97,7 +127,15 @@
       "region_id": 30,
       "holes": 2,
       "rows": 2,
-      "columns": 1
+      "columns": 1,
+      "because": [
+       "holes 2 >= 2",
+       "holes_before_cell_floor 4 >= 2",
+       "cell_floor_px 57 applied_to 4",
+       "fill 0.0449",
+       "rule_widths_px none",
+       "lattice 2x1"
+      ]
      }
     },
     {
@@ -113,7 +151,15 @@
      "cell_row": 0,
      "cell_column": 0,
      "cell_row_span": 1,
-     "cell_col_span": 1
+     "cell_col_span": 1,
+     "ink": {
+      "because": [
+       "width_px 427 >= 57",
+       "height_px 211 >= 57",
+       "contains 30",
+       "hole_of_table 30"
+      ]
+     }
     },
     {
      "type": "simple_cell",
@@ -128,7 +174,15 @@
      "cell_row": 1,
      "cell_column": 0,
      "cell_row_span": 1,
-     "cell_col_span": 1
+     "cell_col_span": 1,
+     "ink": {
+      "because": [
+       "width_px 427 >= 57",
+       "height_px 210 >= 57",
+       "contains 56",
+       "hole_of_table 30"
+      ]
+     }
     },
     {
      "type": "glyph",

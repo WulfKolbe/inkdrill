@@ -240,6 +240,164 @@ def cmd_locate(argv) -> int:
     return 0
 
 
+def _regions_from_lines_json(path, page, mask_w, mask_h):
+    """MathPix `lines.json` regions for one page, scaled to mask pixels.
+
+    The only region format this reads, and it is read STRICTLY: a page
+    that is absent raises rather than yielding an empty region list,
+    because "no regions" and "page not in this file" are different
+    findings and the second one silently reads as 100% missed ink.
+    """
+    import ast
+    import json
+    from .coverage import Region
+    doc = json.loads(pathlib.Path(path).read_text())
+    pages = {p["page"]: p for p in doc["pages"]}
+    if page not in pages:
+        raise SystemExit(f"{path}: no page {page} "
+                         f"(pages {min(pages)}..{max(pages)})")
+    meta = pages[page]
+    sx = mask_w / meta["page_width"]
+    sy = mask_h / meta["page_height"]
+    out = []
+    for j, ln in enumerate(meta.get("lines", [])):
+        r = ln.get("region")
+        if isinstance(r, str):
+            r = ast.literal_eval(r)
+        if not r:
+            continue
+        out.append(Region(j, r["top_left_x"] * sx, r["top_left_y"] * sy,
+                          (r["top_left_x"] + r["width"]) * sx,
+                          (r["top_left_y"] + r["height"]) * sy,
+                          ln.get("type", "")))
+    return out
+
+
+_RESIDUAL_COLOURS = {
+    "inside": (170, 170, 170),        # ink another tool accounted for
+    "missed": (220, 30, 30),          # ink with NO region -- the finding
+    "straddle": (230, 150, 20),       # ink crossing a region edge
+    "overlapping": (40, 90, 220),     # ink under overlapping regions
+}
+
+
+def _write_png(path, width, height, rgb_rows):
+    """Minimal RGB PNG writer (stdlib zlib only -- no dependency)."""
+    import struct
+    import zlib
+    raw = b"".join(b"\x00" + bytes(row) for row in rgb_rows)
+
+    def chunk(tag, data):
+        c = tag + data
+        return (struct.pack(">I", len(data)) + c
+                + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF))
+    png = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height,
+                                        8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw, 6))
+           + chunk(b"IEND", b""))
+    pathlib.Path(path).write_bytes(png)
+
+
+def cmd_residual(argv) -> int:
+    """`residual page.png --regions lines.json --region-page N` (S3).
+
+    Cross-checks another tool's regions against the real ink and emits
+    the FOUR coverage classes with their component ids -- the residual
+    is the product, so `missed` ink is named component by component
+    rather than summarised into a rate. `--png` paints the same
+    classes so a human can see where the tool stopped looking.
+
+    Containment, not centres: a component crossing a region edge is
+    `straddle`, which is a finding of its own and never silently
+    counted as covered.
+    """
+    import argparse
+    import json
+    ap = argparse.ArgumentParser(prog="python3 -m inkdrill residual")
+    ap.add_argument("page", type=pathlib.Path)
+    ap.add_argument("--regions", type=pathlib.Path, required=True,
+                    help="MathPix lines.json holding the other tool's "
+                         "regions")
+    # NOT --page: that dest collides with the positional page image
+    # and argparse silently overwrites the path with an int
+    ap.add_argument("--region-page", type=int, default=1, dest="rpage",
+                    help="page number WITHIN the regions file")
+    ap.add_argument("--threshold", type=int, default=200)
+    ap.add_argument("--min-pixels", type=int, default=4,
+                    help="speck floor: a 1-px speck reported as missed "
+                         "content is noise the caller must filter anyway")
+    ap.add_argument("--png", type=pathlib.Path,
+                    help="write a coloured overlay of the classes")
+    ap.add_argument("-o", "--out", type=pathlib.Path)
+    args = ap.parse_args(argv)
+
+    from .aggregate import moments_per_component
+    from .coverage import Box, CoverageClass, check
+    from .pngio import auto_mask, read_png
+    from .sweep import Capture, sweep
+
+    img = read_png(args.page)
+    mask, flipped = auto_mask(img.gray, img.width, img.height,
+                              args.threshold)
+    res = sweep(mask, axis="row", conn=8, capture=Capture.GRAPH)
+    moms = moments_per_component(res)
+    boxes = [Box(c.root, moms[c.root].x0, moms[c.root].y0,
+                 moms[c.root].x1, moms[c.root].y1, moms[c.root].area)
+             for c in res.components]
+    # the helper scales with the page dimensions the regions were
+    # measured in, which only it has read
+    regions = _regions_from_lines_json(args.regions, args.rpage,
+                                       mask.width, mask.height)
+
+    rep = check(boxes, regions, min_pixels=args.min_pixels)
+    by = {}
+    for k in CoverageClass:
+        by[k.name.lower()] = sorted(rep.members(k))
+    doc = {
+        "page": str(args.page), "regions_file": str(args.regions),
+        "region_page": args.rpage,
+        "width": mask.width, "height": mask.height,
+        "polarity": "light-on-dark" if flipped else "dark-on-light",
+        "boxes": rep.box_count, "regions": rep.region_count,
+        "classes": {k: len(v) for k, v in by.items()},
+        "missed_pixels": sum(moms[b].area for b in by["missed"]
+                             if b in moms),
+        "members": by,
+    }
+    text = json.dumps(doc, indent=1) + "\n"
+    if args.out:
+        args.out.write_text(text)
+        print(f"{doc['classes']} -> {args.out}", file=sys.stderr)
+    else:
+        sys.stdout.write(text)
+
+    if args.png:
+        klass = {}
+        for name, ids in by.items():
+            if name in _RESIDUAL_COLOURS:
+                for i in ids:
+                    klass[i] = _RESIDUAL_COLOURS[name]
+        owner = {}
+        for comp in res.components:
+            for nid in comp.nodes:
+                owner[nid] = comp.root
+        rows = [bytearray(b"\xff" * (mask.width * 3))
+                for _ in range(mask.height)]
+        for nid, n in enumerate(res.nodes):
+            col = klass.get(owner.get(nid))
+            if col is None:
+                continue
+            row = rows[n.line]
+            for x in range(n.lo, n.hi + 1):
+                row[x * 3:x * 3 + 3] = bytes(col)
+        _write_png(args.png, mask.width, mask.height, rows)
+        print(f"overlay -> {args.png} "
+              f"(grey inside, red missed, orange straddle, blue "
+              f"overlapping)", file=sys.stderr)
+    return 0
+
+
 def cmd_template(argv) -> int:
     """`template --font f.pfb --glyph name -o out.pgm` (T27).
 
@@ -510,6 +668,8 @@ def main(argv=None) -> int:
         return cmd_compare(argv[1:])
     if argv and argv[0] == "topology":
         return cmd_topology(argv[1:])
+    if argv and argv[0] == "residual":
+        return cmd_residual(argv[1:])
     if argv and argv[0] == "template":
         return cmd_template(argv[1:])
     if argv and argv[0] == "locate":

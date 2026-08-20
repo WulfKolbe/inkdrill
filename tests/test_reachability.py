@@ -25,8 +25,6 @@ _PKG = pathlib.Path(__file__).resolve().parents[1] / "inkdrill"
 OFF_THE_CLI_PATH = {
     "band": "the parallel sweep tier; the CLI does one page at a time "
             "and U8's band tier was measured into the ground",
-    "coverage": "cross-checks ANOTHER tool's regions, so it needs that "
-                "tool's output as a second input the CLI does not take",
     "domains": "the Gardenfors design test; an analysis tool for adding "
                "a dimension, not a per-page step",
     "font": "font inventory from a PDF; the CLI reads a raster",
@@ -36,7 +34,6 @@ OFF_THE_CLI_PATH = {
     "rewrite": "the maths layer; consumes `relate` output",
     "sched": "multi-page scheduling; the CLI is serial by design",
     "seam": "curved gutters; measured and not wired into `page_lines`",
-    "space": "affine algebra used by the units above, not by emit",
     "trace": "boundary contours; nothing in lines.json carries a "
              "polygon yet, and the consumer has not asked for one",
     "typeface": "weight/slant/serif signals; measured, and no lines.json "

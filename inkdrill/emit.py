@@ -210,6 +210,46 @@ def text_scale(nesting) -> float:
     return float(hs[len(hs) // 2]) if hs else 0.0
 
 
+def because(*facts) -> list:
+    """The measured facts that produced a semantic type (S4).
+
+    A type without its evidence is an assertion; with it, a consumer
+    can disagree on the threshold without re-deriving the measurement.
+    Each fact is `name value test threshold` -- e.g. `holes 14 >= 2`,
+    `fill 0.06 < 0.35` -- so it reads as a sentence and parses on
+    whitespace. The facts are exactly the quantities the branch
+    tested: change a threshold and this list changes with it, because
+    both come from the same call site.
+    """
+    return [f for f in facts if f]
+
+
+def _fact(name, value, test, threshold) -> str:
+    v = f"{value:.3g}" if isinstance(value, float) else str(value)
+    t = f"{threshold:.3g}" if isinstance(threshold, float) else str(threshold)
+    return f"{name} {v} {test} {t}"
+
+
+def lattice_holes(n, region_id, min_cell: float = 0.0):
+    """(holes passing the cell floor, holes before it).
+
+    ONE definition, because two callers depend on the same quantity:
+    `table_lines` tests it (>= 2 makes a lattice) and `page_lines`
+    reports it as the diagram's evidence. The first version recomputed
+    nothing and the diagram simply printed the RAW hole count, so a
+    region with ten glyph-sized counters emitted `holes 10 < 2` -- a
+    false statement in the evidence field, which is worse than no
+    evidence at all.
+    """
+    holes = [n.regions[h] for h in n.holes_of(region_id)]
+    raw = len(holes)
+    if min_cell > 0.0:
+        holes = [h for h in holes
+                 if (h.x1 - h.x0 + 1) >= min_cell
+                 and (h.y1 - h.y0 + 1) >= min_cell]
+    return holes, raw
+
+
 def table_lines(mask, region_id=None, *, pt: float, tol: float = 0.0,
                 nesting=None, min_cell: float = 0.0):
     """A `table` and its `simple_cell`s from one ink region's holes (G3).
@@ -233,7 +273,7 @@ def table_lines(mask, region_id=None, *, pt: float, tol: float = 0.0,
             f"region {region_id} is {region.kind.value}, not ink; "
             f"`table_lines` takes a nest region id, not a sweep "
             f"component id -- see `ink_regions`")
-    holes = [n.regions[h] for h in n.holes_of(region_id)]
+    holes, n_holes_raw = lattice_holes(n, region_id, min_cell)
     # A CELL IS BIGGER THAN THE TEXT IT CONTAINS; a glyph counter is
     # smaller than the glyph around it. Without this, every `a`, `e` and
     # `o` on a page emits a `simple_cell` -- 1,161 of 1,611 on one real
@@ -245,10 +285,6 @@ def table_lines(mask, region_id=None, *, pt: float, tol: float = 0.0,
     # can be smaller than body text. A cell is the opposite object -- a
     # hole that CONTAINS content -- so it is bounded below by the text
     # inside it. Different object, opposite bound.
-    if min_cell > 0.0:
-        holes = [h for h in holes
-                 if (h.x1 - h.x0 + 1) >= min_cell
-                 and (h.y1 - h.y0 + 1) >= min_cell]
     # A LATTICE, not merely a hole. Every hollow rectangle encloses its
     # interior, so `holes >= 1` would make a plot frame a 1x1 table --
     # which is true and useless, and would hand the consumer a table
@@ -266,15 +302,44 @@ def table_lines(mask, region_id=None, *, pt: float, tol: float = 0.0,
     # equivalence silently.
     rows = max(r + rs for r, _, rs, _ in grid)
     cols = max(c + cs for _, c, _, cs in grid)
+    w = moments.x1 - moments.x0 + 1
+    h = moments.y1 - moments.y0 + 1
+    fill = moments.area / max(1, w * h)
+    rule_w = sorted({min(r.x1 - r.x0 + 1, r.y1 - r.y0 + 1)
+                     for r in n.regions.values()
+                     if r.kind is Kind.INK and is_rule(r)
+                     and r.x0 >= moments.x0 and r.x1 <= moments.x1
+                     and r.y0 >= moments.y0 and r.y1 <= moments.y1})
+    why = because(
+        _fact("holes", len(holes), ">=", 2),
+        _fact("holes_before_cell_floor", n_holes_raw, ">=", len(holes)),
+        _fact("cell_floor_px", min_cell, "applied_to", n_holes_raw)
+        if min_cell > 0.0 else "",
+        f"fill {fill:.3g}",
+        f"rule_widths_px {','.join(map(str, rule_w))}" if rule_w else
+        "rule_widths_px none",
+        f"lattice {rows}x{cols}")
     out = [_line("table", (moments.x0, moments.y0,
                            moments.x1 + 1, moments.y1 + 1), pt,
                  cell_row=None, cell_column=None,
                  ink={"region_id": region_id,
-                      "holes": len(holes), "rows": rows, "columns": cols})]
+                      "holes": len(holes), "rows": rows, "columns": cols,
+                      "because": why})]
     for box, (r, c, rs, cs) in zip(boxes, grid):
+        cw, ch = box[2] - box[0], box[3] - box[1]
+        held = len(n.ink_in_hole(
+            next(hh.id for hh in holes
+                 if (hh.x0, hh.y0) == (box[0], box[1]))))
         out.append(_line("simple_cell", box, pt,
                          cell_row=r, cell_column=c,
-                         cell_row_span=rs, cell_col_span=cs))
+                         cell_row_span=rs, cell_col_span=cs,
+                         ink={"because": because(
+                             _fact("width_px", cw, ">=", min_cell)
+                             if min_cell > 0.0 else f"width_px {cw}",
+                             _fact("height_px", ch, ">=", min_cell)
+                             if min_cell > 0.0 else f"height_px {ch}",
+                             f"contains {held}",
+                             f"hole_of_table {region_id}")}))
     return out
 
 
@@ -325,7 +390,9 @@ def _contains(outer, inner) -> bool:
 
 
 def diagram_line(region, pt: float, *, ground: str | None = None,
-                 contains: int | None = None) -> dict:
+                 contains: int | None = None, max_fill: float | None = None,
+                 min_diagram: float | None = None,
+                 holes: int | None = None) -> dict:
     """A hollow rectangle that is not a table, or a textured region.
 
     `contains` is the number of separate ink components sitting inside
@@ -350,6 +417,21 @@ def diagram_line(region, pt: float, *, ground: str | None = None,
         ink["contains"] = contains
     if ground is not None:
         ink["border_ground"] = ground
+    # S4: the branch's own quantities, so the call can be disagreed
+    # with on the threshold instead of re-derived. `max_fill` and
+    # `min_diagram` are the caller's cuts; passing them makes the
+    # evidence follow a retuned threshold automatically.
+    w = region.x1 - region.x0 + 1
+    h = region.y1 - region.y0 + 1
+    ink["because"] = because(
+        (f"border_ground {ground} is textured" if ground == "textured"
+         else (_fact("fill", ink["fill"], "<", max_fill)
+               if max_fill is not None else f"fill {ink['fill']:.3g}")),
+        (_fact("longest_side_px", max(w, h), ">=", min_diagram)
+         if min_diagram is not None else f"longest_side_px {max(w, h)}"),
+        (_fact("contains", contains, ">=", 1)
+         if contains is not None else ""),
+        (_fact("holes", holes, "<", 2) if holes is not None else ""))
     return _line("diagram", (region.x0, region.y0,
                              region.x1 + 1, region.y1 + 1), pt,
                  cell_row=None, cell_column=None, ink=ink)
@@ -904,8 +986,10 @@ def page_lines(mask, *, pt: float, tol: float = 0.0, grounds=None,
              or region.area / max(1, w * h) < max_fill)
                 and max(w, h) >= min_diagram
                 and (held or not require_content)):
-            out.append((region, [diagram_line(region, pt, ground=ground,
-                                              contains=held)]))
+            out.append((region, [diagram_line(
+                region, pt, ground=ground, contains=held,
+                max_fill=max_fill, min_diagram=min_diagram,
+                holes=len(lattice_holes(n, region.id, min_cell)[0]))]))
 
     if glyphs:
         # One line per CLUSTER, not per component (A1). `_clustered`

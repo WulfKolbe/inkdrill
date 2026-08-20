@@ -1480,3 +1480,103 @@ class T1_14_CompareCLI(unittest.TestCase):
         (tmp / "B.png").write_bytes(blank)
         rc = main(["compare", str(tmp / "A.png"), str(tmp / "B.png")])
         self.assertEqual(rc, 1)
+
+
+class S4_1_EvidenceTravelsWithTheType(unittest.TestCase):
+    """Every semantic type carries the measured facts that produced
+    it. The facts must be TRUE of the branch actually taken -- the
+    first version printed the RAW hole count on a diagram, so a region
+    with ten glyph counters claimed `holes 10 < 2`."""
+
+    @staticmethod
+    def _page():
+        """Dimensions derived from the rule they must satisfy, not
+        chosen: the cell floor is 3x the median component height, so
+        with 14 px content the floor is ~42 px. The page carries all
+        three outcomes -- a table whose cells clear the floor, a
+        hollow frame with ONE hole, and a grid whose nine holes are
+        all BELOW the floor. That last one is what separates the raw
+        hole count from the post-floor count in the evidence."""
+        from tests.test_pngio import build_png
+        g = [[(255, 255, 255)] * 400 for _ in range(440)]
+
+        def box(x0, y0, x1, y1, v=(0, 0, 0)):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    g[y][x] = v
+        # 2x2 table: cells 178x88, well above the floor
+        box(20, 20, 380, 22); box(20, 198, 380, 200)
+        box(20, 20, 22, 200); box(378, 20, 380, 200)
+        box(20, 108, 380, 110); box(198, 20, 200, 200)
+        for cx, cy in ((60, 50), (240, 50), (60, 140), (240, 140)):
+            box(cx, cy, cx + 30, cy + 14)
+        # hollow frame, ONE hole, content inside -> diagram
+        box(20, 230, 380, 232); box(20, 298, 380, 300)
+        box(20, 230, 22, 300); box(378, 230, 380, 300)
+        box(80, 255, 110, 269)
+        # 3x3 grid of 28x28 cells: nine RAW holes, none of them a cell
+        for i in range(4):
+            box(20 + i * 30, 330, 22 + i * 30, 420)
+        for j in range(4):
+            box(20, 330 + j * 30, 112, 332 + j * 30)
+        box(28, 338, 44, 352)      # INSIDE a cell: must not touch a rule
+        return build_png(g)
+
+    def _lines(self):
+        import json, tempfile, pathlib as pl
+        from inkdrill.__main__ import main
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "p.png").write_bytes(self._page())
+        out = tmp / "o.json"
+        self.assertEqual(main([str(tmp / "p.png"), "--dpi", "96",
+                               "-o", str(out)]), 0)
+        d = json.loads(out.read_text())
+        pg = d["pages"][0] if "pages" in d else d
+        return pg["lines"]
+
+    def test_table_cell_and_diagram_each_name_their_facts(self):
+        seen = {}
+        for l in self._lines():
+            seen.setdefault(l["type"], l)
+        for kind in ("table", "simple_cell", "diagram"):
+            self.assertIn(kind, seen, f"{kind} never fired")
+            why = seen[kind]["ink"]["because"]
+            self.assertTrue(why, f"{kind} carries no evidence")
+            self.assertTrue(all(isinstance(f, str) for f in why))
+        self.assertTrue(any(f.startswith("holes ")
+                            for f in seen["table"]["ink"]["because"]))
+        self.assertTrue(any(f.startswith("rule_widths_px")
+                            for f in seen["table"]["ink"]["because"]))
+        self.assertTrue(any(f.startswith("fill ")
+                            for f in seen["diagram"]["ink"]["because"]))
+        self.assertTrue(any(f.startswith("contains ")
+                            for f in seen["simple_cell"]["ink"]["because"]))
+
+    def test_the_diagrams_hole_fact_is_the_one_the_branch_TESTED(self):
+        """The diagram branch turns on the holes that pass the CELL
+        FLOOR, not the raw count. The grid region has NINE raw holes
+        and none that clears the floor, so its evidence must read
+        `holes 0 < 2`; printing the raw count there would state
+        `holes 9 < 2`, which is false. Asserting on the grid (not the
+        hollow frame, where raw and post-floor are both 1) is what
+        makes the two counts distinguishable."""
+        from inkdrill.emit import lattice_holes
+        from inkdrill.nest import nest
+        from inkdrill.pngio import auto_mask, read_png
+        import tempfile, pathlib as pl
+        lines = self._lines()
+        dias = [l for l in lines if l["type"] == "diagram"]
+        self.assertEqual(len(dias), 2, "both diagram cases must fire")
+        grid = min(dias, key=lambda l: l["region"]["width"])
+        fact = [f for f in grid["ink"]["because"]
+                if f.startswith("holes ")][0]
+        self.assertEqual(fact, "holes 0 < 2", grid["ink"]["because"])
+
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "p.png").write_bytes(self._page())
+        img = read_png(tmp / "p.png")
+        m = auto_mask(img.gray, img.width, img.height, 200)[0]
+        n = nest(m)
+        kept, raw = lattice_holes(n, grid["ink"]["region_id"], 42.0)
+        self.assertEqual((len(kept), raw), (0, 9),
+                         "the fixture must separate raw from post-floor")
