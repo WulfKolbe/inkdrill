@@ -1057,6 +1057,60 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### The corpus runs — what the committed harnesses measured
+
+Three harnesses now live in `tools/`, each re-runnable and each
+named beside the numbers it produced.
+
+**`tools/mathpixcoverage.py`** — MathPix `lines.json` geometry vs
+real ink, via `coverage.check`, per page. Population: **3,232
+documents / 305,895 pages** with geometry, 200 dpi, 4-px speck
+floor; 46 documents failed on unreadable PDF pages and are listed,
+not skipped silently.
+
+| missed ink per document | docs |
+|---|---|
+| exactly 0% | 432 |
+| ≤0.5% | 451 |
+| 0.5–2% | 501 |
+| 2–10% | 799 |
+| **>10%** | **1,049** |
+
+Median 3.3%, **p90 92.8%** — the shape is the finding, not the
+median: ~43% of documents have essentially complete geometry, a
+quarter partial, and a third are effectively stub extractions.
+`1807.06173` reads 100% missed on all 134 pages because its
+`lines.json` contains only the rotated arXiv sidebar watermark
+("8102 luJ 7") — the instrument is right and the extraction is
+empty. Read the per-page TSV, never the aggregate.
+
+**`tools/reportcompare.py`** — Rendered vs Scan per formula-report
+row, 300 vs 600 dpi. Population: **49 of 49 P13 reports**
+(1511.08771 excluded by the user; exit code 0 = no zero-row
+inputs, P16). **5,966 rows: 25.0% at distance 0**, median 3, and
+of 4,475 non-zero rows **1,442 are scale-stable** and **2,777
+differ at the component level**. The population grew from 4,788
+rows / 38 reports once three report-GENERATOR defects were fixed
+upstream (column-width accounting, mixed tables sharing a page, an
+unbreakable identifier overprinting the narrow Page column and
+bridging its holes away); the distribution barely moved (25.3% →
+25.0%, median 3 both times), so the earlier aggregate was not
+biased by what it could not see.
+
+**`tools/bookprofile.py`** — per-page structural profile of a
+scanned book. On the four Heim-publisher scans (BH1org, bh2,
+BH3FR, WDorg4; 1,042 pages) it showed one physical pipeline
+(px-per-run 3.18–3.34 across all four), BH1org/bh2 as structural
+twins carrying halftone plates, and WDorg4 as denser setting with
+distinctly fewer holes per component (0.241 vs 0.29–0.31).
+
+**`tools/threeway.py`** (P17) first full run — 0806.1585, 243
+display equations: `d_layout` zero on 101, `d_finding` zero on 58,
+and of the 13 rows with finding > 10 the tiebreak separated one
+report-cell fault (EQ0038) from two conversion faults (EQ0064,
+EQ0141). The pair contract was written into the docstring before
+this run, which is why the split is readable rather than argued.
+
 ### P15 — content decides a column; width only pre-filters
 
 The 2% floor's measured margin was 1.2% (widest phantom seen in a
