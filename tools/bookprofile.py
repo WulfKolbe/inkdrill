@@ -57,9 +57,18 @@ def _npages(pdf):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        raise SystemExit("usage: python3 tools/bookprofile.py <pdf> [pdf ...]")
-    for arg in sys.argv[1:]:
+    import argparse
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import corpusgate
+    ap = argparse.ArgumentParser(
+        prog="tools/bookprofile.py",
+        description=__doc__.strip().splitlines()[0])
+    ap.add_argument("pdf", nargs="+")
+    corpusgate.add_arguments(ap)
+    args = ap.parse_args()
+    chosen = corpusgate.gate("bookprofile", args.pdf, args.limit, args.yes,
+                             count_pages=lambda a: _npages(pathlib.Path(a)))
+    for arg in chosen:
         p = pathlib.Path(arg)
         profile(p, p.parent / (p.stem + ".profile.tsv"), _npages(p))
     print("ALL DONE", flush=True)

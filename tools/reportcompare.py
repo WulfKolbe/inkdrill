@@ -19,20 +19,32 @@ from inkdrill.pnmio import read_pnm_stream
 from inkdrill.pngio import read_png, auto_mask
 from inkdrill.__main__ import _table_cells
 
-import tempfile
-LIB = pathlib.Path(sys.argv[2] if len(sys.argv) > 2
-                   else "~/pdfdrill-library").expanduser()
-LIST = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else \
+import argparse, datetime, tempfile
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import corpusgate
+
+_ap = argparse.ArgumentParser(
+    prog="tools/reportcompare.py",
+    description=__doc__.strip().splitlines()[0])
+_ap.add_argument("list", nargs="?", default=None,
+                 help="report roster (default: <library>/P13-arxiv-reports.txt)")
+_ap.add_argument("library", nargs="?", default="~/pdfdrill-library")
+corpusgate.add_arguments(_ap)
+ARGS = _ap.parse_args()
+
+LIB = pathlib.Path(ARGS.library).expanduser()
+LIST = pathlib.Path(ARGS.list) if ARGS.list else \
     LIB / "P13-arxiv-reports.txt"
 S = pathlib.Path(os.environ.get("INKDRILL_WORK") or
                  (tempfile.gettempdir() + "/inkdrill-reportcompare"))
 S.mkdir(parents=True, exist_ok=True)
+RESULTS = pathlib.Path(__file__).resolve().parent.parent / "results"
 if not LIST.is_file():
     raise SystemExit(__doc__.strip().splitlines()[2] +
                      f"\n  no such list: {LIST}")
-DIRS = re.findall(r"-> ~/pdfdrill-library/(\S+)/report\.pdf",
-                  LIST.read_text())
-if not DIRS:
+ALL_DIRS = re.findall(r"-> ~/pdfdrill-library/(\S+)/report\.pdf",
+                      LIST.read_text())
+if not ALL_DIRS:
     raise SystemExit(f"{LIST}: no '-> ~/pdfdrill-library/<dir>/report.pdf' "
                      f"lines found")
 
@@ -40,6 +52,29 @@ def npages(pdf):
     out = subprocess.run(["pdfinfo", str(pdf)], capture_output=True,
                          text=True).stdout
     return int(re.search(r"^Pages:\s+(\d+)", out, re.M).group(1))
+
+DIRS = corpusgate.gate(
+    "reportcompare", ALL_DIRS, ARGS.limit, ARGS.yes,
+    count_pages=lambda n: npages(LIB / n / "report.pdf"))
+
+
+def idents_for(name):
+    """[(identifier, source page), ...] in display-table order.
+
+    Read from the report's own .tex, which is the only place the
+    identifier lives -- inkdrill reads no text. Row i of the compare
+    output is equation i, and a COUNT MISMATCH means that assumption
+    broke, so ids are withheld rather than guessed (see run_rows).
+    """
+    tex = LIB / name / "report.tex"
+    if not tex.is_file():
+        return []
+    # the identifier may carry an equation number before the column
+    # break: `\ident{bh2\_EQ0001} (30) & 020 &`
+    return [(m.group(1).replace("\\", ""), m.group(2)) for m in
+            re.finditer(r"\\ident\{([^}]*?EQ\d+)\}[^&]*& *(\d+) *&",
+                        tex.read_text())]
+
 
 def probe(pdf, n):
     five = []
@@ -106,12 +141,18 @@ with cf.ThreadPoolExecutor(max_workers=4) as ex:
         n += 1
         if n % 25 == 0: print(f"compared {n}/{len(jobs)}", flush=True)
 
+from findings import flag_of        # one definition (P19)
+
+
+run_rows = []
+id_mismatch = []
 zero_rows = []
 for name in DIRS:
     d = S / name
     hdr = ("report_page\tline\tdis\tA_eq_B\tL_comp\tL_holes\tL_stk"
            "\tL_cen\tL_off\tR_comp\tR_holes\tR_stk\tR_cen\tR_off")
     rows = []
+    recs = []
     for md in sorted(d.glob("p*.md")):
         p = int(md.stem[1:])
         png = d / f"p{p:03d}_r300.png"
@@ -128,6 +169,32 @@ for name in DIRS:
             L = [int(x) for x in c[3:8]]; R = [int(x) for x in c[8:13]]
             dis = sum(abs(x - y) for x, y in zip(L, R))
             rows.append("\t".join(map(str, [p, ln, dis, c[13]] + L + R)))
+            recs.append((dis, abs(L[0] - R[0]), c[13] == "yes"))
+    # P19: identifiers come from the report's own tex, in table order.
+    # A count mismatch means the row<->equation correspondence broke;
+    # ids are then withheld ("?") and the document is named in the
+    # summary -- a wrong identifier is worse than none.
+    idents = idents_for(name)
+    # The harness compares the LEADING contiguous run of display
+    # pages, so its rows are a PREFIX of the equation list -- valid
+    # only while the compared pages are themselves contiguous and
+    # there are at least as many equations as rows. More rows than
+    # equations means the population is not display equations alone
+    # (a 5-column-reading inline table shares the page), and the ids
+    # are withheld: a wrong identifier is worse than none.
+    pages = sorted(int(md.stem[1:]) for md in d.glob("p*.md"))
+    contiguous = pages == list(range(pages[0], pages[0] + len(pages))) \
+        if pages else False
+    if len(idents) >= len(recs) and contiguous:
+        idents = idents[:len(recs)]
+    else:
+        why = ("more rows than equations" if len(idents) < len(recs)
+               else "compared pages are not contiguous")
+        id_mismatch.append((name, len(recs), len(idents), why))
+        idents = [("?", "?")] * len(recs)
+    for (ident, srcpage), (dis, cd, stable) in zip(idents, recs):
+        run_rows.append((name, ident, srcpage, dis, cd,
+                         flag_of(dis, cd, stable)))
     (LIB / name / "report.compare.tsv").write_text(
         "\n".join([hdr] + rows) + "\n")
     print(f"{name}: {len(rows)} rows -> report.compare.tsv", flush=True)
@@ -137,6 +204,27 @@ for name in DIRS:
              if not display_count.get(name)
              else f"{display_count[name]} display pages compared but "
                   f"every row was filtered"))
+# P19: one machine-readable file per corpus RUN, so a finding is a
+# file a consumer can sort and filter, not prose in a commit message.
+RESULTS.mkdir(exist_ok=True)
+stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+run_file = RESULTS / f"compare-{LIST.stem}-{stamp}.tsv"
+run_file.write_text(
+    "\n".join(["bibkey\tid\tpage\tdistance\tcomp_delta\tflag"] +
+              ["\t".join(map(str, r)) for r in run_rows]) + "\n")
+_by = {}
+for r in run_rows:
+    _by[r[5]] = _by.get(r[5], 0) + 1
+print(f"{len(run_rows)} rows -> {run_file}", flush=True)
+print("  flags: " + ", ".join(f"{k} {v}" for k, v in sorted(_by.items())),
+      flush=True)
+if id_mismatch:
+    print(f"  IDS WITHHELD in {len(id_mismatch)} document(s) "
+          f"(row/equation count mismatch):", flush=True)
+    for name, nrows, nids, why in id_mismatch:
+        print(f"    {name}: {nrows} rows vs {nids} equations "
+              f"in the tex -- {why}", flush=True)
+
 # P16: an empty result is an error, not a silence -- every zero-row
 # input is listed with its reason, and the exit code says so
 if zero_rows:

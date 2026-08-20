@@ -1057,6 +1057,73 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### P18/P19, Q1–Q5 — the harnesses get rails, and a refuted premise
+
+**P18/Q5 — no harness sweeps a corpus by accident.** `--limit` is
+required (running without it refuses, naming the flag and the
+smallest useful sample), the plan prints before any work, and above
+25 documents / 5,000 pages the run needs `--yes` — refused, never
+prompted, when stdin is not a terminal, because a harness that
+blocks on a prompt in the background reads as a hang. One gate
+(`tools/corpusgate.py`) for all three harnesses. Page counts are
+exact up to 100 documents and a **labelled** estimate above, from a
+20-document sample.
+
+**P19 — the finding is a file.** `tools/reportcompare.py` writes
+`results/compare-<list>-<stamp>.tsv`: `bibkey, id, page, distance,
+comp_delta, flag`. The flag vocabulary lives in `tools/findings.py`,
+one definition, ordered by evidence: `component` (the
+scale-invariant channel) outranks `stable` (survives 300→600 dpi)
+outranks `soft` (threshold channels only). Identifiers come from the
+report's own tex and are **withheld** (`?`) when the row count and
+the equation count disagree — a wrong identifier is worse than none,
+and the mismatching document is named in the summary.
+
+**Q1/Q2 — the overlap premise was measured and refuted.** Excess
+fraction = ink bbox area outside the declared region, over region
+area; ink is assigned by component centre. Over 1511.08771 and ten
+arXiv documents (first 20 math-bearing pages each):
+
+| document | max overlap |
+|---|---|
+| **1511.08771** | **0.000** (89 math regions) |
+| 0807.3013 | 0.206 |
+| 0707.2676 / 0707.4470 / 0711.0273 / 0802.3344 / 0803.2924 / 0806.1585 / 0902.0431 | 0.000 |
+| 0705.4638, 0812.3504 | no math-bearing page (not 0.000) |
+
+**The document that motivated the check is not oversized by it.**
+1511.08771's problem is SIZE — an 11,232-page PDF with a 1 GB
+lines.json — not overlap, and a quarantine on this axis would have
+dropped 0802.3344, an ordinary paper, while keeping the pathological
+one. The distribution supports **no threshold**: one mild non-zero
+value and everything else exactly 0.
+
+The first pass said 0.994 for 0802.3344, and that was an
+**attribution artifact**: a 795x2 px page-wide rule whose centre fell
+inside a 391 px math region. `assign()` now drops a rule-shaped
+component LONGER than the region — page furniture crossing the band
+is not the expression's ink, while a fraction bar (shorter than its
+expression) survives. `is_rule` is imported, not re-implemented.
+
+**Q3/Q4 — built, off by default.** `--quarantine F` drops a document
+whole, removes any earlier `coverage.tsv` so the corpus cannot keep
+the data the document was dropped for, and appends document,
+identifier, page and fraction to `results/oversized.txt`. There is no
+default F. The summary prints **measured, quarantined and the reason
+breakdown from one call site**, so no count of measured documents
+can print without its exclusions beside it.
+
+**A mutant survived in the working tree for six commands.** An
+interrupted mutation sweep left `if not interactive:` forced to
+`if False:` and the restore never ran, so one Q2 re-run was allowed
+without `--yes` that should have been refused (measurements
+unaffected — the guard gates whether a run starts, not what it
+computes). Two lessons recorded: restore the file in the SAME
+command that mutates it, and assert that the confirmation callback
+is never reached, because the dropped guard made the suite HANG on
+`input()` rather than fail — the non-terminating mutant class,
+observed live.
+
 ### The corpus runs — what the committed harnesses measured
 
 Three harnesses now live in `tools/`, each re-runnable and each
