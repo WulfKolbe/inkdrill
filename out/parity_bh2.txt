@@ -1,0 +1,28 @@
+A/B per-cell diff at 300 dpi
+  PRE  /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/ab_bh2/PRE/report.pdf
+  POST /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/ab_bh2/POST/report.pdf
+cells compared: 10434  (cells present in only one build: 0)
+cells DIFFERING: 2
+  p112 row 55 rendered: 46/4/6/6/0 -> 44/4/5/5/0
+  p112 row 56 rendered: 33/3/6/6/0 -> 31/3/5/5/0
+
+VERDICT: parity HOLDS where the compare reads.
+
+The two differing cells are on page 112, which is a 58-row x 4-column
+INLINE-formula page -- it has no scan column at all. On a 4-column
+page the tool's "last two columns" are LaTeX source and Rendered, so
+what differs is the SOURCE column of the two migrated inline rows
+(bh2_FO2487, bh2_FO2488): it prints `:::(+1)_{d}...:::` before the
+migration and `...::` after, because latex now holds mathematics only
+and the third colon lives in trailing_punct.
+
+That is the migration working as designed, in a column the compare
+never reads. Every Rendered and Scan cell of every display row is
+IDENTICAL: 10,432 of 10,434 cells unchanged, 0 cells present in only
+one build, and the 2 that differ are explained character by character
+(a colon is 2 components forming 1 stacked+centred pair -- exactly
+the delta measured: 46/4/6/6/0 -> 44/4/5/5/0).
+
+Design question left with pdfdrill, not a defect: whether the LaTeX
+source column should display latex + trailing_punct for copy
+fidelity, or mathematics only as it does now.
