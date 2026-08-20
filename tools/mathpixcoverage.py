@@ -93,6 +93,7 @@ docs = corpusgate.gate(f"mathpixcoverage[{W}/{K}]", _all,
 
 MEASURED, QUARANTINED = [], []
 REASONS = {}
+OVERLAP_ROWS = []          # Q1's numbers, for the run file below
 
 
 def _reason(kind):
@@ -130,6 +131,7 @@ for lj in docs:
                       ][:ARGS.math_pages]
             if not wanted:
                 print(f"{name}: PROBE no math-bearing page", flush=True)
+                OVERLAP_ROWS.append((name, "", 0, "", "", "no-math-page"))
                 _reason("probe-no-math-page"); continue
             npg = max(wanted)
         for lo in range(1, npg + 1, 10):
@@ -221,6 +223,11 @@ for lj in docs:
                  f"no coverage.tsv written]" if wanted is not None else "")
         print(f"{name}: MATH OVERLAP max {max_frac:.3f} over {n_math} "
               f"math region(s){where}{scope}", flush=True)
+        OVERLAP_ROWS.append((
+            name, f"{max_frac:.4f}" if n_math else "", n_math,
+            (max_where or ("", ""))[0], (max_where or ("", ""))[1],
+            f"probe:{len(wanted)}-math-pages" if wanted is not None
+            else "full"))
         if wanted is not None:
             continue
         print(f"{name}: {npg} pages, comps {totc}, regions {totr}, "
@@ -230,6 +237,26 @@ for lj in docs:
     except Exception as e:
         print(f"{lj.parent.name}: FAILED {type(e).__name__}: {e}", flush=True)
         _reason(f"failed:{type(e).__name__}")
+def write_overlap_run():
+    """Q1's per-document numbers as a FILE, not prose (P19's rule
+    applied to the overlap probe): the distribution that decides a
+    quarantine threshold has to be re-readable, sortable, and
+    attributable to a run. `scope` records the page budget, because
+    a max over 20 math-bearing pages and a max over a whole document
+    are different measurements."""
+    if not OVERLAP_ROWS:
+        return
+    RESULTS.mkdir(exist_ok=True)
+    import datetime
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    f = RESULTS / f"overlap-{stamp}-w{W}.tsv"
+    f.write_text("\n".join(
+        ["document\tmax_overlap\tmath_regions\tworst_id\tworst_page\tscope"]
+        + ["\t".join(map(str, r)) for r in OVERLAP_ROWS]) + "\n")
+    print(f"WORKER {W}: overlap of {len(OVERLAP_ROWS)} document(s) "
+          f"-> {f}", flush=True)
+
+
 def summary():
     """Q4: measured, quarantined and the reason breakdown print
     TOGETHER, from one call site. There is no path that prints a
@@ -249,5 +276,6 @@ def summary():
               f"nothing was dropped for overlap", flush=True)
 
 
+write_overlap_run()
 summary()
 print(f"WORKER {W} DONE", flush=True)
