@@ -1,0 +1,101 @@
+028 trailing punctuation profile -- bh2, BH1org_OCR, BH3FR, WDorg4
+population: the first 50 EQ rows whose LaTeX ends in one of '.,;:' and that have a scan crop
+measured on the CROP itself (not the report raster), both figures normalised by the crop's median glyph height
+
+identifier             mark   height  baseline  comps
+bh2_EQ0003                .     0.18     -0.53     65
+bh2_EQ0010                .     0.24      0.12     39
+bh2_EQ0011                ,     0.59      0.41     68
+bh2_EQ0016                ,     0.33      0.28     35
+bh2_EQ0026                .     0.27     -0.36     45
+bh2_EQ0027                .     0.22      0.28     23
+bh2_EQ0031                ,     0.53      0.44     45
+bh2_EQ0039                ,     0.50      0.33     57
+bh2_EQ0044                .     0.33      0.08     63
+bh2_EQ0093                ,     0.56      0.00     66
+bh2_EQ0101                ,     0.42      0.32     54
+bh2_EQ0103                .     5.83      1.17     92
+bh2_EQ0119                .     0.06      0.12     43
+bh2_EQ0127                .     0.19     -0.24     49
+bh2_EQ0128                ,     0.47      0.00     67
+bh2_EQ0132                ,     0.69     -0.23    101
+bh2_EQ0254                .     0.13      0.00     57
+bh2_EQ0259                .     0.14     -0.45     50
+bh2_EQ0291                .     0.22     -0.61     57
+bh2_EQ0323                .     0.16     -0.32     54
+BH1org_OCR_EQ0023         .     0.40     -0.40     69
+BH1org_OCR_EQ0026         .     0.22     -0.11     17
+BH1org_OCR_EQ0028         .     0.19     -0.29     16
+BH1org_OCR_EQ0032         .     0.29     -0.86     53
+BH1org_OCR_EQ0038         ,     0.56     -0.19     39
+BH1org_OCR_EQ0055         .     0.17     -0.17     24
+BH1org_OCR_EQ0058         ,     0.39     -0.11     44
+BH1org_OCR_EQ0059         ,     0.50      0.12     26
+BH1org_OCR_EQ0067         ,     0.50      0.03     70
+BH1org_OCR_EQ0068         .     0.13     -0.35     51
+BH1org_OCR_EQ0070         .     0.24     -0.53     56
+BH1org_OCR_EQ0095         .     0.36      0.86     73
+BH1org_OCR_EQ0102         .     0.25     -0.69     74
+BH1org_OCR_EQ0108         ,     0.41     -0.21     56
+BH1org_OCR_EQ0121         ,     0.35      2.18    125
+BH1org_OCR_EQ0132         .     1.53      0.00     52
+BH1org_OCR_EQ0152         ,     1.05      0.05     12
+BH1org_OCR_EQ0155         .     0.19     -0.71     88
+BH1org_OCR_EQ0159         ,     0.50      0.00     37
+BH1org_OCR_EQ0165         ,     0.71     -0.50     76
+BH1org_OCR_EQ0184         .     0.33     -1.00     75
+BH1org_OCR_EQ0187         .     0.22     -0.33     79
+BH1org_OCR_EQ0188         .     0.28     -0.33     39
+BH1org_OCR_EQ0190         ,     0.53      0.24     67
+BH1org_OCR_EQ0219         .     0.24      0.18     92
+BH3FR_EQ0047              ,     0.62      0.23    115
+BH3FR_EQ0050              ,     0.39     -0.11     36
+BH3FR_EQ0062              .     0.16     -0.37     71
+BH3FR_EQ0133              ,     0.41     -0.03     61
+BH3FR_EQ0262              .     0.13     -0.20     51
+
+height ratio   min 0.06  p25 0.22  med 0.33  p75 0.50  max 5.83
+baseline offset min -1.00  p25 -0.35  med -0.11  p75 0.12  max 2.18
+
+height ratio histogram (bin 0.1):
+   0.1  ##### 5
+   0.2  ############### 15
+   0.3  ###### 6
+   0.4  ######## 8
+   0.5  ####### 7
+   0.6  #### 4
+   0.7  ## 2
+   1.1  # 1
+   1.5  # 1
+   5.8  # 1
+
+baseline offset histogram (bin 0.1):
+  -1.0  # 1
+  -0.9  # 1
+  -0.7  ## 2
+  -0.6  # 1
+  -0.5  #### 4
+  -0.4  ### 3
+  -0.3  ##### 5
+  -0.2  ###### 6
+  -0.1  ### 3
+  -0.0  ####### 7
+  +0.1  ##### 5
+  +0.2  ### 3
+  +0.3  #### 4
+  +0.4  ## 2
+  +0.9  # 1
+  +1.2  # 1
+  +2.2  # 1
+
+PROFILE (necessary, not sufficient):
+  height <= 0.7 x median glyph height AND |baseline offset| <= 0.5
+  inside the band  37 of 50 (74%)
+  outside          13 -- the rightmost component is demonstrably NOT the mark
+
+  Checked by eye, both inside-the-band cases and one outside:
+    bh2_EQ0119 (h 0.06, b +0.12) -- a 16x1 px UNDERLINE fragment, not a period
+    bh2_EQ0011 (h 0.59, b +0.41) -- a 5x10 px comma, correct
+    bh2_EQ0103 (h 5.83, b +1.17) -- a 12x70 px matrix BRACKET, not a period
+
+  So a rule that drops the rightmost component when it falls in the band will drop the wrong component on an unmeasured fraction of rows: the band admits an underline fragment as readily as a period. 029 must report its firing count, and 030's distribution is what tests whether the trim helped or hurt.
