@@ -1057,6 +1057,42 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### The migration is invisible in the findings — measured twice
+
+The same 50-document compare, run before and after the corpus
+migration, against 49 of 49 documents and 4,335 rows both times:
+
+| flag | before | after | Δ |
+|---|---|---|---|
+| clean | 984 | 988 | +4 |
+| noise | 2,256 | 2,248 | −8 |
+| weak | 705 | 706 | +1 |
+| stable | 107 | 112 | +5 |
+| **component** | 283 | **281** | **−2** |
+| findings | 1,095 | 1,099 (25.4%) | +4 |
+
+Largest class delta 0.4% of the population; the component channel,
+which ranks the findings, moved 2 rows of 283. The 20 rows that
+changed class are the reflow residue the A/B already characterised —
+rows that moved a page rasterise marginally differently and cross a
+band boundary — not ink the migration touched.
+
+**A prediction has a LAYER, and scoring it means checking that
+layer.** I predicted "no change in the Rendered|Scan channel". The
+channel is unchanged; 20 individual row classes moved. That is
+neither a confirmation to round up nor a falsification to round
+down. The same rule scored pdfdrill's prediction the other way
+earlier the same day: they verified that the emitted LaTeX was
+identical (true, and content-level) and predicted that the rendered
+cells would be identical (pixel-level, and false for 34 cells,
+because a cell's raster depends on position as well as content).
+
+**Only measuring the same thing twice makes "invisible" a claim
+rather than an assertion.** Without the before-run over the same
+corpus, "4,335 rows, 25.4% findings" would have had nothing to
+compare against, and the 20 movers would have been either invisible
+or discovered later and attributed to the wrong cause.
+
 ### The trailing_punct migration — verified at 19 marks and at 673
 
 pdfdrill moved a formula's trailing `.` `,` `;` `:` out of `latex`
