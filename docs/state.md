@@ -1057,6 +1057,45 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### Columns are DISJOINT — the third phantom-column mechanism
+
+A column whose x-span lies inside another column's span is not a
+column: real columns tile the table width. Measured on 1602.07462
+p4 (the inline-formula page, declared with FOUR columns) the raw
+lattice has **eight**, four of them nested inside col3 — short
+variable-width cells whose content touches both rules split their
+holes, and the fragments cluster as columns. The width floor and
+P15's content test remove three of the four; the fourth holds real
+ink and survives both, so only containment catches it.
+
+Effect, per page, on reports that were reading as all-5-column:
+
+| document | before | after |
+|---|---|---|
+| 1602.07462 | 5,4,4,**5,5** | 5,4,4,4,4 |
+| 0803.2924 | 5,5,**5,5** | 5,5,4,4 |
+| 1506.0005v1 | 5,**4**,4 | 5,4,4 |
+| 0806.1585 (real display pages) | all 5 | all 5, untouched |
+
+That is the mechanism behind "more rows than equations": the
+inline-formula pages were being read as display pages and their
+rows compared as if the last column were a scan. Found by the
+pdfdrill session reading MY code and measuring the spans; the
+credit is theirs, the defect was mine.
+
+Two process notes from the same hour, both recorded because they
+cost time:
+
+* **The 117-rows-vs-23-equations figure I quoted for three
+  exchanges was measured on a build three regenerations old.** On
+  the current reports that document reads 19 rows against 23
+  equations — under, not over. Re-measure a symptom against the
+  CURRENT artifact before diagnosing it.
+* **Never edit code a running batch depends on.** `reportcompare`
+  spawns `python3 -m inkdrill compare` per page, so editing
+  `_table_cells` mid-run mixed old and new logic in one result set;
+  that run was discarded and its work directory deleted.
+
 ### S3/S4/S5 — the residual CLI, evidence beside every type, and a floor
 
 **S3 `python3 -m inkdrill residual page.png --regions lines.json

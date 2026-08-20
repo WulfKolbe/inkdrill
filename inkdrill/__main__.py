@@ -91,8 +91,30 @@ def _table_cells(mask, tol, debug=None):
     # existed before the content test did).
     span = max(v[1] for v in colx.values()) - min(v[0] for v in colx.values())
     ty0, ty1 = best.y0, best.y1
+    # CONTAINMENT: real columns are DISJOINT and tile the table width,
+    # so a column whose x-span lies inside another's is not a column.
+    # Measured on 1602.07462 p4 (the inline-formula page, declared with
+    # four columns): the raw lattice has EIGHT, four of them nested in
+    # col3's span, because short variable-width cells leave long white
+    # tails that cluster into extra groups over 56 dense rows. The
+    # width floor and the content test remove three; the fourth has
+    # real ink in it and survives them both, and only containment
+    # catches it. Needs no tolerance and leaves a real page untouched
+    # (p1 of the same report: five disjoint spans, none contained).
+    def _contained(c):
+        for o in range(ncols):
+            if o == c:
+                continue
+            wider = ((colx[o][1] - colx[o][0]) > (colx[c][1] - colx[c][0])
+                     or ((colx[o][1] - colx[o][0])
+                         == (colx[c][1] - colx[c][0]) and o < c))
+            if wider and colx[o][0] <= colx[c][0] and colx[c][1] <= colx[o][1]:
+                return True
+        return False
+
     keep = [c for c in range(ncols)
             if colx[c][1] - colx[c][0] >= 0.02 * span
+            and not _contained(c)
             and _column_has_content(n, best, colx[c][0], colx[c][1],
                                     ty0, ty1)]
     colx = {i: colx[c] for i, c in enumerate(keep)}

@@ -1580,3 +1580,66 @@ class S4_1_EvidenceTravelsWithTheType(unittest.TestCase):
         kept, raw = lattice_holes(n, grid["ink"]["region_id"], 42.0)
         self.assertEqual((len(kept), raw), (0, 9),
                          "the fixture must separate raw from post-floor")
+
+
+class S6_1_ColumnsAreDisjoint(unittest.TestCase):
+    """A column whose x-span lies INSIDE another's is not a column.
+
+    Measured on 1602.07462 p4 (inline formulas, declared with four
+    columns): the raw lattice has eight, four of them nested inside
+    col3, because short variable-width cells leave long white tails
+    that cluster into extra groups over 56 dense rows. The width
+    floor and the content test remove three of the four; the fourth
+    holds real ink and survives both, so only containment catches it.
+    """
+
+    @staticmethod
+    def _page(nested_ink):
+        """Built from the REAL mechanism: content touching both rules
+        of a cell SPLITS that cell's hole, and the fragments cluster
+        as extra columns whose spans lie inside the full column's.
+        The first version used a 2 px strip, which the width floor
+        removed on its own -- so containment decided nothing and its
+        deletion killed no test."""
+        from tests.test_pngio import build_png
+        W, H = 700, 320
+        g = [[(255, 255, 255)] * W for _ in range(H)]
+
+        def box(x0, y0, x1, y1):
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    g[y][x] = (0, 0, 0)
+        for x in (0, 164, 328, 492):
+            box(x, 0, x + 2, H)
+        box(692, 0, 694, H)
+        for y in (0, 60, 120, 180, 240):
+            box(0, y, W - 6, y + 2)
+        box(0, 316, W - 6, 318)
+        for r in range(5):
+            for cx in (30, 200, 360, 520):
+                box(cx, 20 + r * 60, cx + 30, 34 + r * 60)
+            if r in (1, 3):
+                # a bar touching BOTH rules splits this cell's hole in
+                # two; each fragment's span sits inside the column's
+                box(600, 2 + r * 60, 603, 60 + r * 60)
+                if nested_ink:
+                    box(620, 20 + r * 60, 650, 34 + r * 60)
+        return build_png(g)
+
+    def _cols(self, nested_ink):
+        import tempfile, pathlib as pl
+        from inkdrill.__main__ import _table_cells
+        from inkdrill.pngio import auto_mask, read_png
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "p.png").write_bytes(self._page(nested_ink))
+        img = read_png(tmp / "p.png")
+        m = auto_mask(img.gray, img.width, img.height, 128)[0]
+        cells = _table_cells(m, 6.0)
+        return max(c for _, c in cells) + 1 if cells else 0
+
+    def test_a_nested_span_is_dropped_even_when_it_holds_ink(self):
+        """With ink the content test passes it, so containment is the
+        ONLY filter that can drop it -- assert both, or the test
+        cannot tell which filter fired."""
+        self.assertEqual(self._cols(nested_ink=True), 4)
+        self.assertEqual(self._cols(nested_ink=False), 4)

@@ -115,15 +115,33 @@ class P18_3_ConfirmationAboveTheThreshold(unittest.TestCase):
 
 class P19_1_FindingVocabulary(unittest.TestCase):
 
-    def test_every_flag_fires_and_component_outranks_stability(self):
+    def test_every_flag_fires_and_the_measured_floors_gate_them(self):
+        import findings as F
         self.assertEqual(flag_of(0, 0, True), "clean")
-        self.assertEqual(flag_of(9, 2, False), "component")
-        self.assertEqual(flag_of(9, 2, True), "component")
-        self.assertEqual(flag_of(9, 0, True), "stable")
-        self.assertEqual(flag_of(9, 0, False), "soft")
+        # inside BOTH measured bands -> not a finding
+        self.assertEqual(flag_of(F.NOISE_DISTANCE, F.NOISE_COMP_DELTA,
+                                 True), "noise")
+        self.assertEqual(flag_of(1, 0, False), "noise")
+        # one step past either band is a finding again
+        self.assertEqual(flag_of(99, F.NOISE_COMP_DELTA + 1, False),
+                         "component")
+        self.assertEqual(flag_of(F.NOISE_DISTANCE + 1, 0, True),
+                         "stable")
+        self.assertEqual(flag_of(F.NOISE_DISTANCE + 1, 0, False),
+                         "weak")
+        # every class reachable
         self.assertEqual(set(FLAGS),
-                         {flag_of(0, 0, True), flag_of(9, 2, False),
-                          flag_of(9, 0, True), flag_of(9, 0, False)})
+                         {flag_of(0, 0, True), flag_of(1, 0, False),
+                          flag_of(99, 9, False),
+                          flag_of(F.NOISE_DISTANCE + 1, 0, True),
+                          flag_of(F.NOISE_DISTANCE + 1, 0, False)})
+
+    def test_the_floors_are_arguments_not_baked_constants(self):
+        """A caller measuring its own corpus passes its own numbers;
+        with the floor at zero the same row is a finding again."""
+        self.assertEqual(flag_of(3, 1, False), "noise")
+        self.assertEqual(flag_of(3, 1, False, noise_distance=0,
+                                 noise_comp_delta=0), "component")
 
 
 if __name__ == "__main__":
