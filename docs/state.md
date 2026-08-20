@@ -1057,6 +1057,55 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### The trailing_punct migration — verified at 19 marks and at 673
+
+pdfdrill moved a formula's trailing `.` `,` `;` `:` out of `latex`
+into a `trailing_punct` field, 2,113 marks across 4 books and 49
+documents, with the report emitting the mark AFTER the math box so
+the ink is unchanged. `tools/abdiff.py` verifies that claim: two
+builds of the same report, one dpi, every lattice cell of the last
+two columns diffed, differing cells NAMED.
+
+| document | marks | cells | one-sided | differing |
+|---|---|---|---|---|
+| bh2 | 19 | 10,434 | 0 | 2 |
+| 0902.0431 | 673 | 8,796 | 0 | 51 (0.58%) |
+
+bh2's two are LaTeX-SOURCE cells of migrated inline rows on a
+4-column page (no scan column), explained character by character: a
+colon is two components forming one stacked+centred pair, and the
+delta is exactly 46/4/6/6/0 → 44/4/5/5/0.
+
+**The scan column is the control, and nobody designed it as one.**
+Six of 0902.0431's differing cells are SCAN cells — an unchanged
+JPEG the migration cannot touch. Both "the migration changed the
+ink" and "the row moved" fit the 34 differing Rendered cells
+equally well; only the untouched column separates them. The cause
+is a six-row reflow (measured independently by pdfdrill: 6 of 4,386
+identifiers, all one page earlier), and a row at a different
+sub-pixel offset rasterises differently. Against the S5 noise floor:
+component delta max 2 = the measured ceiling, **zero cells above
+it**; 4 cells above the distance p95, all in holes and pair counts.
+
+Demoted rows measured, not argued: all 129 sub-25-component cells
+across pages 1–40 are identical in both builds.
+
+**Two instrument defects, one per session, same shape.** My
+`abdiff` keyed cells by `(page, row)`, so one row crossing a page
+boundary renumbered every later row and the first pass claimed 143
+differing cells — correct on bh2 where nothing reflowed, wrong on
+0902.0431 where six rows moved. The tell was in the data: from page
+46 on, POST row N equalled PRE row N+1 exactly. Cells are now keyed
+by position in the document. pdfdrill's counterpart was an error
+counter matching any log line starting with `!`, where a real TeX
+error is `! ` with a space — a false FAILURE reads exactly like a
+real one.
+
+**"No layout cost" was true at page-count level and false at
+row-placement level.** Page counts are identical; six rows still
+moved. An artifact keyed on report page number and built against a
+pre-migration report is off by one for those six rows.
+
 ### Columns are DISJOINT — the third phantom-column mechanism
 
 A column whose x-span lies inside another column's span is not a
