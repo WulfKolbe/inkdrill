@@ -1,0 +1,12 @@
+document	max_overlap	math_regions	worst_id	worst_page	scope
+0705.4638		0			no-math-page
+0807.3013	0.2063	34	ocr_p122_l12	122	probe:20-math-pages
+0812.3504		0			no-math-page
+0707.2676	0.0000	30			probe:8-math-pages
+0707.4470	0.0000	61			probe:20-math-pages
+0711.0273	0.0000	14			probe:9-math-pages
+0802.3344	0.0000	21			probe:5-math-pages
+0803.2924	0.0000	23			probe:5-math-pages
+0806.1585	0.0000	70			probe:20-math-pages
+0902.0431	0.0000	130			probe:20-math-pages
+1511.08771	0.0000	89			probe:20-math-pages

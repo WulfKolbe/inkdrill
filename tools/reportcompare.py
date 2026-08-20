@@ -69,10 +69,15 @@ def idents_for(name):
     tex = LIB / name / "report.tex"
     if not tex.is_file():
         return []
-    # the identifier may carry an equation number before the column
-    # break: `\ident{bh2\_EQ0001} (30) & 020 &`
-    return [(m.group(1).replace("\\", ""), m.group(2)) for m in
-            re.finditer(r"\\ident\{([^}]*?EQ\d+)\}[^&]*& *(\d+) *&",
+    # The identifier may carry an equation number before the column
+    # break (`\ident{bh2\_EQ0001} \eqnum{(30)} & 020 &`) and, since
+    # the overprint fix, break opportunities INSIDE the braces
+    # (`0803.\allowbreak{}2924\_\allowbreak{}EQ0001`) -- so the
+    # capture cannot stop at the first `}`.
+    def _clean(t):
+        return t.replace("\\allowbreak{}", "").replace("\\", "")
+    return [(_clean(m.group(1)), m.group(2)) for m in
+            re.finditer(r"\\ident\{([^&\n]*?EQ\d+)\}[^&\n]*& *(\d+) *&",
                         tex.read_text())]
 
 
@@ -186,15 +191,23 @@ for name in DIRS:
     contiguous = pages == list(range(pages[0], pages[0] + len(pages))) \
         if pages else False
     if len(idents) >= len(recs) and contiguous:
-        idents = idents[:len(recs)]
+        for (ident, srcpage), (dis, cd, stable) in zip(idents, recs):
+            run_rows.append((name, ident, srcpage, dis, cd,
+                             flag_of(dis, cd, stable)))
     else:
-        why = ("more rows than equations" if len(idents) < len(recs)
+        # MORE ROWS THAN EQUATIONS means the compared population is
+        # not display equations alone -- on 0803.2924 the inline
+        # formula table (94 rows) shares the leading page run with the
+        # 23 display equations, and an inline row compares LaTeX
+        # source against a rendering, with no scan in it at all. Those
+        # rows are excluded from the findings file entirely rather
+        # than emitted with a "?" identifier: an unusable row in a
+        # findings file is worse than a named absence (P16/Q3's
+        # no-partial-inclusion, applied to rows).
+        why = ("more rows than equations -- population is not display "
+               "equations alone" if len(idents) < len(recs)
                else "compared pages are not contiguous")
         id_mismatch.append((name, len(recs), len(idents), why))
-        idents = [("?", "?")] * len(recs)
-    for (ident, srcpage), (dis, cd, stable) in zip(idents, recs):
-        run_rows.append((name, ident, srcpage, dis, cd,
-                         flag_of(dis, cd, stable)))
     (LIB / name / "report.compare.tsv").write_text(
         "\n".join([hdr] + rows) + "\n")
     print(f"{name}: {len(rows)} rows -> report.compare.tsv", flush=True)
@@ -219,7 +232,8 @@ print(f"{len(run_rows)} rows -> {run_file}", flush=True)
 print("  flags: " + ", ".join(f"{k} {v}" for k, v in sorted(_by.items())),
       flush=True)
 if id_mismatch:
-    print(f"  IDS WITHHELD in {len(id_mismatch)} document(s) "
+    print(f"  EXCLUDED from the findings file: {len(id_mismatch)} "
+          f"document(s), {sum(m[1] for m in id_mismatch)} row(s) "
           f"(row/equation count mismatch):", flush=True)
     for name, nrows, nids, why in id_mismatch:
         print(f"    {name}: {nrows} rows vs {nids} equations "

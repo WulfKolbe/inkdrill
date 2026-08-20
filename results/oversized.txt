@@ -1,0 +1,2 @@
+document	identifier	page	fraction
+0807.3013	ocr_p122_l12	122	0.2063
