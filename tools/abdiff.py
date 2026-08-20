@@ -54,8 +54,9 @@ def cells_of(pdf, lo, hi, dpi):
                 b = cells[(r, col)]
                 st = pair_stats(_cell_crop(m, b[0], b[1], b[2] - 1,
                                            b[3] - 1))
-                out[(page, r, "rendered" if col == nc - 2 else "scan")] = \
-                    tuple(st[k] for k in KEYS)
+                out.setdefault(page, []).append(
+                    ("rendered" if col == nc - 2 else "scan",
+                     tuple(st[k] for k in KEYS)))
     return out
 
 
@@ -75,10 +76,29 @@ def main():
         hi = min(lo + 9, n)
         a.update(cells_of(pre, lo, hi, dpi))
         b.update(cells_of(post, lo, hi, dpi))
-        print(f"pages {lo}..{hi}: {len(a)} cells measured", flush=True)
-    keys = sorted(set(a) & set(b))
-    diff = [k for k in keys if a[k] != b[k]]
-    only = sorted(set(a) ^ set(b))
+        print(f"pages {lo}..{hi}: {sum(len(v) for v in a.values())} "
+              f"cells measured", flush=True)
+
+    # Rows are keyed by their POSITION IN THE DOCUMENT, not by
+    # (page, row). A change that moves a row across a page boundary
+    # shifts every later row index, and a positional key then reports
+    # every one of them as a differing cell -- 143 of them on
+    # 0902.0431, all of which were row N of one build against row N+1
+    # of the other. Reflow is not an ink change and must not read as
+    # one.
+    def flat(d):
+        out = []
+        for page in sorted(d):
+            out.extend(d[page])
+        return out
+
+    fa, fb = flat(a), flat(b)
+    keys = list(range(min(len(fa), len(fb))))
+    diff = [k for k in keys if fa[k] != fb[k]]
+    only = list(range(len(keys), max(len(fa), len(fb))))
+    a = {k: fa[k][1] for k in keys}
+    b = {k: fb[k][1] for k in keys}
+    kind = {k: fa[k][0] for k in keys}
     lines = [f"A/B per-cell diff at {dpi} dpi",
              f"  PRE  {pre}",
              f"  POST {post}",
@@ -86,7 +106,7 @@ def main():
              f"(cells present in only one build: {len(only)})",
              f"cells DIFFERING: {len(diff)}"]
     for k in diff[:40]:
-        lines.append(f"  p{k[0]} row {k[1]} {k[2]}: "
+        lines.append(f"  cell #{k} ({kind[k]}): "
                      f"{'/'.join(map(str, a[k]))} -> "
                      f"{'/'.join(map(str, b[k]))}")
     if only:
