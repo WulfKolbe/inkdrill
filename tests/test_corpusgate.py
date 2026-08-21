@@ -195,3 +195,74 @@ class Q1_1_MathOverlap(unittest.TestCase):
         region = (100.0, 0.0, 200.0, 20.0)
         far = self.B(300, 5, 320, 15)
         self.assertEqual(inkfit.assign([far], region), [])
+
+
+class S7_1_StaleArtifactGuard(unittest.TestCase):
+    """`reportcompare.check_fresh` refuses a report.pdf older than its
+    own report.tex.
+
+    The condition it catches put a 230-page build of a superseded
+    source into a measurement, where it survived a day of consistency
+    checks on two sides -- because every check asked "is this recent"
+    rather than "does this match the file it claims to render". The
+    PDF was minutes old and its page count was plausible.
+
+    All four cases are asserted, not just the refusal: the two
+    NEGATIVE ones are what stop the guard becoming noise (equal
+    mtimes fire on every run) or meaningless (an absent PDF is a
+    first run, not a stale one).
+    """
+
+    @staticmethod
+    def _check():
+        import pathlib as pl
+        src = (pl.Path(__file__).resolve().parent.parent
+               / "tools" / "reportcompare.py").read_text()
+        ns = {"pathlib": pl}
+        exec(src[src.index("def check_fresh"):src.index("def npages")], ns)
+        return ns["check_fresh"]
+
+    def _pair(self, dpdf, dtex):
+        """(pdf, tex) with mtimes offset by the given seconds."""
+        import os, pathlib as pl, tempfile, time
+        d = pl.Path(tempfile.mkdtemp())
+        pdf, tex = d / "report.pdf", d / "report.tex"
+        tex.write_text("source")
+        if dpdf is not None:
+            pdf.write_text("build")
+        now = time.time()
+        os.utime(tex, (now + dtex, now + dtex))
+        if dpdf is not None:
+            os.utime(pdf, (now + dpdf, now + dpdf))
+        return pdf
+
+    def test_a_pdf_older_than_its_tex_is_refused(self):
+        with self.assertRaises(SystemExit) as cm:
+            self._check()("doc", self._pair(dpdf=0, dtex=10))
+        msg = str(cm.exception)
+        self.assertIn("OLDER", msg)
+        self.assertIn("--compile", msg, "the refusal must name the fix")
+
+    def test_a_pdf_newer_than_its_tex_is_accepted(self):
+        self.assertIsNone(self._check()("doc", self._pair(dpdf=10, dtex=0)))
+
+    def test_equal_mtimes_are_not_stale(self):
+        """A recompile leaves both files at the same second; treating
+        that as stale would fire on every healthy run."""
+        self.assertIsNone(self._check()("doc", self._pair(dpdf=0, dtex=0)))
+
+    def test_an_absent_pdf_is_refused_BY_NAME_not_as_stale(self):
+        """A consumer cannot measure a report that is not there, so
+        this refuses -- but it must say WHICH file and for which
+        document rather than surfacing a raw FileNotFoundError three
+        frames later, and it must not claim the file is stale, which
+        would send the reader to recompile something that does not
+        exist."""
+        pdf = self._pair(dpdf=None, dtex=0)
+        self.assertFalse(pdf.exists())
+        with self.assertRaises(SystemExit) as cm:
+            self._check()("doc", pdf)
+        msg = str(cm.exception)
+        self.assertIn("no report.pdf", msg)
+        self.assertIn("doc", msg)
+        self.assertNotIn("OLDER", msg)

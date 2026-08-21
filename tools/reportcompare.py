@@ -64,6 +64,10 @@ def check_fresh(name, pdf):
     past, and the whole point of P16 is that a defect must not read
     as an absence.
     """
+    if not pdf.is_file():
+        # named, not a raw FileNotFoundError three frames later: an
+        # absence has to say which file and for which document (P16).
+        raise SystemExit(f"{name}: no report.pdf at {pdf}")
     tex = pdf.with_suffix(".tex")
     if tex.is_file() and pdf.stat().st_mtime < tex.stat().st_mtime:
         raise SystemExit(
