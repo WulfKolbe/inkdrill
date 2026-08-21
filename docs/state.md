@@ -1089,6 +1089,32 @@ Their nine-row precursor gave median 11 and was itself biased —
 selected as SLT-zero AND ink > 6, a truncated tail rather than a
 distribution. Both numbers were wrong in opposite directions.
 
+**The floor held at scale; the ceiling did not.** pdfdrill's
+selection grew from 810 to 1,490 SLT-zero rows across 42 documents
+(one excluded because its "author" side resolved to MathPix's own
+tex.zip — a manufactured SLT-zero would have pulled the floor DOWN).
+Re-measured in this channel's units, n = 1,484:
+
+| | n=804 | n=1,484 | verdict |
+|---|---|---|---|
+| distance p95 | 23 | **23** | unchanged as the sample grew 85% |
+| component delta p95 | 2 | **3** | moved |
+
+The distance floor is kept at 23 rather than adopting pdfdrill's 22:
+theirs is measured on standalone author renders at 400 dpi, mine on
+the report cell at 300 dpi that this channel actually gates, and
+swapping in a number from a different comparison is the error that
+produced 6. One unit between two routes is corroboration.
+
+The component ceiling of 2 was reported here as "CONFIRMED by the
+better control" at 2.7% — true of 804 rows and **false at scale**,
+where it reads 5.7%. It is left at 2 deliberately: an estimate that
+moved when the sample doubled needs evidence it has stopped moving,
+not a new value picked off a curve. The channel the findings are
+ranked on is therefore running at about twice the false-positive
+rate previously claimed for it, and that is now recorded rather
+than implied.
+
 **Demoted rows had no rendering to compare.** A row whose LaTeX
 `renderable()` refused prints `\emph{(not rendered)}`, whose ink is
 13 components and 6 holes whatever the equation was. Comparing that

@@ -29,10 +29,23 @@ route (pdfdrill rendering the AUTHOR's LaTeX standalone at 400 dpi
 rather than reading the report cell at 300) gives p95 22 on the same
 selection, so two different renders converge.
 
-`NOISE_COMP_DELTA` stays at 2: the better control CONFIRMS it, with
-only 2.7% of content-identical rows above the ceiling. The channel
-the findings are ranked on was the correctly calibrated one; the
-distance floor was not.
+`NOISE_COMP_DELTA` stays at 2 -- but UNDER PROTEST, and the reason
+is recorded because it is a live uncertainty rather than a settled
+number. On 804 content-identical rows the ceiling of 2 looked
+confirmed (2.7% above it). On 1,484 rows from the same selection
+method it reads 5.7%, and the p95 moved 2 -> 3:
+
+    ceiling 1 -> 11.1% false positives   ceiling 4 -> 2.4%
+    ceiling 2 ->  5.7%  (in force)       ceiling 5 -> 1.7%
+    ceiling 3 ->  3.5%                   ceiling 6 -> 1.5%
+
+The distance floor did NOT move when the sample grew 85% (p95 23
+both times, and an independent render route gives 22). The ceiling
+did. An estimate that survives a doubled sample has earned its
+number; one that moved needs evidence it has stopped moving, not a
+new value picked off a curve -- so the ceiling is left where it is
+and the component channel is known to run at roughly twice the
+false-positive rate previously claimed for it.
 """
 
 from __future__ import annotations
