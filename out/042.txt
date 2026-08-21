@@ -1,0 +1,102 @@
+042 - compare on the rows out/041.txt flags as text-side differences
+==============================================================================
+
+WHAT IS BEING COMPARED, because 041's number and mine are NOT the
+same quantity and must not be read as one:
+
+  041's 'd' is an SLT EDIT DISTANCE between two LaTeX sources -- the
+  author's and MathPix's -- in units of symbol and layout edits. It
+  never touches ink.
+
+  My distance is an INK distance: L1 over the five-tuple (components,
+  holes, stacked, centred, offset) between the report's Rendered cell
+  and its Scan cell, both rasterised from the same page.
+
+  The noise floor of 6 belongs to MINE. It is the p95 of the same 208
+  expressions rendered through ghostscript and through poppler
+  (tools/noisefloor.py), so it bounds what a change of rasterizer can
+  produce. Applying it to an edit distance would be a category error;
+  what follows applies it only to the ink column.
+
+POPULATION: the 30 identifiers listed in out/041.txt (of the 935
+nonzero-distance pairs it summarises), all from 0707.4470, all 30
+found in compare-P13-arxiv-reports-20260820-214919.tsv.
+
+ANSWER: 14 of 30 exceed the ink noise floor of 6.
+
+  ink distance: zero 9, median 4, max 52
+  flags: clean 9, component 8, noise 7, stable 5, weak 1
+
+  # identifier             SLT d  ink  compΔ  flag       spacing-only
+  1 0707.4470_EQ0002           6    4      1  noise      yes
+  2 0707.4470_EQ0003           6    3      1  noise      yes
+  3 0707.4470_EQ0005           2    0      0  clean      yes
+  4 0707.4470_EQ0006           2    0      0  clean      yes
+  5 0707.4470_EQ0007           3    7      4  component  
+  6 0707.4470_EQ0008           6   16      2  stable     
+  7 0707.4470_EQ0009           1    8      4  component  
+  8 0707.4470_EQ0011           3   11      7  component  
+  9 0707.4470_EQ0015           1   30     21  component  
+ 10 0707.4470_EQ0017           1   12      3  component  
+ 11 0707.4470_EQ0022           4    0      0  clean      
+ 12 0707.4470_EQ0027           3    9      2  stable     
+ 13 0707.4470_EQ0038           2    0      0  clean      yes
+ 14 0707.4470_EQ0041           8    0      0  clean      
+ 15 0707.4470_EQ0042           8    3      0  noise      
+ 16 0707.4470_EQ0043           8    4      0  noise      
+ 17 0707.4470_EQ0045          30   13      0  stable     
+ 18 0707.4470_EQ0046          34    8      0  weak       
+ 19 0707.4470_EQ0047           6   17      3  component  
+ 20 0707.4470_EQ0048           1    3      0  noise      
+ 21 0707.4470_EQ0049           6   52     27  component  
+ 22 0707.4470_EQ0050           3   36     21  component  
+ 23 0707.4470_EQ0051           2    2      1  noise      yes
+ 24 0707.4470_EQ0052           3    8      2  stable     
+ 25 0707.4470_EQ0054           1    7      2  stable     
+ 26 0707.4470_EQ0055           6    1      0  noise      yes
+ 27 0707.4470_EQ0056          31    0      0  clean      
+ 28 0707.4470_EQ0059           1    0      0  clean      
+ 29 0707.4470_EQ0060           4    0      0  clean      
+ 30 0707.4470_EQ0061          11    0      0  clean      
+
+WHAT THE TWO INSTRUMENTS SAY TOGETHER
+------------------------------------------------------------------------------
+  041 marks 7 of the 30 as SPACING ONLY. Their ink distances:
+    [0, 0, 0, 1, 2, 3, 4]
+    above the floor: 0 of 7
+  the other 23 (substantive by 041's reckoning):
+    above the floor: 14 of 23
+
+  A text-side difference need NOT show on the page: \mathrm{~d} and
+  \mathrm{d} render identically, and the SLT charges an edit for it
+  while the ink cannot see one. The converse also holds -- ink can
+  differ where the LaTeX agrees, because the scan is a photograph of
+  a printed page and the render is not.
+
+  rows with SLT d >= 8: 7; of those, above the ink floor: 2
+  rows with SLT d <= 3: 15; of those, above the ink floor: 9
+
+CORRELATION BETWEEN THE TWO INSTRUMENTS
+------------------------------------------------------------------------------
+  Spearman rank correlation, SLT edit distance vs ink distance,
+  over these 30 rows: rho = -0.04
+
+  Effectively UNCORRELATED. The two instruments are not two views of
+  one quantity and neither is a proxy for the other:
+
+    EQ0056  SLT 31, ink  0  -- MathPix wraps the equation in
+            \begin{aligned} where the author does not. A large
+            structural edit that prints the same.
+    EQ0015  SLT  1, ink 30  -- one edit on the text side, and the
+            largest ink disagreement in the sample.
+
+  The one place they DO agree is the spacing-only class, and they
+  agree by independent routes: 041 classifies those 7 rows by
+  neutralising spacing tokens in the LaTeX, and all 7 land at ink
+  distance 0-4, every one below the floor. Neither instrument was
+  told the other's answer.
+
+  Read together rather than ranked against each other: a row that is
+  large on BOTH (EQ0049 SLT 6 / ink 52 / compdelta 27, EQ0050 SLT 3 /
+  ink 36 / compdelta 21) has a disagreement visible in the source AND
+  on the page, which is the strongest evidence either side can offer.
