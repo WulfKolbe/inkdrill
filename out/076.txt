@@ -1,0 +1,71 @@
+076 - docs/ audit: last update, and whether the claims match the code
+==========================================================================
+
+FILE                LAST TOUCHED        LINES   VERDICT
+--------------------------------------------------------------------------
+docs/state.md       2026-08-21 a87e73b    2715   current, one stale section
+docs/units.md       2026-08-12 43aa92b    3009   STALE: suite count, and silent on 5 CLI subcommands
+docs/algorithms.md  2026-08-14 901fe6a     754   no contradicted claim found; silent on this session's work
+
+FLAGGED - CLAIMS THAT STATE A SUPERSEDED NUMBER
+==========================================================================
+
+1. docs/units.md:530  SUITE COUNT
+     says   'Ran 635 tests in 2.4s / OK (skipped=23)'
+     is now  Ran 1072 tests, OK (skipped=37)
+     The file's own rule is that a unit is 'tests T-n.m passed on
+     <date>', so a stale count is a violation of the document's
+     stated contract, not just an old number.
+
+2. docs/state.md:1370  THE NOISE FLOOR
+     says   'Nothing below distance 6 is a finding -- the p95 of
+             pure rasterizer noise' and 'This retires the "soft"
+             flag class'
+     is now  floor 7, measured on RENDER-vs-SCAN (the comparison it
+             gates) rather than rasterizer-vs-rasterizer; and there
+             is no 'soft' class -- the vocabulary is
+             clean/noise/weak/stable/component.
+     The section is CORRECT AS HISTORY (it is the S5 record) and
+     WRONG AS A CLAIM, because it states the rule in the present
+     tense. Later sections supersede it and say so, but a reader
+     arriving at S5 first gets the retired rule with no marker.
+
+NOT FLAGGED, checked and sound
+==========================================================================
+
+  state.md's other '6' and '1,099 / 25.4%' occurrences are all
+  explicitly labelled as superseded ('the OLD floor of 6 falsely
+  flagged 21.1%', before/after tables). History stated as history
+  is not a stale claim.
+
+  No doc contradicts the current constants: NOISE_DISTANCE=7,
+  NOISE_COMP_DELTA=2, FLAGS=(clean, noise, weak, stable, component).
+
+COVERAGE GAPS - not wrong, but absent
+==========================================================================
+
+  Five CLI subcommands exist: compare, topology, template, locate,
+  residual.
+    docs/state.md    documents 4 (locate is described under T29/T30
+                     but not as an `inkdrill locate` invocation)
+    docs/units.md    mentions NONE of them
+    docs/algorithms.md mentions none
+  units.md is the 'authoritative per-unit record' by its own
+  definition and predates every subcommand in this session, so the
+  authority and the record have diverged.
+
+  Also absent from all three: tools/corpusgate.py, findings.py,
+  inkfit.py, abdiff.py, noisefloor.py, punctprofile.py, threeway.py
+  -- seven committed tools, each carrying a measured constant or a
+  measurement contract.
+
+RECOMMENDATION (not done here; 076 says audit, not fix)
+==========================================================================
+  1. units.md:530  re-run and paste the current count, per the
+     file's own rule.
+  2. state.md S5  add one line marking the floor superseded, with a
+     pointer to the section that measures 7. Do NOT delete the
+     section: the superseded figure is the more instructive one and
+     this project's convention is to strike through, not overwrite.
+  3. units.md  add the CLI surface, or state explicitly that the
+     subcommands live in state.md and units.md covers units only.
