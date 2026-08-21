@@ -1101,7 +1101,12 @@ called it a perfect match. **45% of the "content-identical"
 selection was nothing of the kind.**
 
 Split verified in this channel independently, by filtering their
-file on the environment rather than trusting their correction:
+file on the environment rather than trusting their correction —
+and their published flag turned out to be a strict SUBSET of it
+(664 rows against 677, agreeing on all 664; the 13 extra are
+matrix/cases blocks their parser may handle). Their column puts the
+floor at 8, this filter at 7; the stricter one is kept because it
+is the one that cannot hide a finding:
 
 | | n | distance p95 | comp delta p95 |
 |---|---|---|---|

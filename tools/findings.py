@@ -23,9 +23,14 @@ line, and the metric called it a perfect match.
 
 **7** is the p95 over the 813 rows of that selection carrying no
 multi-line or array environment -- the part where content really is
-identical. Verified in this channel independently of pdfdrill's fix
-by splitting their file on the environment myself; their genuine
-p95 and mine agree exactly.
+identical. Split independently of pdfdrill's fix, by testing each
+row's latex here rather than trusting their column. Their published
+`degenerate` flag is a strict SUBSET of this filter: 664 rows, all
+of which this side also flags, against 677 here. The 13 extra are
+`matrix`/`pmatrix`/`cases` blocks their parser may handle and this
+filter refuses; keeping the stricter filter puts the floor at 7
+rather than the 8 their column gives. One unit, and the more
+conservative one is the one that does not hide findings.
 
     genuine     n=813   distance p50 1  p95  7   comp delta p95 1
     degenerate  n=671   distance p50 7  p95 30   comp delta p95 4
