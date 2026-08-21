@@ -1261,15 +1261,33 @@ five-tuples (`46/4/6/6/0 → 44/4/5/5/0` and `33/3/6/6/0 →
 31/3/5/5/0`). A figure confirmed by independent reconstruction after
 its artifact was deleted.
 
-**0902.0431 does not, and the reason is not the reconstruction.**
-The CELL COUNT moved (+22) and the page count with it (230 → 231),
-on both sides — so the rebuilt pair is a different document, not a
-different measurement of the same one. The rebuild used a generator
-carrying 057/058 (mathrsfs + stmaryrd) and 064 (confidence marks),
-landed after the original A/B. Comparing 51 against 53 across
-different populations is not a comparison. bh2 was immune because
-057/058 changed nothing in it: no `\mathscr`, demoted count already
-zero.
+**0902.0431 does not, and the cause was a STALE ARTIFACT — not the
+reconstruction, and not the generator either.** My first hypothesis
+was generator drift (057/058/064 landing after the original A/B).
+pdfdrill ruled it out by building a worktree at the generator the
+original actually used: both generators produce 231 pages from the
+current tiddlers, so the generator is not what moved the count.
+
+What moved it: the library's `0902.0431/report.pdf` was **older
+than its own `report.tex`**. Task 064 regenerated the tex (adding 12
+`\lowconf` marks) and printed "compile with --compile" without
+compiling, so the 230-page PDF that both sessions were treating as
+current was a build of a superseded source. Recompiled: 231 pages,
+and the library now agrees with the rebuild. **1 of 49 was stale.**
+
+`tools/reportcompare.py` now REFUSES a report whose PDF predates its
+tex. The harness already invalidated its render cache against the
+PDF's mtime; nothing checked the PDF against its SOURCE, and that
+one missing mtime comparison cost two sessions and three hypotheses.
+Refused rather than warned — a warning in a two-hour batch scrolls
+past, which is the P16 rule applied to inputs instead of outputs.
+
+**The original 8,796/51 is now unreproducible by construction**, not
+merely unrebuilt: the 230-page document it measured no longer exists
+in the tree, because the artifact it was built from was itself
+stale. Recorded so a future reader does not try. The comparison of
+51 against 53 was never a divergence — the two numbers describe
+documents that differ by a real page.
 
 The original figure stands as measured on the artifact that existed
 then; the rebuild is recorded beside it as a second measurement

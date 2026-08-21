@@ -48,6 +48,33 @@ if not ALL_DIRS:
     raise SystemExit(f"{LIST}: no '-> ~/pdfdrill-library/<dir>/report.pdf' "
                      f"lines found")
 
+def check_fresh(name, pdf):
+    """Refuse a report.pdf older than its own report.tex.
+
+    The harness already clears its render cache against the pdf's
+    mtime. Nothing checked the pdf against its SOURCE, and on
+    2026-08-21 exactly that gap put a stale artifact into a
+    measurement: 0902.0431's tex was regenerated and the pdf was not
+    recompiled, so a 230-page build of an older tex was measured as
+    current and produced a 22-cell population difference that took
+    two sessions and three hypotheses to trace. One mtime comparison
+    would have caught it at the door.
+
+    Refused rather than warned: a warning in a two-hour batch scrolls
+    past, and the whole point of P16 is that a defect must not read
+    as an absence.
+    """
+    tex = pdf.with_suffix(".tex")
+    if tex.is_file() and pdf.stat().st_mtime < tex.stat().st_mtime:
+        raise SystemExit(
+            f"{name}: report.pdf is OLDER than report.tex "
+            f"({pdf.stat().st_mtime:.0f} < {tex.stat().st_mtime:.0f}) -- "
+            f"the pdf is a build of a superseded source. Recompile it "
+            f"(`pdfdrill reporttex <pdf> --compile`) before measuring, "
+            f"or the measurement describes an artifact that no longer "
+            f"corresponds to its own tex.")
+
+
 def npages(pdf):
     out = subprocess.run(["pdfinfo", str(pdf)], capture_output=True,
                          text=True).stdout
@@ -141,6 +168,7 @@ for name in DIRS:
     if stale:
         for f in d.iterdir(): f.unlink()
         print(f"{name}: cleared {len(stale)} stale files", flush=True)
+    check_fresh(name, pdf)
     try:
         disp = probe(pdf, npages(pdf))
     except Exception as e:
