@@ -1,0 +1,116 @@
+074 - files written outside the repo this session
+==========================================================================
+
+Nothing is deleted here. The column that matters is the last one:
+on a machine that runs for months, deleting a cache something still
+reads costs more than the disk it frees.
+
+   size  path                                                 verdict
+--------------------------------------------------------------------------
+     1G  <session>/scratchpad/p13cmp                          READ
+         report renders + compare md, P13
+         read by: tools/threeway.py -- HARDCODED to this exact path (lines 51-52)
+         NOTE: but by a committed tool that should not depend on it
+
+   411M  <session>/scratchpad/mpx                             UNREAD
+         300/600 dpi renders, 4 books + P13
+         read by: nothing; the old scratch harness was replaced by tools/reportcompare.py
+
+   159M  <session>/scratchpad/bh2p54                          UNREAD
+         bh2 report renders, pages 1-54
+         read by: nothing; superseded three regenerations ago
+
+    60M  <session>/scratchpad/p13                             UNREAD
+         locate-driver renders (abandoned route)
+         read by: nothing; that driver was replaced before it produced a result
+
+     2M  <session>/scratchpad/rescue                          UNREAD
+         pyc snapshot of pdfdrill's commands.py
+         read by: nothing; the work it protected was recovered and committed (their f7d5568 lineage)
+         NOTE: keep-or-delete is a judgement call, see note
+
+   871K  <session>/scratchpad/bh2cmp                          UNREAD
+         bh2 compare markdown
+         read by: nothing
+
+   270K  <session>/scratchpad/cmp                             UNREAD
+         early compare output
+         read by: nothing
+
+   127K  <session>/scratchpad/es3chk                          UNREAD
+         ES3 regression crop
+         read by: nothing
+
+     9K  <session>/scratchpad/ljcheck                         UNREAD
+         coverage driver (promoted to tools/mathpixcoverage.py)
+         read by: nothing; the committed tool superseded it
+
+    12M  <session>/scratchpad                                 UNREAD
+         110 loose files (crops, pgm/png, logs, drivers)
+         read by: nothing
+
+   558K  <session>/tasks                                      UNREAD
+         background-command logs, 50 files
+         read by: nothing now; each was read when its command finished
+
+     1G  /tmp/inkdrill-reportcompare                          READ
+         compare cache: renders + per-page md, 7,320 files
+         read by: tools/reportcompare.py, as its working directory ($INKDRILL_WORK default)
+         NOTE: but every entry is STALE: the reports were regenerated, and the harness clears any file older than its report.pdf on the next run
+
+   404K  /tmp                                                 UNREAD
+         22 *.bak files (mutation-sweep restores)
+         read by: nothing; each was restored in the same command that wrote it
+
+    23K  /tmp                                                 UNREAD
+         7 loose probe scripts and logs
+         read by: nothing
+
+
+SUMMARY
+--------------------------------------------------------------------------
+  total written outside the repo   ~3.4G
+  still read                        1.4G  scratchpad/p13cmp (see below)
+                                    1.4G  /tmp/inkdrill-reportcompare (stale)
+  unread                           ~600M  everything else
+
+THE FINDING, which is why 074 runs before 075
+--------------------------------------------------------------------------
+  tools/threeway.py -- a COMMITTED tool -- hardcodes this session's
+  scratchpad:
+
+      SCRATCH = pathlib.Path(
+          "/tmp/claude-1000/-home-wkolbe-inkdrill/"
+          "4c2bddec-f2e9-4179-ac4a-ae5869ace73a/scratchpad")
+
+  Two consequences, and the second is worse than the disk:
+    1. Deleting scratchpad/p13cmp breaks the P17 three-way tool.
+    2. The tool is ALREADY broken for anyone else -- a different
+       session, a different machine, or this machine after /tmp is
+       cleared. It has only ever worked because it ran in the session
+       that created the directory.
+
+  So the right fix is not "keep the directory". It is to give
+  threeway.py the same treatment reportcompare.py already has
+  ($INKDRILL_WORK with a tempfile default), after which p13cmp
+  becomes deletable like the rest. That is a code change, not a
+  deletion, and it belongs to whoever schedules it -- flagged here,
+  not done here.
+
+TWO ITEMS THAT ARE NOT JUNK AND ARE NOT LISTED ABOVE
+--------------------------------------------------------------------------
+  Written outside the repo this session, actively read, DELIVERABLES:
+    54    report.compare.tsv   (~/pdfdrill-library/<doc>/)
+    3,244 *.coverage.tsv       (~/pdfdrill-library/<doc>/)
+    4     *.profile.tsv        (~/pdfdrill-library/)
+  These are the session's output, not its residue. 075 must not touch
+  them, and they are named here so that "delete everything outside the
+  repo" cannot be read as including them.
+
+ONE JUDGEMENT CALL FOR THE USER
+--------------------------------------------------------------------------
+  scratchpad/rescue (2.1M) holds a pyc snapshot taken when a git
+  checkout destroyed another session's uncommitted work. That work was
+  recovered and committed, so nothing reads it. It is evidence of an
+  incident rather than a cache; delete it with the rest unless it is
+  wanted as a record.
