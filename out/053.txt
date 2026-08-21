@@ -1,0 +1,70 @@
+053 - demoted rows excluded from the findings file
+==========================================================================
+
+A DEMOTED row is one whose LaTeX `renderable()` refused at generation
+time; the report prints \emph{(not rendered)} in its Rendered cell.
+Its ink is 13 components and 6 holes WHATEVER the equation was, so
+comparing it against a scan of real mathematics measures the
+placeholder, not the conversion. Such a row has no rendering to
+compare and is now excluded with the reason named, exactly as the
+row/equation mismatch already is.
+
+Detected from the report's own TEX -- the artifact -- not from the
+model: the model-side label missed 2 of the 4 demoted rows in
+0707.4470 (EQ0012, EQ0016).
+
+POPULATION: compare-P13-arxiv-reports-20260820-214919.tsv, 49 of 49 documents
+  rows before          4335
+  demoted rows found   73  (1.7%)
+  rows after           4262
+
+THE ANSWER, at the floor in force when the question was asked
+(distance 6, component delta 2) so the exclusion is ISOLATED from
+the floor correction made the same day:
+
+  findings          1099  ->   1038   (-61)
+  component class    281  ->    228   (-53, 19% of the class)
+
+AND AT THE RE-MEASURED FLOOR now in force (distance 23, component
+delta 2 -- p95 of 804 content-identical rows), which is the state of
+the channel going forward:
+
+  findings           453  ->    399   (-54)
+  component class    281  ->    228   (-53)
+
+flag          before    after    (at the floor in force, 23)
+clean            988      986
+noise           2894     2877
+weak             160      159
+stable            12       12
+component        281      228
+
+WHERE THE EXCLUDED ROWS WERE
+--------------------------------------------------------------------------
+  documents contributing demoted rows: 12
+    0902.0431        31
+    0707.4470        17
+    1407.7814        9
+    1205.3463v2      4
+    1205.5935v1      2
+    1411.5002        2
+    1502.02973       2
+    1510.06699       2
+
+  the largest values this artefact produced, all previously
+  reported as component-class findings:
+    0902.0431_EQ0939           distance   858  component delta  580
+    0902.0431_EQ0696           distance   492  component delta  151
+    1407.7814_EQ0085           distance   444  component delta  233
+    1411.5002_EQ0278           distance   365  component delta  208
+    0902.0431_EQ0938           distance   327  component delta  196
+    0902.0431_EQ0726           distance   317  component delta  133
+
+HOW IT WAS FOUND, because the route matters: pdfdrill measured three
+of these rows (EQ0057 85, EQ0016 100, EQ0010 84) by rendering their
+LaTeX standalone and got 2, 12, 12 -- then reported that it could not
+reproduce the large values at any scale or resolution. It could not,
+because the content was never on the page. A defect that survives
+BECAUSE the number looks impressive: distance 922 reads as the
+strongest possible evidence, and the placeholder is stable across
+builds, so every consistency check confirms it.
