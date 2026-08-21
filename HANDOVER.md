@@ -78,6 +78,21 @@ measurement; a fresh pass is ~2 hours.
   72−21=51; the two 21s are unrelated).
 - **An empty result is a defect, not a silence** — P16; and **an
   unexplained delta is a finding** (a +15% page count was a bug).
+- **Warn or refuse is decided by what the failure costs, not by how
+  bad it sounds.** The same staleness condition: the producer WARNS
+  (the user asked for a `.tex` and got one; refusing a successful
+  command over a neighbouring file is the tool overriding the
+  instruction) and the consumer REFUSES (a stale input silently
+  corrupts a two-hour batch). Same rule, opposite output, three times
+  in one day — it also settled whether an absent file is named
+  (expected for a producer's first run, a real problem for a
+  consumer) and whether a message may scroll past.
+- **Ask "is there a report to measure", not "is there a file here".**
+  `pdf.is_file()` refuses a directory named `report.pdf`;
+  `pdf.exists()` calls an old one stale and sends the reader to
+  recompile it. The phrasing of the question excluded a case the
+  other phrasing admits — accident here, not foresight, and recorded
+  as accident because that is the useful part.
 - **A fixture must contain the class the rule discriminates against**,
   and its dimensions must come from a measured value.
 
