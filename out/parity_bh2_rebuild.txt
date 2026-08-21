@@ -1,0 +1,7 @@
+A/B per-cell diff at 300 dpi
+  PRE  /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/abrebuild/bh2-PRE/report.pdf
+  POST /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/abrebuild/bh2-POST/report.pdf
+cells compared: 10434  (cells present in only one build: 0)
+cells DIFFERING: 2
+  cell #5656 (rendered): 46/4/6/6/0 -> 44/4/5/5/0
+  cell #5658 (rendered): 33/3/6/6/0 -> 31/3/5/5/0

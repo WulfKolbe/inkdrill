@@ -1244,6 +1244,39 @@ bh2's two are LaTeX-SOURCE cells of migrated inline rows on a
 colon is two components forming one stacked+centred pair, and the
 delta is exactly 46/4/6/6/0 → 44/4/5/5/0.
 
+**Both parities re-measured from a reconstructed PRE, and the two
+results differ in an instructive way.** pdfdrill rebuilt each pair
+after deleting the originals, patching the tiddlers from the
+docmodel's `latex_prepunct` — deliberately NOT re-projecting, since
+that would have produced two identical builds and a diff of 0
+differing cells, a pass indistinguishable from a real one.
+
+| | original | rebuilt |
+|---|---|---|
+| bh2 | 10,434 cells, **2** differing | 10,434 cells, **2** differing |
+| 0902.0431 | 8,796 cells, 51 differing, 230 pp | 8,818 cells, 53 differing, **231 pp** |
+
+**bh2 reproduces cell for cell** — same count, same two cells, same
+five-tuples (`46/4/6/6/0 → 44/4/5/5/0` and `33/3/6/6/0 →
+31/3/5/5/0`). A figure confirmed by independent reconstruction after
+its artifact was deleted.
+
+**0902.0431 does not, and the reason is not the reconstruction.**
+The CELL COUNT moved (+22) and the page count with it (230 → 231),
+on both sides — so the rebuilt pair is a different document, not a
+different measurement of the same one. The rebuild used a generator
+carrying 057/058 (mathrsfs + stmaryrd) and 064 (confidence marks),
+landed after the original A/B. Comparing 51 against 53 across
+different populations is not a comparison. bh2 was immune because
+057/058 changed nothing in it: no `\mathscr`, demoted count already
+zero.
+
+The original figure stands as measured on the artifact that existed
+then; the rebuild is recorded beside it as a second measurement
+against a later generator, not as a correction. **A reproduction
+must fix the generator as well as the data** — otherwise a
+cell-for-cell match is being asked of two different documents.
+
 **How to re-run these two parities, because the built pair is
 gone.** pdfdrill deleted `ab_bh2` and `ab_0902.0431` in its own
 cleanup, so the figures above (10,434 cells / 2 differing; 8,796 /
