@@ -1089,6 +1089,39 @@ Their nine-row precursor gave median 11 and was itself biased —
 selected as SLT-zero AND ink > 6, a truncated tail rather than a
 distribution. Both numbers were wrong in opposite directions.
 
+### Two rules from the cross-session corrections, both earned twice
+
+**A pattern verified on a sample lacking the disambiguating case
+cannot fail.** Three instances in one week: a `\ident\{[^}]*\}` form
+truncating at `~\eqnum{}`, the same form truncating at
+`\allowbreak{}`, and this channel's own parser reading ZERO
+identifiers the moment `\allowbreak{}` moved inside the braces.
+Each was correct on the sample it was written against. Two
+defences, both cheap: anchor on something stable (`[^&\n]*?EQ\d+`
+matches to the number, so brace macros pass through untouched)
+rather than on a brace class, and **read the residue bucket** — 93
+rows classified as "other" is a broken pattern announcing itself.
+This is the fixture rule one layer down: a test that does not
+contain the class it discriminates against cannot fail.
+
+**Two subtractions of equal size are not a chain.** Reconciling the
+demoted counts, `93 − 21 = 72` and `72 − 21 = 51` are both true —
+and the two 21s are unrelated (three Heim books; one excluded
+document). Arithmetic alone would "confirm" a chain that does not
+exist. The numeric analogue of the `(page, row)` key, where a
+consistent-looking result came from two mechanisms nobody had
+separated.
+
+Three defensible numbers exist for "demoted rows" and they differ
+only by population: **72** (all row kinds, roster as written),
+**51** (all kinds, excluding the user-excluded 1511.08771), **49**
+(EQ rows only, which is what this channel consumes). Both sessions
+derived all three independently and agree exactly. `1511.08771` is
+still listed in `~/pdfdrill-library/P13-arxiv-reports.txt`, so every
+consumer filters it at use; whether the roster should instead mean
+the operative corpus is the user's call and neither session will
+edit it unilaterally.
+
 **The floor was measured three times and the third one is right —
 because the CONTROL GROUP was broken, not the measurement.** The
 re-measured floor of 23 survived a doubled sample (p95 23 at n=804
