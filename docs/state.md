@@ -1244,6 +1244,24 @@ bh2's two are LaTeX-SOURCE cells of migrated inline rows on a
 colon is two components forming one stacked+centred pair, and the
 delta is exactly 46/4/6/6/0 → 44/4/5/5/0.
 
+**How to re-run these two parities, because the built pair is
+gone.** pdfdrill deleted `ab_bh2` and `ab_0902.0431` in its own
+cleanup, so the figures above (10,434 cells / 2 differing; 8,796 /
+51) rest on a reconstruction path rather than on a directory. The
+path is verified and the harness is committed (`tools/abdiff.py`):
+
+    latex_prepunct lives in model.docmodel.json, NOT in the
+    tiddlers -- bh2 19 of 6,554 objects, 0902.0431 673 of 6,351,
+    and every one ends with its own trailing_punct. Substituting it
+    back for `latex` reconstructs the PRE state object by object.
+
+The trap for anyone reproducing this: `reporttex` builds from the
+TIDDLERS, and the tiddlers projection carries `trailing_punct` but
+NOT `latex_prepunct` (verified: 0 of 6,469 in bh2). So a
+reconstruction that starts from the tiddlers finds nothing and
+looks like the field was never written. It must start from the
+docmodel and re-project.
+
 **The scan column is the control, and nobody designed it as one.**
 Six of 0902.0431's differing cells are SCAN cells — an unchanged
 JPEG the migration cannot touch. Both "the migration changed the
