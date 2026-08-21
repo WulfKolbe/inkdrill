@@ -1089,31 +1089,42 @@ Their nine-row precursor gave median 11 and was itself biased —
 selected as SLT-zero AND ink > 6, a truncated tail rather than a
 distribution. Both numbers were wrong in opposite directions.
 
-**The floor held at scale; the ceiling did not.** pdfdrill's
-selection grew from 810 to 1,490 SLT-zero rows across 42 documents
-(one excluded because its "author" side resolved to MathPix's own
-tex.zip — a manufactured SLT-zero would have pulled the floor DOWN).
-Re-measured in this channel's units, n = 1,484:
+**The floor was measured three times and the third one is right —
+because the CONTROL GROUP was broken, not the measurement.** The
+re-measured floor of 23 survived a doubled sample (p95 23 at n=804
+and at n=1,484) and an independent render route (22). It was still
+wrong. pdfdrill's SLT parser collapses `\begin{aligned}` to one
+`UNRESOLVED` node, so two multi-line equations with different
+content compare EQUAL at distance 0 — on 1408.0838_EQ0011 MathPix
+had dropped three summations and an entire line, and the metric
+called it a perfect match. **45% of the "content-identical"
+selection was nothing of the kind.**
 
-| | n=804 | n=1,484 | verdict |
+Split verified in this channel independently, by filtering their
+file on the environment rather than trusting their correction:
+
+| | n | distance p95 | comp delta p95 |
 |---|---|---|---|
-| distance p95 | 23 | **23** | unchanged as the sample grew 85% |
-| component delta p95 | 2 | **3** | moved |
+| degenerate (env present) | 671 | 30 | 4 |
+| **genuine (no env)** | **813** | **7** | **1** |
 
-The distance floor is kept at 23 rather than adopting pdfdrill's 22:
-theirs is measured on standalone author renders at 400 dpi, mine on
-the report cell at 300 dpi that this channel actually gates, and
-swapping in a number from a different comparison is the error that
-produced 6. One unit between two routes is corroboration.
+So `NOISE_DISTANCE = 7`, and **the original 6 was right to within
+one unit** — typeface, hinting and scan noise add almost nothing
+beyond rasterizer noise, which is itself worth knowing. False
+positives on the clean control: floor 6 → 5.4%, floor 7 → 4.7%,
+floor 23 → 1.0%. `NOISE_COMP_DELTA` stays 2 (1.6% there); the
+earlier alarm at 5.7% was the same degenerate rows.
 
-The component ceiling of 2 was reported here as "CONFIRMED by the
-better control" at 2.7% — true of 804 rows and **false at scale**,
-where it reads 5.7%. It is left at 2 deliberately: an estimate that
-moved when the sample doubled needs evidence it has stopped moving,
-not a new value picked off a curve. The channel the findings are
-ranked on is therefore running at about twice the false-positive
-rate previously claimed for it, and that is now recorded rather
-than implied.
+Adopting 23 would have moved **real findings out** of the channel —
+worse than the false positives it was adopted to prevent, because it
+hides defects rather than inventing them.
+
+The lesson is not "measure the floor": that was done three times.
+**A control group is only as good as the rule that built it**, and
+"content is identical" was an assumption inherited from another
+tool's metric rather than a property this channel checked. The
+degenerate rows are also findable from this side alone — their ink
+distances are visibly a different distribution (p50 7 against 1).
 
 **Demoted rows had no rendering to compare.** A row whose LaTeX
 `renderable()` refused prints `\emph{(not rendered)}`, whose ink is

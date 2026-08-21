@@ -1,56 +1,56 @@
 """The finding vocabulary shared by the compare harnesses (P19, S5).
 
 One definition, because a flag that means different things in two
-files is worse than no flag. The cuts are MEASURED, not chosen -- and
-the first measurement was of the WRONG COMPARISON.
+files is worse than no flag. The cuts are MEASURED, and the history
+of getting them wrong is kept because each error had a different
+shape.
 
-`tools/noisefloor.py` renders one page through two RASTERIZERS
-(ghostscript, poppler) and gave distance p95 6, component delta max
-2. That bounds rasterizer choice and nothing else. But this channel
-compares a LaTeX RENDER against a SCAN of a printed page: different
-typeface, different hinting, print and scan noise -- none of which a
-rasterizer swap can produce. Measuring the noise of one comparison
-and applying it to another is the population error this project
-keeps catching, and it was mine.
+**6** came from `tools/noisefloor.py`: one page through two
+RASTERIZERS. That bounds rasterizer choice, and this channel
+compares a LaTeX RENDER against a SCAN -- different typeface,
+different hinting, print and scan noise. Right method, wrong
+comparison.
 
-The floor is now measured on the comparison it gates. pdfdrill
-supplied the SELECTION -- 810 rows whose MathPix LaTeX matches the
-author's LaTeX at SLT distance 0, so content agreement is guaranteed
-by construction -- and this channel supplied the MEASUREMENT, its own
-distance and component delta on those same rows with demoted rows
-excluded (n = 804):
+**23** came from re-measuring on 1,484 rows selected as SLT-distance
+zero, i.e. content identical by construction. It survived a doubled
+sample and an independent render route (22). It was still wrong,
+because the SELECTION was broken: pdfdrill's SLT parser collapses
+`\begin{aligned}` to a single UNRESOLVED node, so two multi-line
+equations with different content compared EQUAL. 45% of the
+"content-identical" rows were nothing of the kind -- on
+1408.0838_EQ0011 MathPix had dropped three summations and a whole
+line, and the metric called it a perfect match.
 
-    distance         p50 2  p90 15  p95 23  p99 46
-    component delta  p50 0  p90  1  p95  2  p99  6
+**7** is the p95 over the 813 rows of that selection carrying no
+multi-line or array environment -- the part where content really is
+identical. Verified in this channel independently of pdfdrill's fix
+by splitting their file on the environment myself; their genuine
+p95 and mine agree exactly.
 
-Hence `NOISE_DISTANCE = 23`. The old floor of 6 falsely flagged
-21.1% of content-identical rows -- one row in five. An independent
-route (pdfdrill rendering the AUTHOR's LaTeX standalone at 400 dpi
-rather than reading the report cell at 300) gives p95 22 on the same
-selection, so two different renders converge.
+    genuine     n=813   distance p50 1  p95  7   comp delta p95 1
+    degenerate  n=671   distance p50 7  p95 30   comp delta p95 4
 
-`NOISE_COMP_DELTA` stays at 2 -- but UNDER PROTEST, and the reason
-is recorded because it is a live uncertainty rather than a settled
-number. On 804 content-identical rows the ceiling of 2 looked
-confirmed (2.7% above it). On 1,484 rows from the same selection
-method it reads 5.7%, and the p95 moved 2 -> 3:
+False-positive rate on the genuine control:
 
-    ceiling 1 -> 11.1% false positives   ceiling 4 -> 2.4%
-    ceiling 2 ->  5.7%  (in force)       ceiling 5 -> 1.7%
-    ceiling 3 ->  3.5%                   ceiling 6 -> 1.5%
+    distance floor  6 -> 5.4%     component ceiling 1 -> 2.6%
+    distance floor  7 -> 4.7%     component ceiling 2 -> 1.6%
+    distance floor 23 -> 1.0%     component ceiling 3 -> 1.2%
 
-The distance floor did NOT move when the sample grew 85% (p95 23
-both times, and an independent render route gives 22). The ceiling
-did. An estimate that survives a doubled sample has earned its
-number; one that moved needs evidence it has stopped moving, not a
-new value picked off a curve -- so the ceiling is left where it is
-and the component channel is known to run at roughly twice the
-false-positive rate previously claimed for it.
+So the original 6 was right to within one unit, and 23 would have
+thrown real findings away -- worse than the false positives it was
+adopted to prevent, because it hides defects instead of inventing
+them. `NOISE_COMP_DELTA` stays 2: on the clean control it costs
+1.6%, and the earlier alarm at 5.7% was the same degenerate rows.
+
+The lesson is not "measure the floor" -- I did that three times.
+It is that a control group is only as good as the rule that built
+it, and "content is identical" was an assumption inherited from
+another tool's metric rather than a property this channel checked.
 """
 
 from __future__ import annotations
 
-NOISE_DISTANCE = 23         # p95 of RENDER-vs-SCAN on identical content
+NOISE_DISTANCE = 7          # p95 of RENDER-vs-SCAN, GENUINELY identical
 NOISE_COMP_DELTA = 2        # p95 of the same control -- unchanged
 
 FLAGS = ("clean", "noise", "weak", "stable", "component")
