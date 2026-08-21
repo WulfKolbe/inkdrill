@@ -58,6 +58,32 @@ DIRS = corpusgate.gate(
     count_pages=lambda n: npages(LIB / n / "report.pdf"))
 
 
+def demoted_idents(name):
+    """Identifiers whose Rendered cell is the string '(not rendered)'.
+
+    A demoted row has NO rendering: `renderable()` refused the LaTeX
+    at generation time and the report printed a placeholder. Comparing
+    that placeholder against a scan of real mathematics measures
+    nothing -- the ink of '(not rendered)' is 13 components and 6
+    holes whatever the equation was -- and it produced 63 of this
+    channel's 401 component-class findings, including its largest
+    (dist 922). Found by pdfdrill failing to reproduce three of them
+    from the content; the content was never on the page.
+
+    Read from the report's own tex, which is the artifact, rather
+    than from the model: the model-side label missed two of the four
+    demoted rows in 0707.4470.
+    """
+    tex = LIB / name / "report.tex"
+    if not tex.is_file():
+        return set()
+    return {m.group(1).replace("\\", "").replace("allowbreak{}", "")
+            for m in re.finditer(
+                r"\\ident\{([^&\n]*?EQ\d+)\}(.*?)\\\\ \\hline",
+                tex.read_text(), re.S)
+            if "emph{(not rendered)}" in m.group(2)}
+
+
 def idents_for(name):
     """[(identifier, source page), ...] in display-table order.
 
@@ -150,6 +176,7 @@ from findings import flag_of        # one definition (P19)
 
 
 run_rows = []
+demoted_rows = []
 id_mismatch = []
 zero_rows = []
 for name in DIRS:
@@ -191,7 +218,11 @@ for name in DIRS:
     contiguous = pages == list(range(pages[0], pages[0] + len(pages))) \
         if pages else False
     if len(idents) >= len(recs) and contiguous:
+        dem = demoted_idents(name)
         for (ident, srcpage), (dis, cd, stable) in zip(idents, recs):
+            if ident in dem:
+                demoted_rows.append(name)
+                continue
             run_rows.append((name, ident, srcpage, dis, cd,
                              flag_of(dis, cd, stable)))
     else:
@@ -229,6 +260,13 @@ _by = {}
 for r in run_rows:
     _by[r[5]] = _by.get(r[5], 0) + 1
 print(f"{len(run_rows)} rows -> {run_file}", flush=True)
+if demoted_rows:
+    import collections as _c
+    by = _c.Counter(demoted_rows)
+    print(f"  excluded {len(demoted_rows)} DEMOTED rows (no rendering to "
+          f"compare) across {len(by)} documents; worst: "
+          f"{', '.join(f'{k} {v}' for k, v in by.most_common(3))}",
+          flush=True)
 print("  flags: " + ", ".join(f"{k} {v}" for k, v in sorted(_by.items())),
       flush=True)
 if id_mismatch:

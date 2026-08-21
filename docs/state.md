@@ -1057,6 +1057,63 @@ and the T23 non-glyph oracle stayed byte-identical; the two glyph
 oracles are re-captured in the same commit, as the oracle's contract
 requires. Classification and structure logic untouched.
 
+### Two corrections to the findings channel, both from outside it
+
+**The floor was measured on the wrong comparison.** S5 rendered one
+page through two RASTERIZERS and took p95 = 6. That bounds
+rasterizer choice; this channel compares a LaTeX RENDER against a
+SCAN — different typeface, different hinting, print and scan noise,
+none of which a rasterizer swap can produce. The population error
+this project keeps catching, committed by me.
+
+Re-measured on the comparison it gates, with the two halves supplied
+independently: pdfdrill selected 810 rows whose MathPix LaTeX equals
+the author's at SLT distance 0 (content agreement guaranteed by
+construction), and this channel measured its own distance on those
+rows, demoted excluded, n = 804:
+
+| | p50 | p90 | p95 | p99 |
+|---|---|---|---|---|
+| distance | 2 | 15 | **23** | 46 |
+| component delta | 0 | 1 | **2** | 6 |
+
+The old floor of 6 falsely flagged **21.1% of content-identical
+rows**. pdfdrill's independent route — rendering the AUTHOR's LaTeX
+standalone at 400 dpi instead of reading the report cell at 300 —
+gives p95 = 22 on the same selection, so two renders converge.
+`NOISE_COMP_DELTA` stays 2: the better control CONFIRMS it (2.7%
+above the ceiling). **The channel the findings are ranked on was
+the correctly calibrated one; the distance floor was not.**
+
+Their nine-row precursor gave median 11 and was itself biased —
+selected as SLT-zero AND ink > 6, a truncated tail rather than a
+distribution. Both numbers were wrong in opposite directions.
+
+**Demoted rows had no rendering to compare.** A row whose LaTeX
+`renderable()` refused prints `\emph{(not rendered)}`, whose ink is
+13 components and 6 holes whatever the equation was. Comparing that
+against a scan of real mathematics measured nothing and produced
+**63 of the channel's 401 component-class findings (16%)**,
+including its largest (distance 922). Found because pdfdrill could
+not reproduce three of them from the content — the content was
+never on the page. Demoted rows are now excluded with the count
+reported, read from the report's own tex rather than the model
+(the model-side label missed two of four in 0707.4470).
+
+Combined effect on the current findings, same rows re-flagged:
+
+| flag | before | after |
+|---|---|---|
+| noise | 2,248 | 2,877 |
+| weak | 706 | 159 |
+| stable | 112 | 12 |
+| component | 281 | 228 |
+| **findings** | **1,099 (25.4%)** | **399 (9.4%)** |
+
+Three fifths of what this channel called a finding was floor
+artefact or placeholder. The component channel lost 19%, all of it
+demoted rows.
+
 ### The migration is invisible in the findings — measured twice
 
 The same 50-document compare, run before and after the corpus
