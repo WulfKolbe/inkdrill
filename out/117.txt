@@ -1,0 +1,144 @@
+117 - do the components a scan is MISSING sit next to a rule?
+==============================================================
+
+ANSWER: NO. The pooled figure says 17.2% against an 11.5% null and
+looks like a 1.5x enrichment. It is not. Compared per row against
+each row's OWN rule density, the deficit sits BELOW the null on 80
+rows and above it on 29 (sign test z = -4.88, median difference
+-0.056). The pooled number is carried by 16 rows, and with those
+removed the rate is 7.6% against a null of 11.5% -- the opposite
+direction.
+
+There is no rule-adjacency signal in the deficit on this corpus.
+
+--------------------------------------------------------------------
+1. WHAT WAS ASKED AND WHAT COULD BE ANSWERED
+
+117 asks how many of the MISSING components lie within one median
+glyph width of a rule. That presumes the missing components can be
+identified, which means matching the rendered cell's components to
+the scan's.
+
+THE MATCHING DOES NOT WORK, and this is a finding rather than an
+implementation shortfall. I built it threshold-free on purpose -- each
+component's box normalised to its own crop's ink bounding box, a
+rendered component counted PRESENT when any scan component's
+normalised box overlaps it, overlap `> 0`, no tolerance to tune. It
+checks itself against the row's actual deficit:
+
+    unmatched minus deficit    p5 -34    p50 -6    p95 +16
+    rows where they agree to within 25% or 2:   61 of 426
+
+Per-component correspondence between a LaTeX render and a SCAN of the
+same expression is not recoverable by position. The two differ in
+typeface, in scale, and in how ink decomposes -- a scanned `i` merges
+its dot into its stem, one rendered mark becomes two scanned ones and
+two become one. Any per-component answer would have been an artefact
+of the matching, so no per-component answer is given.
+
+WHAT REPLACED IT: zone counts, not identities. Each rule in the
+rendered cell defines a zone, its box grown by one median glyph
+width; the zone is normalised to the rendered cell's ink bounding box
+and mapped onto the scan cell's. Both sides' components are counted
+within the SAME normalised zone and the deficit is the difference. No
+identity is claimed for any single mark.
+
+--------------------------------------------------------------------
+2. THE DENOMINATOR DECIDES, AND IT IS SMALL
+
+    flagged rows where the render has more components than the scan
+                                                            426
+      with a rule in the RENDERED cell                      110
+      with no rule at all -- cannot answer the question     316
+
+74% of the population has no rule in the rendered cell. Those rows
+are counted and named, not dropped: a measurement about rules over a
+population that is three-quarters ruleless would be quoting a
+subgroup as a corpus.
+
+--------------------------------------------------------------------
+3. THE POOLED NUMBER, AND WHY IT IS WRONG
+
+    deficit falling in a rule zone      73 of 425      17.2%
+    NULL: rendered components in a
+      rule zone at all                 968 of 8,398    11.5%
+
+The null model is the whole reason this is readable. Without it,
+"17% of missing components are near a rule" reads as a finding; with
+it, the question is whether 17.2% exceeds the share of ink that is
+near a rule anyway.
+
+It appears to. It does not survive being asked per row:
+
+    per-row deficit share MINUS that row's own null share
+      above its own null    29 rows
+      below                 80 rows
+      equal                  1 row
+      median difference   -0.0569
+      p10 -0.1765   p25 -0.1045   p50 -0.0569   p75 +0.0070   p90 +0.7447
+      sign test, 109 non-tied rows:  z = -4.88
+
+The pooled and the paired figures point in OPPOSITE directions. The
+pooled one aggregates across rows with very different rule densities,
+so rows that are rule-dense and deficit-heavy dominate it. Sixteen
+rows carry it:
+
+    16 rows where every missing component is in a rule zone
+      they hold  44 of 425 deficit  (10%)
+      they hold  44 of  73 near     (60%)
+    the other 94 rows:  29 of 381 = 7.6%   against a null of 11.5%
+
+Those 16 have a mean deficit of 2.75. A row with a rule and two
+missing marks lands at 1.000 by arithmetic, not by evidence.
+
+--------------------------------------------------------------------
+4. WHAT THIS DOES NOT SAY
+
+- It does not say rules are irrelevant to scan loss in general. It
+  says that on THIS population -- 110 rows over 30 documents, the
+  subset of my flagged negative-delta rows that have any rule in the
+  rendered cell -- proximity to a rule does not predict where the
+  deficit falls.
+- It does not measure thin-ink survival. A rule that vanished
+  ENTIRELY from the scan is a missing component near a rule only if
+  another rule remains to define the zone. 116 already showed
+  `is_rule` refuses most bar-shaped ink on scans (205 bars at aspect
+  10-20 against 3 at >= 20), so a rule that survived thinner may not
+  be counted as a rule at all. That is the measurement I would take
+  next, and it is not this one.
+- 0902.0431 contributes 2 of the 16 all-near rows. It is my largest
+  document and its identifiers are withheld for the 16-page cache
+  hole, so its rows appear here with id `?`. The zone measurement
+  does not need an identifier, but a later join would.
+
+--------------------------------------------------------------------
+5. FOR 118
+
+Nothing. E cannot use 117 and should not try.
+
+The result is a NULL, and a prompt hint built on it would be
+asserting a defect the measurement refuted rather than merely failed
+to find -- worse than 116's case, not better. If a missing-structure
+hint is wanted it needs a different locator; this one says the
+deficit is not where the rules are.
+
+--------------------------------------------------------------------
+6. POPULATION
+
+76 documents with a cached 300 dpi report render under
+/tmp/inkdrill-reportcompare, measured from the CACHE and not
+re-rendered. Flag from tools/findings.py at the floors in force
+(distance 7, component delta 2); demoted rows excluded; "negative
+delta" means the RENDERED cell has more components than the scan
+cell. 426 such rows, 110 with a rule, 30 documents.
+
+This is MY population and it is not pdfdrill's out/097 294 -- theirs
+is standalone-render against crop JPEG at 400 dpi over 49 documents,
+mine is report-cell against scan-cell at 300 dpi over 76. Different
+artifacts, different rule; the two counts are not comparable and are
+not combined.
+
+RE-RUN:  python3 tools/ruledeficit.py --jobs 6 [--reach F]
+FILES:   results/ruledeficit-20260822-201421.tsv -- 426 rows with
+         deficit, unmatched, rule count, near-rule count, the
+         rendered cell's own near/total, and the fraction.
