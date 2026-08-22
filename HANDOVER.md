@@ -52,6 +52,30 @@ measurement; a fresh pass is ~2 hours.
    unilaterally.
 5. **`prune()` unused by `emit`**; CFG parser undecided; `group()`
    absorbs an inline limit — all need symbol identity.
+6. **The compare probe still selects 5-column pages; the reports are
+   now 6.** pdfdrill's task 099 added a Confidence column, so a
+   display-equation table with crops is **6 columns with crops, 5
+   without** (inline formulas 5, tables 4, diagrams 4, each section
+   preceded by `\clearpage` so no page mixes two). The fix is
+   `reportcompare.py`'s probe; the fix is MINE and the change
+   ORIGINATES in 099, which matters because **it will move row counts
+   corpus-wide.** If someone later asks why the counts moved, the
+   answer is a column that was added, not a change in what the ink
+   found. Write that beside the new numbers when they land.
+7. **`0902.0431`'s render cache has a 16-page hole** (113–115,
+   118–130), so `overrun.py` withholds identifiers for its 320
+   flagged rows and three of the four cases pdfdrill confirmed by eye
+   are unverifiable. Every one of those pages carries maths objects —
+   the gap is the cache, not the document. Sixteen ghostscript calls.
+8. **`out/102.txt` is measured against the render cache as it stood
+   at 14:11 on 2026-08-22.** pdfdrill's tail-split fix (their open
+   item 9) changes crop rectangles corpus-wide; when it lands those
+   numbers describe a corpus that no longer exists and must be
+   re-measured. There is no mtime to compare here — **an artifact can
+   be stale against its source and a RESULT can be stale against the
+   artifact it was measured on**, and only the first has a guard. It
+   is held by a message between sessions, which is why it is written
+   down.
 
 ## Known failure classes — every one cost real time here
 
