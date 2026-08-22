@@ -1083,6 +1083,67 @@ def free_rules(mask, *, pt: float, regions=None) -> list[dict]:
     return sorted(out, key=lambda d: (d["y0"], d["x0"]))
 
 
+def rule_context(mask, rule, *, pt: float, reach: float = 1.0) -> dict:
+    """Ink above and below one rule, within `reach` x its own length.
+
+    A rule alone says nothing about what it does. The same 2 px
+    horizontal bar is a fraction bar, an overline, an underline or a
+    booktabs separator, and the four are told apart by WHAT SITS
+    AROUND IT -- which is ink, and therefore measurable here without
+    knowing a single symbol.
+
+    The band is the rule's own x-span by `reach` x its length in y,
+    clipped to the page. Scaling the band to the RULE rather than to
+    a page constant is the point: a fraction bar under a 12 pt
+    numerator and a booktabs rule spanning a 400 pt table need the
+    same test, and any band expressed in pixels or points fits one
+    and not the other.
+
+    Returns the two coverages as ink fraction of band area, the band
+    heights actually used after clipping, and the rule's length --
+    NOT a class. `qc` sets the precedent and the reason is the same:
+    the cut between "ink above" and "no ink above" is a threshold on
+    a continuum, the caller has the page's own statistics, and a
+    classifier buried here would fix that cut for every caller. The
+    four names in 116 -- fraction, overline, underline, separator --
+    are `above and below`, `above only`, `below only`, `neither`,
+    and the caller supplies the presence test.
+
+    A vertical rule returns zero coverage in both bands rather than
+    being refused: the bands are defined off the long axis, and for a
+    vertical rule they lie beside it, not above and below. Callers
+    filtering to horizontal rules should do so on `horizontal` in the
+    rule record; this function does not silently reinterpret one
+    orientation as the other.
+    """
+    x0 = int(round(rule["x0"] / pt)); x1 = int(round(rule["x1"] / pt))
+    y0 = int(round(rule["y0"] / pt)); y1 = int(round(rule["y1"] / pt))
+    w, h = x1 - x0, y1 - y0
+    length = max(w, h)
+    band = max(1, int(round(reach * length)))
+    if h >= w:                       # vertical: no above/below to read
+        return {"above": 0.0, "below": 0.0, "band_above_px": 0,
+                "band_below_px": 0, "length_px": length,
+                "vertical": True}
+
+    def cover(ya, yb):
+        ya = max(0, ya); yb = min(mask.height, yb)
+        xa = max(0, x0); xb = min(mask.width, x1)
+        if yb <= ya or xb <= xa:
+            return 0.0, 0
+        n = 0
+        data = mask.data
+        for y in range(ya, yb):
+            row = data[y * mask.width + xa: y * mask.width + xb]
+            n += len(row) - row.count(0)
+        return n / float((yb - ya) * (xb - xa)), yb - ya
+
+    above, ha = cover(y0 - band, y0)
+    below, hb = cover(y1, y1 + band)
+    return {"above": above, "below": below, "band_above_px": ha,
+            "band_below_px": hb, "length_px": length, "vertical": False}
+
+
 def page_record(*, page: int, width_px: int, height_px: int, dpi,
                 lines=(), rules=(), polarity=None) -> dict:
     """One page, with every coordinate in pt (G1, G2).

@@ -1643,3 +1643,146 @@ class S6_1_ColumnsAreDisjoint(unittest.TestCase):
         cannot tell which filter fired."""
         self.assertEqual(self._cols(nested_ink=True), 4)
         self.assertEqual(self._cols(nested_ink=False), 4)
+
+
+class T1_15_RuleContext(unittest.TestCase):
+    """116: what a rule DOES, from the ink around it.
+
+    Dimensions are measured, not chosen. `ink.rules[]` on
+    arxiv_1408_0838_p8 at 300 dpi holds rules 20 and 28 px long and
+    1 px thick; the Heim scan pages carry rules 160 and 222 px long.
+    This fixture uses a 100 px rule 2 px thick, inside that range, on
+    a page big enough for a full band above and below.
+
+    All four classes fire in this class and each from its own
+    fixture, so no branch of the classification can be deleted
+    without a failure -- and `rule_context` itself returns no class,
+    which is the point: the caller supplies the presence cut.
+    """
+
+    W, H = 400, 260
+    RX0, RX1 = 150, 250          # rule spans x 150..249, length 100
+    RY0, RY1 = 130, 132          # 2 px thick, so the band is 100 px
+
+    def _page(self, *, above=False, below=False, vertical=False):
+        from inkdrill.raster import InkMask
+        buf = bytearray(self.W * self.H)
+
+        def box(x0, y0, x1, y1):
+            for y in range(max(0, y0), min(self.H, y1)):
+                for x in range(max(0, x0), min(self.W, x1)):
+                    buf[y * self.W + x] = 0xFF
+        if vertical:
+            box(200, 80, 202, 180)               # 100 px tall, 2 wide
+        else:
+            box(self.RX0, self.RY0, self.RX1, self.RY1)
+        if above:                                 # inside the 100 px band
+            box(180, 60, 220, 120)
+        if below:
+            box(180, 145, 220, 205)
+        return InkMask(bytes(buf), self.W, self.H)
+
+    @staticmethod
+    def _ctx(mask):
+        from inkdrill.emit import free_rules, rule_context, _pt_per_px
+        pt = _pt_per_px((72.0, 72.0))            # 1 px == 1 pt, so the
+        rules = free_rules(mask, pt=pt)          # fixture reads directly
+        assert len(rules) == 1, f"fixture gave {len(rules)} rules"
+        return rule_context(mask, rules[0], pt=pt), rules[0]
+
+    def test_all_four_classes_fire(self):
+        """Each class from its own fixture. A classification whose
+        fourth branch never occurs is the defect this project has
+        recorded five times."""
+        seen = {}
+        for above, below, name in ((True, True, "fraction"),
+                                   (True, False, "overline"),
+                                   (False, True, "underline"),
+                                   (False, False, "separator")):
+            c, _ = self._ctx(self._page(above=above, below=below))
+            cut = 0.01
+            seen[name] = (c["above"] > cut, c["below"] > cut)
+        self.assertEqual(seen["fraction"], (True, True))
+        self.assertEqual(seen["overline"], (True, False))
+        self.assertEqual(seen["underline"], (False, True))
+        self.assertEqual(seen["separator"], (False, False))
+
+    def test_the_band_scales_with_the_rule_not_with_the_page(self):
+        """A fraction bar under a 12 pt numerator and a booktabs rule
+        spanning a table must get the same test. Doubling every
+        dimension must leave the coverages unchanged; a band fixed in
+        pixels would not."""
+        from inkdrill.emit import free_rules, rule_context, _pt_per_px
+        from inkdrill.raster import InkMask
+
+        def page(s):
+            W, H = 400 * s, 260 * s
+            buf = bytearray(W * H)
+            for x0, y0, x1, y1 in ((150, 130, 250, 132),
+                                   (180, 60, 220, 120),
+                                   (180, 145, 220, 205)):
+                for y in range(y0 * s, y1 * s):
+                    for x in range(x0 * s, x1 * s):
+                        buf[y * W + x] = 0xFF
+            return InkMask(bytes(buf), W, H)
+        pt = _pt_per_px((72.0, 72.0))
+        out = []
+        for s in (1, 2):
+            m = page(s)
+            r = free_rules(m, pt=pt)[0]
+            c = rule_context(m, r, pt=pt)
+            out.append((round(c["above"], 3), round(c["below"], 3)))
+        self.assertEqual(out[0], out[1])
+        self.assertGreater(out[0][0], 0.0)      # and it is not zero
+                                                # on both, which would
+                                                # make equality vacuous
+
+    def test_reach_changes_the_answer_and_is_not_inert(self):
+        """`reach` is load-bearing: on the real page the three 20 px
+        rules read `separator` at reach 1 and `overline` at reach 4,
+        because a 4x band reaches the previous text line. Asserted
+        here so the argument cannot be dropped."""
+        from inkdrill.emit import free_rules, rule_context, _pt_per_px
+        from inkdrill.raster import InkMask
+        buf = bytearray(self.W * self.H)
+        for y in range(self.RY0, self.RY1):
+            for x in range(self.RX0, self.RX1):
+                buf[y * self.W + x] = 0xFF
+        for y in range(10, 25):                 # far above: outside a
+            for x in range(180, 220):           # 100 px band, inside 400
+                buf[y * self.W + x] = 0xFF
+        m = InkMask(bytes(buf), self.W, self.H)
+        pt = _pt_per_px((72.0, 72.0))
+        r = free_rules(m, pt=pt)[0]
+        self.assertEqual(rule_context(m, r, pt=pt, reach=1.0)["above"],
+                         0.0)
+        self.assertGreater(rule_context(m, r, pt=pt, reach=4.0)["above"],
+                           0.0)
+
+    def test_a_vertical_rule_is_flagged_not_reinterpreted(self):
+        """The bands are defined off the long axis; for a vertical
+        rule they would lie beside it, not above and below. It must
+        say so rather than return a number that reads like an
+        answer."""
+        c, _ = self._ctx(self._page(vertical=True))
+        self.assertTrue(c["vertical"])
+        self.assertEqual((c["above"], c["below"]), (0.0, 0.0))
+
+    def test_a_band_clipped_by_the_page_edge_reports_its_real_height(self):
+        """A rule near the top has no room for a full band. The
+        coverage must be over the band that EXISTS, not over the one
+        that was asked for, or a rule at the margin reads as empty."""
+        from inkdrill.emit import free_rules, rule_context, _pt_per_px
+        from inkdrill.raster import InkMask
+        buf = bytearray(self.W * self.H)
+        for y in range(10, 12):                 # rule 10 px from the top
+            for x in range(self.RX0, self.RX1):
+                buf[y * self.W + x] = 0xFF
+        for y in range(0, 9):                   # ink filling that gap
+            for x in range(self.RX0, self.RX1):
+                buf[y * self.W + x] = 0xFF
+        m = InkMask(bytes(buf), self.W, self.H)
+        pt = _pt_per_px((72.0, 72.0))
+        c = rule_context(m, free_rules(m, pt=pt)[0], pt=pt)
+        self.assertEqual(c["band_above_px"], 10)   # not 100
+        self.assertAlmostEqual(c["above"], 0.9, places=2)

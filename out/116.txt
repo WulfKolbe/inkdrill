@@ -1,0 +1,165 @@
+116 - rule context: what a rule DOES, from the ink around it
+==============================================================
+
+ANSWER FIRST, and it is mostly about the population. The test works
+and all four classes fire. But on the Heim page it was asked for,
+THERE ARE NO RULES TO CLASSIFY: `ink.rules[]` is empty on
+tests/fixtures/heim_bh2_p96.png, 0 of 1,087 ink regions pass
+`is_rule`. Six further Heim scan pages at 300 dpi yield 5 rules
+between them. The distribution 116 asks for does not exist on a
+scanned prose page, and the reason is the rule DETECTOR, not the
+context test.
+
+--------------------------------------------------------------------
+1. THE TEST
+
+`emit.rule_context(mask, rule, pt=, reach=1.0)` returns the ink
+fraction in the band above and the band below one rule, where the
+band is the rule's OWN x-span by `reach` x its own length in y,
+clipped to the page.
+
+Scaling the band to the rule rather than to a page constant is the
+whole design. A fraction bar under a 12 pt numerator and a booktabs
+rule spanning a 400 pt table need the same test, and any band
+expressed in pixels or points fits one and not the other. Pinned by
+a test that doubles every dimension and requires the coverages
+unchanged.
+
+It returns NO CLASS. `qc` sets the precedent: the cut between "ink
+above" and "no ink above" is a threshold on a continuum, the caller
+holds the page's own statistics, and a classifier here would fix
+that cut for every caller. The four names are the caller's:
+
+  fraction   above and below      overline   above only
+  underline  below only           separator  neither
+
+--------------------------------------------------------------------
+2. THE HEIM PAGE HAS NO RULES, AND THAT IS THE FINDING
+
+  page                          ink regions   is_rule   free
+  heim_bh2_p96 (the fixture)          1,087         0      0
+  Massenformel p20                    3,250         0      0
+  Massenformel p30                    1,775         3      2
+  Massenformel p40                    2,706         0      0
+  Massenformel p50                    2,100         0      0
+  Massenformel p60                    2,051         2      2
+  Massenformel p70                    2,170         0      0
+
+`is_rule` requires fill > 0.8 AND a long side >= 20x the short one.
+On these scans the aspect gate is what empties the population.
+Solid horizontal bars (fill > 0.8) across the six Massenformel
+pages, by aspect:
+
+    aspect >= 20  (accepted)      3
+    aspect 10-20                205
+    aspect 6-10                   4
+    aspect 4-6                    0
+    aspect 3-4                   40
+
+205 against 3. A scanned fraction bar is short and THICK -- ink
+spread by the scan puts a 60 px bar at 5 px rather than 1 -- so it
+lands at aspect 12 and is refused.
+
+WHAT I AM NOT CLAIMING: that those 205 are missed rules. At aspect
+10-20 a solid horizontal bar is also a hyphen, an em-dash, a minus
+sign or the crossbar of a letter, and nothing here separates them.
+The measurement says the gate excludes 98.6% of bar-shaped ink on a
+scan; identifying what it excluded is a different measurement and
+must happen before anyone moves the constant. Recorded as an open
+question, not as a defect.
+
+--------------------------------------------------------------------
+3. THE DISTRIBUTION, WHERE RULES EXIST
+
+Massenformel p30 -- 2 rules, both horizontal:
+
+    y0_pt   x0_pt   len_px  above  below  class
+     86.4   205.2      222  0.055  0.063  underline
+    165.8   187.4      160  0.057  0.054  separator
+
+READ THE COVERAGES, NOT THE CLASSES. All four bands sit between
+0.054 and 0.063 -- body-text density, above and below, for both
+rules. The widest gap in the sorted values is 0.0054, against 0.0024
+and 0.0005 for the runners-up: no separation, so the cut the tool
+derived is an artefact of sorting four nearly equal numbers. The
+honest reading is that both rules have text on both sides and
+coverage alone does not decide the class at this density.
+
+Massenformel p60 -- 2 rules, both VERTICAL. Reported as vertical and
+excluded rather than being given an above/below band that would lie
+beside them.
+
+arxiv 1408.0838 p8 -- 5 rules, all horizontal, and here the
+coverages DO separate (7 of 10 bands exactly zero):
+
+    y0_pt   x0_pt   len_px  above  below  class
+    226.1   185.0       20  0.000  0.000  separator
+    226.1   319.4       20  0.000  0.000  separator
+    226.1   453.6       20  0.000  0.000  separator
+    295.2   354.7       28  0.000  0.036  underline
+    297.1   354.7       28  0.036  0.060  fraction
+
+  cut 0.0179, the midpoint of a 0.0357 gap against 0.0242 and 0.0000
+  for the runners-up -- a real separation, unlike p30's.
+
+The three 20 px rules on one baseline with NOTHING within 20 px
+above or below are not fraction bars; that geometry is three dashes
+or minus signs in a row. The two 28 px rules 1.9 pt apart at the
+same x are one object -- a double rule, or an equals sign passing
+the aspect gate twice.
+
+--------------------------------------------------------------------
+4. `reach` IS LOAD-BEARING AND THERE IS NO STABLE ANSWER
+
+Same page, same rules, band height varied:
+
+    reach   fraction  overline  underline  separator
+    0.5            0         1          1          3
+    1.0            1         0          1          3
+    2.0            2         0          0          3
+    4.0            2         3          0          0
+
+At reach 4 the three dashes become `overline`, because an 80 px band
+reaches the PREVIOUS TEXT LINE. That is the argument for reach 1: it
+asks whether something is attached to this rule, and anything larger
+asks whether the rule is somewhere on a page with text on it.
+
+The sensitivity is asserted in the suite so the argument cannot be
+quietly dropped.
+
+--------------------------------------------------------------------
+5. FOR 118, IN ONE SENTENCE
+
+pdfdrill asked for one grounded sentence for prompt variant E. This
+is what 116 supports, and it is deliberately narrow:
+
+    On this corpus the rule-context test locates rules whose bands
+    are EMPTY on both sides -- 3 of 5 on arxiv 1408.0838 p8 -- which
+    means a component the aspect gate accepted as a rule has no
+    numerator and no denominator and is therefore a dash or a minus
+    sign, not a fraction bar.
+
+WHAT E MUST NOT SAY. It must not assert a missing fraction bar: 116
+found none. The empty-band case is a rule that should not have been
+called a rule, which is the opposite defect, and a prompt hint
+claiming the opposite of the measurement is the fixture-to-answer
+move 118 exists to avoid. If E needs a hint about missing structure,
+it must wait for 117.
+
+--------------------------------------------------------------------
+6. POPULATION
+
+Four pages, named individually because there is no corpus number
+here: tests/fixtures/heim_bh2_p96.png and
+tests/fixtures/arxiv_1408_0838_p8.png (both 300 dpi, in the repo),
+and pages 30 and 60 of
+~/pdfdrill-library/29798636-Burkhard-Heim-Massenformel rendered at
+300 dpi. The aspect census covers Massenformel pages 20, 30, 40, 50,
+60, 70. Nine rules in total across everything measured, so every
+count above is small enough to check by hand and none of them should
+be quoted as a rate.
+
+RE-RUN:  python3 tools/rulecontext.py <page.png> [--reach F] [--cut C]
+TESTS:   tests.test_emit.T1_15_RuleContext -- five tests, all four
+         classes fire from their own fixtures, and all five
+         non-trivial branches of rule_context mutate to a failure.
