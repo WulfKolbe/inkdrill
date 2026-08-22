@@ -29,10 +29,16 @@ _ap = argparse.ArgumentParser(
 _ap.add_argument("list", nargs="?", default=None,
                  help="report roster (default: <library>/P13-arxiv-reports.txt)")
 _ap.add_argument("library", nargs="?", default="~/pdfdrill-library")
+_ap.add_argument("--columns", type=int, default=None,
+                 help="override the display-table column count; by "
+                      "default it is read PER DOCUMENT from its own "
+                      "report.tex, because the corpus holds both the "
+                      "pre-099 5-column and post-099 6-column form")
 corpusgate.add_arguments(_ap)
 ARGS = _ap.parse_args()
 
 LIB = pathlib.Path(ARGS.library).expanduser()
+COLUMNS = ARGS.columns
 LIST = pathlib.Path(ARGS.list) if ARGS.list else \
     LIB / "P13-arxiv-reports.txt"
 S = pathlib.Path(os.environ.get("INKDRILL_WORK") or
@@ -138,8 +144,61 @@ def idents_for(name):
                         tex.read_text())]
 
 
-def probe(pdf, n):
-    five = []
+def target_columns(name):
+    """How many columns THIS document's display-equation table has,
+    read from its own report.tex.
+
+    Not a constant, and the reason is that a constant was wrong twice
+    in one day. The count was 5; pdfdrill's task 099 added a
+    Confidence column and made it 6. The corpus now holds BOTH eras
+    -- 1101.4542 was built 08-21 with no `confcell` and reads 5,
+    bh2 and 0902.0431 were rebuilt 08-22 and read 6 -- so any single
+    number skips one era entirely and reports it as "no display
+    pages", which is the BH1org_OCR failure spread across a thousand
+    documents.
+
+    The header row carrying BOTH `Rendered` and `Scan image` is the
+    display-equation table with crops, and only that table has both.
+    Counting its cells is exact, independent of the era, and
+    self-correcting if the format changes again:
+
+        6   ...\textbf{Conf.} & \textbf{LaTeX source}
+                & \textbf{Rendered} & \textbf{Scan image}
+        5   the same without Conf. (pre-099)
+
+    Returns None when no such header exists -- the document's
+    equations table has no scan column, so there is nothing in it to
+    compare, and that is a REASON rather than a zero. Reading the
+    .tex is not a violation of emit's G6: G6 forbids inkdrill reading
+    text off a RASTER, which is what would make it agree with the
+    tool it cross-checks. A column count taken from a source file
+    never touches the ink measurement.
+    """
+    tex = LIB / name / "report.tex"
+    if not tex.is_file():
+        return None
+    for line in tex.read_text().splitlines():
+        if "textbf{Rendered}" in line and "textbf{Scan image}" in line:
+            return line.count("&") + 1
+    return None
+
+
+def probe(pdf, n, columns=None):
+    """The leading contiguous run of DISPLAY-EQUATION pages, by column
+    count, plus a census of every count seen.
+
+    The count comes from `target_columns` -- the document's own tex --
+    and is verified against the raster here, so a tex that says six
+    and a PDF that renders five is caught rather than averaged.
+
+    The census is returned because a zero must not read as an
+    absence (P16). A document with 5-column pages and no 6-column
+    ones has a display table WITHOUT CROPS -- nothing to measure, and
+    a different fact from a document with no display table at all.
+    """
+    want = columns or COLUMNS
+    hits = []
+    seen = {}
     for lo in range(1, n + 1, 25):
         hi = min(lo + 24, n)
         gs = subprocess.run(
@@ -150,18 +209,26 @@ def probe(pdf, n):
         for i, img in enumerate(read_pnm_stream(gs, dpi=(150.0,150.0))):
             mask,_ = auto_mask(img.gray, img.width, img.height, 200)
             cells = _table_cells(mask, 4.0)
-            if cells and max(c for _, c in cells) + 1 == 5:
-                five.append(lo + i)
+            nc = max(c for _, c in cells) + 1 if cells else 0
+            seen[nc] = seen.get(nc, 0) + 1
+            if nc == want:
+                hits.append(lo + i)
     run, last = [], 0
-    for p in five:
+    for p in hits:
         if not run and p <= 3: run.append(p); last = p
         elif run and p - last <= 3:
             run.extend(range(last + 1, p + 1)); last = p
         elif run: break
-    return run
+    return run, seen
 
 jobs = []
 display_count = {}
+census_of = {}
+want_of = {}
+# declared here, not at the aggregation step: the probe loop below
+# reports a document with no scan column, and that is a zero-row
+# reason like any other (P16).
+zero_rows = []
 for name in DIRS:
     pdf = LIB / name / "report.pdf"
     d = S / name; d.mkdir(exist_ok=True)
@@ -173,12 +240,28 @@ for name in DIRS:
         for f in d.iterdir(): f.unlink()
         print(f"{name}: cleared {len(stale)} stale files", flush=True)
     check_fresh(name, pdf)
+    want = ARGS.columns or target_columns(name)
+    if want is None:
+        zero_rows.append(
+            (name, "report.tex has no header carrying both Rendered "
+                   "and Scan image -- the equations table has no scan "
+                   "column, so there is nothing in it to compare"))
+        print(f"{name}: NO SCAN COLUMN in report.tex", flush=True)
+        continue
     try:
-        disp = probe(pdf, npages(pdf))
+        disp, census = probe(pdf, npages(pdf), want)
     except Exception as e:
         print(f"{name}: probe FAILED {e}", flush=True); continue
     display_count[name] = len(disp)
-    print(f"{name}: display pages {len(disp)}", flush=True)
+    census_of[name] = census
+    want_of[name] = want
+    # the census is printed WITH the count, not instead of it: a zero
+    # that says "but 40 pages read 5 columns" is a different finding
+    # from a zero that says "no table anywhere" (P16).
+    shape = "  ".join(f"{k}col x{v}" for k, v in sorted(census.items())
+                      if k)
+    print(f"{name}: display pages {len(disp)} (tex says {want} cols)"
+          f"{'  [' + shape + ']' if not disp else ''}", flush=True)
     for p in disp:
         jobs.append((name, pdf, p, d))
 
@@ -210,7 +293,6 @@ from findings import flag_of        # one definition (P19)
 run_rows = []
 demoted_rows = []
 id_mismatch = []
-zero_rows = []
 for name in DIRS:
     d = S / name
     hdr = ("report_page\tline\tdis\tA_eq_B\tL_comp\tL_holes\tL_stk"
@@ -276,7 +358,8 @@ for name in DIRS:
     print(f"{name}: {len(rows)} rows -> report.compare.tsv", flush=True)
     if not rows:
         zero_rows.append(
-            (name, "probe found no 5-column display pages"
+            (name, f"probe found no {want_of.get(name)}-column display pages"
+                    f" [{'  '.join(f'{k}col x{v}' for k, v in sorted(census_of.get(name, {}).items()) if k) or 'no table on any page'}]"
              if not display_count.get(name)
              else f"{display_count[name]} display pages compared but "
                   f"every row was filtered"))
