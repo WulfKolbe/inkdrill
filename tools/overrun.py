@@ -117,8 +117,20 @@ def rows_of(name):
             crop = (_cell_crop(m, b[0], b[1], b[2] - 1, b[3] - 1)
                     if b else None)
             out.append([None, L, R, dis, cd, fl, crop])
+    # P19's guard, which this harness lacked and paid for: row i is
+    # equation i ONLY while the compared pages are a contiguous run
+    # and there are at least as many equations as rows. The cache
+    # here is whatever survived earlier runs -- 0902.0431's 149 pages
+    # have a 16-page hole in the middle -- so a positional
+    # assignment across that hole labels every later row with the
+    # wrong equation. Ids are withheld rather than guessed; a wrong
+    # identifier is worse than none.
+    pages = sorted(int(md.stem[1:]) for md in mds
+                   if (d / f"{md.stem}_r300.png").is_file())
+    contiguous = pages == list(range(pages[0], pages[0] + len(pages))) \
+        if pages else False
     idents = idents_for(name)
-    if len(idents) >= len(out):
+    if contiguous and len(idents) >= len(out):
         for rec, ident in zip(out, idents):
             rec[0] = ident
     return out
@@ -182,13 +194,46 @@ def sweep_document(name):
         # means the edge anchor is measuring the producer's inset and
         # not the region boundary -- the reason the second anchor
         # exists, and it is recorded per row rather than asserted.
-        margins = (min(c.x0 for c in cs), min(c.y0 for c in cs),
-                   crop.width - 1 - max(c.x1 for c in cs),
-                   crop.height - 1 - max(c.y1 for c in cs))
-        rows.append((name, ident, dis, cd, fl, surplus,
-                     [row_over[k] for k in GRID], margins,
-                     crop.width, crop.height))
+        # An EMPTY scan cell has no margins and is not an overrun --
+        # it is the broken-crop class, which this channel already
+        # reports elsewhere. Recorded as -1 rather than skipped, so a
+        # reader can count them instead of wondering where they went.
+        margins = ((min(c.x0 for c in cs), min(c.y0 for c in cs),
+                    crop.width - 1 - max(c.x1 for c in cs),
+                    crop.height - 1 - max(c.y1 for c in cs))
+                   if cs else (-1, -1, -1, -1))
+        rows.append([name, ident or "?", dis, cd, fl, surplus,
+                     [row_over[k] for k in GRID], list(margins),
+                     crop.width, crop.height])
     return counts, demoted, tally, rows
+
+
+CACHE = S / ".overrun-cache"
+
+
+def cached_sweep(name):
+    """One document, memoised on disk. A 76-document sweep takes half
+    an hour and a single unguarded row used to cost all of it; the
+    cache is keyed by the document and the GRID, so changing a
+    threshold invalidates it and changing nothing does not."""
+    import json, hashlib
+    key = hashlib.sha256(
+        (name + repr(GRID)).encode()).hexdigest()[:16]
+    f = CACHE / f"{key}.json"
+    if f.is_file():
+        try:
+            d = json.loads(f.read_text())
+            return (collections.Counter(d["counts"]), d["demoted"],
+                    {tuple(k): v for k, v in d["tally"]}, d["rows"])
+        except Exception:
+            pass
+    counts, dem, tally, rows = sweep_document(name)
+    CACHE.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"counts": dict(counts), "demoted": dem,
+                             "tally": [[list(k), v]
+                                       for k, v in tally.items()],
+                             "rows": rows}))
+    return counts, dem, tally, rows
 
 
 def main():
@@ -199,7 +244,7 @@ def main():
     skipped_demoted = 0
     with cf.ProcessPoolExecutor(max_workers=A.jobs) as ex:
         for i, (c, dm, tl, rows) in enumerate(
-                ex.map(sweep_document, docs), 1):
+                ex.map(cached_sweep, docs), 1):
             counts.update(c)
             skipped_demoted += dm
             for k in GRID:
@@ -209,6 +254,7 @@ def main():
             print(f"  .. {i}/{len(docs)}", file=sys.stderr, flush=True)
 
     n_flagged = len(per_row)
+    unlabelled = sum(1 for r in per_row if r[1] == "?")
     n_surplus = sum(1 for r in per_row if r[5] > 0)
     print(f"POPULATION: {len(docs)} documents with a cached 300 dpi "
           f"render under {S}")
@@ -220,6 +266,10 @@ def main():
     print(f"  FLAGGED (component+stable+weak) {n_flagged}")
     print(f"  of which the SCAN has more components than the "
           f"rendering: {n_surplus}")
+    print(f"  rows with NO IDENTIFIER {unlabelled} -- the cached pages "
+          f"are not a contiguous run, or there are more rows than "
+          f"equations, so row i is not equation i and the id is "
+          f"withheld")
     print()
     print("condition counts over the flagged rows "
           "(REGION-OVERRUN needs BOTH)")
@@ -233,8 +283,11 @@ def main():
 
     # The inset, measured rather than assumed.
     import statistics
+    empty = sum(1 for r in per_row if r[7][0] < 0)
+    print(f"  scan cells with NO INK {empty} "
+          f"(margins undefined; the broken-crop class, not an overrun)")
     for i, side in enumerate(("left", "top", "right", "bottom")):
-        v = sorted(r[7][i] for r in per_row)
+        v = sorted(r[7][i] for r in per_row if r[7][0] >= 0)
         if not v:
             continue
         print(f"  margin {side:<7} px  min {v[0]}  p50 "

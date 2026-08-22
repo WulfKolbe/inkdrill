@@ -1,0 +1,217 @@
+102 - the region-overrun test, and the condition that measured the cell
+========================================================================
+
+ANSWER FIRST. The test as specified fires on 7 of my 1,666 flagged
+rows (0.4%). That is not because overrun is rare; it is because the
+condition it was given cannot see it on this artifact. Under the
+corrected condition it fires on 1,221 (73.3%), which is not a class
+either. The only number I would defend is 14 (0.8%) - the rows where
+removing the alleged overrun actually makes the row unremarkable.
+
+THE 724 IS NOT MY NUMBER. The task names "the 724 flagged rows"; I
+cannot reproduce 724 anywhere in this repository and I am not going
+to report against a population I did not measure. It is pdfdrill's,
+and they have since stated it exactly:
+
+  theirs   724 = 49 corpus documents, type==Equation, minus demoted /
+           low-confidence / no-standalone, = 3,392 measured, of which
+           ink distance >= 6 between standalone/<ident>.png (400 dpi,
+           xelatex) and report-crops/<ident>.jpg
+  mine   1,666 = 76 documents with a cached 300 dpi report render,
+           flag in (component, stable, weak), demoted excluded,
+           report CELL against scan CELL cut from the same page raster
+
+Different corpus, different artifacts, different rule. Both are
+right and neither is the other. Every figure below is over MY 1,666.
+
+--------------------------------------------------------------------
+1. WHAT IS BEING SEPARATED
+
+A component-class finding says the scan cell carries ink the
+rendering does not. Three things produce that, and they want
+different fixes:
+
+  1 the conversion DROPPED A SYMBOL - the finding this channel
+    exists to report;
+  2 the scan crop OVERRAN ITS REGION and captured a neighbour's ink
+    - a finding about crop geometry, silent about the conversion;
+  3 pdfdrill's own TAIL-SPLIT moved prose out of the LaTeX and left
+    the rectangle alone, so the crop still spans words the render no
+    longer has. Measured on their side: 22 MathTail objects, 100%
+    with region=None, in 10 documents.
+
+Arm 3 was not in the task and is not visible from ink alone - from
+inside a crop, prose that overlaps a Sidenote and prose that no
+object owns look identical. It is named because a two-arm number
+would read as complete.
+
+--------------------------------------------------------------------
+2. THE TEST
+
+`mathstruct.region_overrun`, two conditions, both required:
+
+  SEPARATED  outside the main ink's single-linkage cluster at
+             `gap_scale` x the crop's MEDIAN COMPONENT WIDTH.
+             Relative to the crop's own glyphs, so a dpi change
+             cannot silently retune it.
+  ANCHORED   where the cluster sits. Two readings, and they are
+             DIFFERENT STATEMENTS rather than one statement at two
+             tolerances:
+               edge     some member reaches within `edge_tol` px of
+                        a crop border  (what 102 specified)
+               extreme  the cluster is the outermost in some
+                        direction - no cluster reaches further left,
+                        right, up or down
+
+Judged per CLUSTER, not per component: ink that crossed a boundary
+is cut by it and arrives in pieces, one blob touching the border and
+the rest just inside, so judging each piece alone keeps the interior
+halves and still reports a surplus.
+
+--------------------------------------------------------------------
+3. WHY `edge` FAILS, AND IT IS NOT A TOLERANCE
+
+  margin between the ink and the crop border, over 1,665 rows
+    left    min 0   p50  29   p95   32   max   92
+    top     min 0   p50   9   p95   13   max   28
+    right   min 53  p50 604   p95 1795   max 1900
+    bottom  min 0   p50 176   p95  723   max 1473
+
+My crop is the report's Scan CELL, and a longtable cell is sized by
+the longest row in its column. On a short equation the pasted scan
+image floats in a much larger box: the median row has 604 px of
+empty cell to the right of its ink and the widest has 1,900. A
+condition asking whether ink reaches the crop border is therefore
+measuring CELL LAYOUT, not the region boundary - a real number about
+the wrong subject, which is the same failure as a threshold
+expressed in page pixels.
+
+Only 36 of 1,666 rows have ANY component touching a border at all.
+That ceiling is why no `edge_tol` rescues it: at tol 4 the condition
+starts admitting rows whose ink merely runs close to the cell edge,
+which is a different mistake, not a fix.
+
+pdfdrill found the same defect from the other side, on the raw crop
+JPEGs: the rightmost ink stopped 6, 6, 6 and 7 px short of the
+border on four crops of different sizes from two documents. A
+CONSTANT margin across differently sized crops is the tell - it is
+the producer's inset, not where the content ends. Their inset is 6
+px; mine is 604.
+
+--------------------------------------------------------------------
+4. THE FIRING RATES
+
+  anchor    gap 0.5    1.0     1.5     2.0     3.0
+  edge@0    1.2%      0.4%    0.1%    0.0%    0.0%
+  edge@4   10.9%      4.4%    2.2%    0.6%    0.4%
+  extreme  95.4%     73.3%   51.6%   35.2%   18.9%
+
+Neither is a class. `edge` cannot see the thing; `extreme` fires on
+three quarters of the flagged population at the natural setting,
+which is not a finding but a description of what a flagged row looks
+like.
+
+And there is no natural cut: 95, 73, 52, 35, 19 is smooth. pdfdrill
+report the same smoothness on their artifact from an absolute pixel
+gap (96% at 10 px, 81% at 15, 41% at 20, 22% at 30, 16% at 40).
+Two instruments, two artifacts, no break in either. Any threshold
+here is a choice and must be named as one.
+
+--------------------------------------------------------------------
+5. THE NUMBER I WOULD DEFEND: 14
+
+Firing is not evidence. The test that matters is whether the
+explanation EXPLAINS: remove the alleged overrun components,
+recompute the five-tuple on what is left, and ask whether the row
+falls back inside the measured noise band (distance <= 7, component
+delta <= 2).
+
+  gap_scale        0.5    1.0    1.5    2.0    3.0
+  fires           1590   1221    860    587    315
+  surplus count
+    explained      654    621    456    323    191
+  FALLS TO NOISE     9     14     22     16      7
+
+At the natural setting, 621 rows have their surplus COUNT
+arithmetically explained by the removed components and 14 become
+unremarkable once those components are gone.
+
+That gap of 607 is the real result. The removed components account
+for HOW MANY marks differ and not for HOW the row differs: the
+arithmetic balances and the five-tuple still separates. So where
+overrun is present it is usually ACCOMPANIED BY a genuine
+difference rather than being the whole of it. That is a claim about
+the composition of the class, and it is a stronger negative than a
+small percentage would have been - a small percentage would only
+have said overrun is rare.
+
+--------------------------------------------------------------------
+6. THE ONE CASE WITH A KNOWN ANSWER
+
+pdfdrill confirmed four rows by eye whose crops visibly contain
+prose. A detector built to size a defect must first reproduce the
+case whose answer is already known, so:
+
+  1101.4542_EQ0066   crop 1337x170, margins L30 T5 R514 B121
+    edge     at tol 0,1,2,4 and every gap_scale   DOES NOT FIRE
+    extreme  at every gap_scale                   FIRES
+
+Exactly the prediction: 514 px of empty cell to the right of the
+ink, so a border test cannot see it.
+
+THE OTHER THREE I CANNOT VERIFY, and the reason is mine. All three
+are 0902.0431, whose cached renders have a 16-page hole (113-115,
+118-130). This harness assigned identifiers POSITIONALLY - row i is
+equation i - which across a hole labels every later row with the
+wrong equation. reportcompare has carried that contiguity guard
+since P19; overrun.py did not, and its first run labelled 320 rows
+of 0902.0431 with identifiers I now believe were wrong. The guard is
+now in; ids are withheld for 573 of 1,666 rows (320 in 0902.0431,
+253 in 0911.3722), which is a stated absence rather than a silent
+mislabelling. pdfdrill confirm every page in 113-130 carries maths
+objects, so the gap is my cache and not the document; the fix is 16
+ghostscript calls and is not part of this task.
+
+--------------------------------------------------------------------
+7. POPULATION, AND WHAT MOVED
+
+  76 documents with a cached 300 dpi render under
+  /tmp/inkdrill-reportcompare, measured from the CACHE and not
+  re-rendered, so no rebuild elsewhere could move the population
+  while a threshold was chosen on it. BH1org_OCR is excluded: it is
+  the one document whose renders are gone, and its report was
+  rebuilt today after a torn build, so re-rendering would have mixed
+  two builds in one distribution.
+
+    rows compared        6,467
+    demoted excluded        45
+    clean 1,740  noise 3,061  weak 763  stable 139  component 764
+    FLAGGED              1,666
+    scan has more components than the render   734
+    scan cells with NO INK  1  (the broken-crop class, not an
+                                overrun; margins recorded as -1)
+
+A stale corpus sweep was found writing into this same cache 36
+minutes into the session and was stopped: it was re-comparing
+0902.0431 and 1511.08771, which would have moved the population
+mid-measurement.
+
+--------------------------------------------------------------------
+8. WHAT THIS DOES NOT SAY
+
+- It is not a defect rate. My 0.8% and pdfdrill's 14% region-overlap
+  are different quantities and neither is "the fraction of findings
+  that are cropping defects".
+- Arm 2 and arm 3 are not separated. From inside a crop they are
+  identical; separating them is a JOIN of their ident->region
+  manifest with my ink, and their manifest currently maps 94.7% of
+  rows with the loss correlated with identifier length (26% missing
+  on 1205.5935v1). Not joined on yet, and the reason is recorded.
+- `extreme` is not endorsed as the production rule. It is the
+  reading that CAN see the thing; nothing here shows it separates
+  overrun from anything else.
+
+RE-RUN:  python3 tools/overrun.py --jobs 13
+FILES:   results/overrun-20260822-141104.tsv   (1,666 rows, per-row
+         firing at every grid point, plus the four margins and the
+         crop size, so the inset is measured rather than asserted)
