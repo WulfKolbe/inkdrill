@@ -119,6 +119,32 @@ measurement; a fresh pass is ~2 hours.
   as accident because that is the useful part.
 - **A fixture must contain the class the rule discriminates against**,
   and its dimensions must come from a measured value.
+- **A pooled ratio and a per-unit paired test can point opposite
+  ways.** 117: the deficit near a rule was 17.2% against an 11.5%
+  null — enrichment — and per row against each row's OWN density it
+  inverted, sign test z = -4.88, below its null on 80 rows of 110.
+  Sixteen rows carrying 10% of the deficit and 60% of the near count
+  is the mechanism. A row with one rule and two missing marks scores
+  1.000 by arithmetic, not by evidence. Ask the paired question
+  before quoting the pooled one.
+- **A ratio whose denominator excludes most of the population is a
+  subgroup, not a rate.** 316 of 117's 426 rows had no rule to be
+  near. Counting and naming them is what made the 17.2% readable at
+  all; dropping them would have quoted a quarter of the population as
+  the corpus.
+- **Measure the null before quoting the rate.** "17% of missing
+  components are near a rule" is unreadable without "and 11.5% of all
+  components are". Inherited from pdfdrill's variant B, where 1 of 19
+  crops contained the notation the hint addressed, so its +196
+  measured the cost of an irrelevant hint rather than the hint.
+- **Identity claims need an identity, and position does not supply
+  one.** Per-component correspondence between a LaTeX render and a
+  scan of the same expression is not recoverable by position:
+  residual p5 -34, p50 -6, p95 +16, agreeing on 61 of 426 rows, even
+  with a threshold-free overlap test. Different typeface, different
+  scale, and ink decomposes differently — a scanned `i` merges its
+  dot into its stem. Count claims survive this; identity claims do
+  not, so say which one you are making.
 
 ## Coordination
 
