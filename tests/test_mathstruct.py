@@ -516,3 +516,292 @@ class T14_7_PairStats(unittest.TestCase):
             return InkMask(bytes(buf), W, H)
         self.assertEqual(pair_stats(pair(6))["stacked"], 1)
         self.assertEqual(pair_stats(pair(18))["stacked"], 0)
+
+
+class T14_8_RegionOverrun(unittest.TestCase):
+    """102: the two conditions of `region_overrun`, and the fixture
+    CONTAINS all three classes the rule must separate -- otherwise it
+    cannot fail.
+
+    Dimensions are the measured ones, not chosen: 0902.0431 p1's scan
+    cells at 300 dpi are 1620 px wide with a median component width of
+    9-18 px, so this fixture is 15 px glyphs in a 200 px crop. A
+    fixture whose numbers came from nowhere is the tell.
+
+      MAIN     four 15 px glyphs, 5 px apart -- one cluster.
+      JOINED   a glyph at x=0 touching the left border, 5 px from the
+               main ink. AT AN EDGE and NOT separated: the first
+               symbol of an expression. Must NOT be overrun.
+      ISLAND   a glyph 60 px away in the interior. SEPARATED and not
+               at an edge: a display limit or a stray mark. Must NOT
+               be overrun.
+      OVERRUN  a glyph 60 px away AND cut by the right border. Both
+               conditions. Must BE overrun.
+
+    Every branch of the classification fires in one mask, so neither
+    condition can be deleted without a failure.
+    """
+
+    def test_both_conditions_are_required(self):
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+        W, H = 200, 40
+        def crop(items):
+            buf = bytearray(W * H)
+            for x0, x1 in items:
+                for y in range(12, 27):
+                    for x in range(max(0, x0), min(W, x1)):
+                        buf[y * W + x] = 0xFF
+            return InkMask(bytes(buf), W, H)
+        main = [(70, 85), (90, 105), (110, 125)]
+        joined = (55, 70)          # touches main, not an edge
+        at_edge_joined = (0, 15)   # an edge, 55 px from main -> island
+        island = (5, 20)           # separated, interior? no: x0=5 > tol
+        overrun = (185, 200)       # separated AND cut by the right edge
+
+        # median glyph width is 15, so the bound at gap_scale 1.0 is 15
+        only_main = region_overrun(crop(main), gap_scale=1.0, edge_tol=0)
+        self.assertEqual(only_main["overrun"], [])
+        self.assertEqual(only_main["separated"], [])
+
+        # SEPARATED but interior: an island 45 px from the main ink,
+        # nowhere near a border -> not overrun.
+        isl = region_overrun(crop(main + [(10, 25)]), gap_scale=1.0,
+                             edge_tol=0)
+        self.assertEqual(len(isl["separated"]), 1)
+        self.assertEqual(isl["overrun"], [])
+
+        # AT AN EDGE but joined: a component reaching x=0 that is part
+        # of the same cluster -> not overrun.
+        jn = region_overrun(crop([(0, 15), (18, 33), (45, 60)] + main),
+                            gap_scale=1.0, edge_tol=0)
+        self.assertEqual(jn["separated"], [])
+        self.assertTrue(jn["at_edge"])
+        self.assertEqual(jn["overrun"], [])
+
+        # BOTH: separated AND cut by the right border.
+        ov = region_overrun(crop(main + [overrun]), gap_scale=1.0,
+                            edge_tol=0)
+        self.assertEqual(len(ov["overrun"]), 1)
+        self.assertEqual(len(ov["kept"]), 3)
+
+    def test_the_gap_bound_is_a_multiple_of_the_median_glyph_width(self):
+        """The bound must SCALE, or a dpi change retunes it silently.
+        The same geometry at 15 px and at 30 px glyphs must give the
+        same answer -- and a gap_scale wide enough to swallow the
+        separation must give the opposite one, so the argument is not
+        inert."""
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+
+        def crop(s):
+            W, H = 200 * s, 40 * s
+            buf = bytearray(W * H)
+            for x0, x1 in [(70, 85), (90, 105), (110, 125), (185, 200)]:
+                for y in range(12 * s, 27 * s):
+                    for x in range(x0 * s, min(W, x1 * s)):
+                        buf[y * W + x] = 0xFF
+            return InkMask(bytes(buf), W, H)
+
+        for s in (1, 2):
+            ro = region_overrun(crop(s), gap_scale=1.0, edge_tol=0)
+            self.assertEqual(len(ro["overrun"]), 1, f"scale {s}")
+        wide = region_overrun(crop(1), gap_scale=5.0, edge_tol=0)
+        self.assertEqual(wide["overrun"], [])
+
+    def test_edge_tolerance_admits_a_padded_crop(self):
+        """The scan crops carry 2 px of padding at the top rule, so a
+        component that entered across the border stops 2 px short of
+        it. Asserted in BOTH directions: at tol 0 the padded component
+        is not at an edge and is not reported; at tol 2 it is."""
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+        W, H = 200, 40
+        buf = bytearray(W * H)
+        for x0, x1 in [(70, 85), (90, 105), (110, 125)]:
+            for y in range(12, 27):
+                for x in range(x0, x1):
+                    buf[y * W + x] = 0xFF
+        for y in range(12, 27):            # 2 px short of the right edge
+            for x in range(185, W - 2):
+                buf[y * W + x] = 0xFF
+        m = InkMask(bytes(buf), W, H)
+        self.assertEqual(region_overrun(m, gap_scale=1.0,
+                                        edge_tol=0)["overrun"], [])
+        self.assertEqual(len(region_overrun(m, gap_scale=1.0,
+                                            edge_tol=2)["overrun"]), 1)
+
+    def test_the_kept_components_are_the_crop_minus_the_overrun(self):
+        """`kept` exists so the caller recomputes the five-tuple on the
+        crop's own ink instead of guessing. It must be the complement,
+        and it must not be the whole list when something was found."""
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+        W, H = 200, 40
+        buf = bytearray(W * H)
+        for x0, x1 in [(70, 85), (90, 105), (110, 125), (185, 200)]:
+            for y in range(12, 27):
+                for x in range(x0, min(W, x1)):
+                    buf[y * W + x] = 0xFF
+        ro = region_overrun(InkMask(bytes(buf), W, H), gap_scale=1.0,
+                            edge_tol=0)
+        self.assertEqual(len(ro["overrun"]) + len(ro["kept"]), 4)
+        self.assertEqual(len(ro["kept"]), 3)
+        self.assertTrue(set(ro["overrun"]).isdisjoint(
+            {c.id for c in ro["kept"]}))
+
+    def test_an_empty_crop_is_not_an_overrun(self):
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+        ro = region_overrun(InkMask(bytes(200 * 40), 200, 40))
+        self.assertEqual(ro["overrun"], [])
+        self.assertEqual(ro["med_width"], 0.0)
+
+    def test_all_four_borders_count_as_an_edge(self):
+        """The commonest real overrun is VERTICAL -- the row rule above
+        or the descender of the line below -- and the left/right
+        fixtures above cannot see a top/bottom mistake. Each border is
+        asserted on its own, so no one of the four terms can be
+        deleted."""
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+        W, H = 200, 120
+
+        def crop(x0, y0, x1, y1):
+            buf = bytearray(W * H)
+            for a, b in [(70, 85), (90, 105), (110, 125)]:
+                for y in range(52, 67):        # main ink, mid-crop
+                    for x in range(a, b):
+                        buf[y * W + x] = 0xFF
+            for y in range(y0, y1):            # the intruder
+                for x in range(x0, x1):
+                    buf[y * W + x] = 0xFF
+            return InkMask(bytes(buf), W, H)
+
+        for name, box in (("top", (90, 0, 105, 15)),
+                          ("bottom", (90, H - 15, 105, H)),
+                          ("left", (0, 52, 15, 67)),
+                          ("right", (W - 15, 52, W, 67))):
+            ro = region_overrun(crop(*box), gap_scale=1.0, edge_tol=0)
+            self.assertEqual(len(ro["overrun"]), 1, name)
+        # and the same intruder pulled clear of every border is not one
+        inside = region_overrun(crop(90, 20, 105, 35), gap_scale=1.0,
+                                edge_tol=0)
+        self.assertEqual(inside["overrun"], [])
+        self.assertEqual(len(inside["separated"]), 1)
+
+    def test_passing_comps_gives_the_same_answer_as_sweeping(self):
+        """`comps` is a performance argument -- the threshold sweep
+        runs 20 times over one crop -- and a performance argument that
+        changes the answer is a bug. Both paths asserted."""
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.nest import ink_only
+        from inkdrill.raster import InkMask
+        W, H = 200, 40
+        buf = bytearray(W * H)
+        for x0, x1 in [(70, 85), (90, 105), (110, 125), (185, 200)]:
+            for y in range(12, 27):
+                for x in range(x0, min(W, x1)):
+                    buf[y * W + x] = 0xFF
+        m = InkMask(bytes(buf), W, H)
+        swept = region_overrun(m, gap_scale=1.0, edge_tol=0)
+        given = region_overrun(m, gap_scale=1.0, edge_tol=0,
+                               comps=list(ink_only(m).regions))
+        self.assertEqual(swept["overrun"], given["overrun"])
+        self.assertEqual(swept["separated"], given["separated"])
+        self.assertEqual(swept["med_width"], given["med_width"])
+
+    def test_the_main_ink_is_the_heaviest_cluster_not_the_first(self):
+        """Ids are assigned in raster order, so seeding the cluster
+        from one component makes the answer depend on which glyph
+        comes first. Here the LEFTMOST cluster has the lowest ids and
+        the RIGHTMOST carries the ink; the two-glyph island on the
+        left must be what is reported, not the five-glyph body."""
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+        W, H = 300, 40
+        buf = bytearray(W * H)
+        boxes = [(0, 15), (18, 33)] + \
+                [(150 + i * 20, 165 + i * 20) for i in range(5)]
+        for x0, x1 in boxes:
+            for y in range(12, 27):
+                for x in range(x0, min(W, x1)):
+                    buf[y * W + x] = 0xFF
+        ro = region_overrun(InkMask(bytes(buf), W, H), gap_scale=1.0,
+                            edge_tol=0)
+        self.assertEqual(len(ro["kept"]), 5)
+        self.assertEqual(len(ro["overrun"]), 2)
+
+    def test_the_heaviest_cluster_can_be_the_one_with_fewest_parts(self):
+        """A mutation survivor turned into a fixture: zeroing the mass
+        term still passed, because in every earlier fixture the
+        heaviest cluster was also the one with the most components, so
+        the count tie-breaker carried the answer. Scan noise is the
+        real case -- a border speckled with a dozen 4 px dots against
+        one solid glyph -- and there COUNT gives the wrong cluster."""
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+        W, H = 200, 60
+        buf = bytearray(W * H)
+        for y in range(20, 45):                 # one solid 60x25 mark
+            for x in range(100, 160):
+                buf[y * W + x] = 0xFF
+        for i in range(6):                      # six 4 px specks at x=0
+            for y in range(4 + i * 8, 8 + i * 8):
+                for x in range(0, 4):
+                    buf[y * W + x] = 0xFF
+        ro = region_overrun(InkMask(bytes(buf), W, H), gap_scale=1.0,
+                            edge_tol=0)
+        self.assertEqual(len(ro["kept"]), 1)
+        self.assertEqual(len(ro["overrun"]), 6)
+
+    def test_the_extreme_anchor_is_a_different_statement_not_a_looser_one(self):
+        """`anchor='extreme'` asks where the INK ends, `anchor='edge'`
+        where the RECTANGLE ends, and the case that separates them is a
+        crop with a uniform inset: measured on four report crops from
+        two documents, the rightmost ink stopped 6, 6, 6 and 7 px short
+        of the border whatever the row contained. Here the intruder
+        stops 6 px short -- `edge` at tol 0 sees nothing, `extreme`
+        sees it, and an intruder in the MIDDLE is seen by neither."""
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+        W, H = 200, 40
+
+        def crop(x0, x1):
+            buf = bytearray(W * H)
+            for a, b in [(70, 85), (90, 105), (110, 125)]:
+                for y in range(12, 27):
+                    for x in range(a, b):
+                        buf[y * W + x] = 0xFF
+            for y in range(12, 27):
+                for x in range(x0, x1):
+                    buf[y * W + x] = 0xFF
+            return InkMask(bytes(buf), W, H)
+
+        inset = crop(179, W - 6)          # 6 px short of the border
+        self.assertEqual(region_overrun(inset, anchor="edge",
+                                        edge_tol=0)["overrun"], [])
+        self.assertEqual(len(region_overrun(inset, anchor="extreme")
+                             ["overrun"]), 1)
+        # An intruder that is neither at a border nor at an end of the
+        # ink is not overrun under EITHER reading -- otherwise
+        # `extreme` would be the looser statement rather than a
+        # different one.
+        middle = crop(20, 35)             # left of the main ink...
+        self.assertEqual(len(region_overrun(middle, anchor="extreme")
+                             ["overrun"]), 1)   # ...so it IS an end
+        self.assertEqual(region_overrun(crop(0, 0), anchor="extreme")
+                         ["overrun"], [])       # no intruder at all
+
+    def test_an_unknown_anchor_raises_rather_than_defaulting(self):
+        """A misspelled anchor must not silently pick one of the two
+        readings -- the whole point is that they are different
+        statements. The accepting side is asserted too, so the guard
+        cannot be made unconditional."""
+        from inkdrill.mathstruct import region_overrun
+        from inkdrill.raster import InkMask
+        m = InkMask(bytes(b"\xff" * 100 + bytes(300)), 20, 20)
+        for ok in ("edge", "extreme"):
+            self.assertIn("overrun", region_overrun(m, anchor=ok))
+        with self.assertRaises(ValueError):
+            region_overrun(m, anchor="border")

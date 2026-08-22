@@ -89,7 +89,8 @@ from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
 __all__ = ["Glyph", "Row", "ReferenceLines", "Script", "ScriptKind",
-           "rows", "reference_lines", "detect_scripts", "group"]
+           "rows", "reference_lines", "detect_scripts", "group",
+           "pair_stats", "pair_counts", "region_overrun"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -469,3 +470,176 @@ def pair_counts(comps):
             else:
                 offset += 1
     return stacked, centred, offset
+
+
+def _box_gap(a, b) -> int:
+    """Separation between two boxes, in pixels, 0 when they overlap.
+
+    `max` of the two axis separations rather than a Euclidean
+    distance: for a diagonal pair `max` is the SMALLER number, so a
+    component is called separated only when it clears the bound on the
+    axis it is furthest along. Under-reporting separation
+    under-reports overrun, which is the direction a cross-check should
+    err in.
+    """
+    dx = max(a.x0 - b.x1, b.x0 - a.x1) - 1
+    dy = max(a.y0 - b.y1, b.y0 - a.y1) - 1
+    return max(0, dx, dy)
+
+
+def region_overrun(mask, *, gap_scale: float = 1.0, edge_tol: int = 0,
+                   anchor: str = "edge", comps=None) -> dict:
+    """Which of this crop's components came from OUTSIDE its region.
+
+    A crop cut to a table cell or a detected region does not always
+    stop at the region: a neighbouring line's descender, the row rule
+    above, or the next column's ink can cross the boundary and land
+    in the crop. Downstream that reads as a component the other tool
+    failed to produce -- a conversion defect -- when it is a
+    CROPPING defect, and the two want opposite fixes.
+
+    The two conditions, both required, are what separate the classes:
+
+      SEPARATED  the component is not in the main ink's
+                 single-linkage cluster at `gap_scale` x the crop's
+                 median component WIDTH. Real mathematics is spaced
+                 in fractions of a glyph; ink from the next region
+                 is a whole glyph or more away, because the region
+                 boundary sits between them.
+      ANCHORED  where the cluster sits. Two readings, chosen by
+                 `anchor`, and they are DIFFERENT STATEMENTS rather
+                 than one statement at two tolerances:
+
+                 `edge`     some member reaches within `edge_tol` px
+                            of a crop BORDER. Ink that entered across
+                            the boundary was cut by it, so it
+                            touches -- but only where it was cut, and
+                            the rest of the intruding mark sits just
+                            inside, so the condition is on the
+                            CLUSTER, not on each component.
+                 `extreme`  the cluster is the OUTERMOST one in some
+                            direction -- no cluster reaches further
+                            left, right, up or down. Measures the
+                            position of the INK rather than of the
+                            rectangle, so a uniform inset between the
+                            region border and its content cannot
+                            defeat it.
+
+                 `edge` is the stricter statement and the right one
+                 when the crop really is cut at the region boundary.
+                 It fails outright when the producer insets its
+                 crops: measured on four report crops from two
+                 documents, the rightmost ink stopped 6, 6, 6 and 7
+                 px short of the border regardless of what the row
+                 contained, so `edge` at any tolerance below the
+                 inset reports nothing on every row and above it
+                 reports every row. A constant margin across
+                 differently sized crops is the tell.
+
+    Either alone is common and neither alone is evidence: a display
+    limit is separated and interior; the first glyph of the
+    expression is at an edge and joined. Both together are the
+    signature of ink the crop should not contain.
+
+    `comps` accepts an already-computed region list so a caller that
+    has run `pair_stats` on the same crop does not sweep it twice;
+    it must be that same list, from the SAME mask.
+
+    Returns `overrun` (the ids, under the chosen `anchor`),
+    `separated`, `edged` and `extreme` (the two anchor sets, both
+    computed whichever is selected, so a caller comparing them reads
+    one sweep), `at_edge` (the DIAGNOSTIC set: every component
+    touching a border, main ink included), `med_width`, and `kept` -- the
+    components that survive, so the caller can recompute the
+    five-tuple on the crop's own ink rather than guessing what
+    removing them would do. BOTH anchor sets are returned whichever
+    is selected, so a caller comparing the two reads one sweep.
+
+    Thresholds are named arguments with measured defaults (G7); the
+    defaults come from `tools/overrun.py`, which prints the
+    distribution of both conditions over the flagged corpus.
+    """
+    if comps is None:
+        from .nest import ink_only
+        comps = list(ink_only(mask).regions)
+    if not comps:
+        return {"overrun": [], "separated": [], "at_edge": [],
+                "edged": [], "extreme": [], "med_width": 0.0,
+                "kept": []}
+    import statistics
+    med_w = statistics.median(c.x1 - c.x0 + 1 for c in comps)
+    bound = gap_scale * med_w
+
+    # Single linkage at `bound`, then the MAIN ink is the cluster
+    # carrying the most ink -- not the largest single component and
+    # not the first id. Seeding from one component made the answer
+    # depend on which of several equal-area glyphs happened to be
+    # first in raster order, which is exactly the
+    # `Component.root` vs `nodes[0]` mistake in another costume.
+    parent = {c.id: c.id for c in comps}
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i, a in enumerate(comps):
+        for b in comps[i + 1:]:
+            if _box_gap(a, b) <= bound:
+                ra, rb = find(a.id), find(b.id)
+                if ra != rb:
+                    parent[ra] = rb
+    groups = {}
+    for c in comps:
+        groups.setdefault(find(c.id), []).append(c)
+    main_key = max(groups,
+                   key=lambda k: (sum(c.area for c in groups[k]),
+                                  len(groups[k]), -k))
+    main = groups[main_key]
+    rest = [c for k, g in groups.items() if k != main_key for c in g]
+    w, h = mask.width, mask.height
+
+    def at_edge(c):
+        return (c.x0 <= edge_tol or c.y0 <= edge_tol
+                or c.x1 >= w - 1 - edge_tol or c.y1 >= h - 1 - edge_tol)
+
+    # Per CLUSTER, not per component. Ink that crossed the boundary
+    # is cut by it and usually arrives in pieces -- a descender leaves
+    # a blob touching the border and a second one just inside. Judging
+    # each piece alone keeps the interior halves and still reports a
+    # surplus, which is the finding this test exists to remove.
+    xs0 = min(c.x0 for c in comps); xs1 = max(c.x1 for c in comps)
+    ys0 = min(c.y0 for c in comps); ys1 = max(c.y1 for c in comps)
+
+    def is_extreme(g):
+        return (min(c.x0 for c in g) == xs0 or max(c.x1 for c in g) == xs1
+                or min(c.y0 for c in g) == ys0
+                or max(c.y1 for c in g) == ys1)
+
+    edged, extreme = set(), set()
+    for k, g in groups.items():
+        if k == main_key:
+            continue
+        if any(at_edge(c) for c in g):
+            edged.update(c.id for c in g)
+        if is_extreme(g):
+            extreme.update(c.id for c in g)
+    if anchor == "edge":
+        ids = edged
+    elif anchor == "extreme":
+        ids = extreme
+    else:
+        raise ValueError(f"anchor must be 'edge' or 'extreme', "
+                         f"not {anchor!r}")
+    return {"overrun": sorted(ids),
+            "separated": sorted(c.id for c in rest),
+            # the DIAGNOSTIC set is every component touching a border,
+            # main ink included -- a row whose expression starts at the
+            # crop edge is what tells you the crop is cut tight, and
+            # that is exactly what the decision set hides.
+            "at_edge": sorted(c.id for c in comps if at_edge(c)),
+            "edged": sorted(edged),
+            "extreme": sorted(extreme),
+            "med_width": float(med_w),
+            "kept": [c for c in comps if c.id not in ids]}

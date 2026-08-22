@@ -530,6 +530,18 @@ def cmd_compare(argv) -> int:
     first-column cells are saved as crops beside the output and
     referenced by filename; without it the label is the row index.
     No dpi is required -- the five numbers are counts.
+
+    The last column is the REGION-OVERRUN test (102). When the right
+    column has MORE components than the left, the naive reading is
+    that the left one is missing ink -- a conversion defect. The
+    other cause is that the right crop overran its region and
+    captured a neighbour's, and `mathstruct.region_overrun`
+    separates them: every surplus component both outside the main
+    ink's cluster and cut by a crop border makes the row
+    REGION-OVERRUN. It is APPENDED, so a consumer indexing the
+    earlier columns positionally is unaffected, and the five-tuple
+    is never edited -- the count stays the measured one and the
+    caller decides what the label is worth.
     """
     import argparse
     ap = argparse.ArgumentParser(prog="python3 -m inkdrill compare")
@@ -541,12 +553,22 @@ def cmd_compare(argv) -> int:
     ap.add_argument("--cols", type=int, nargs=2, default=None,
                     help="the two columns to compare (default: last two)")
     ap.add_argument("--page-number", type=int, default=1)
+    ap.add_argument("--gap-scale", type=float, default=1.0,
+                    help="region-overrun separation, x median glyph width")
+    ap.add_argument("--edge-tol", type=int, default=0,
+                    help="region-overrun edge contact, px "
+                         "(--anchor edge only)")
+    ap.add_argument("--anchor", choices=("edge", "extreme"),
+                    default="extreme",
+                    help="where a surplus cluster must sit to count as "
+                         "overrun: at a crop BORDER, or at an end of "
+                         "the INK")
     ap.add_argument("--table-debug", action="store_true",
                     help="dump lattice + per-cell stats to stderr")
     ap.add_argument("-o", "--out", type=pathlib.Path)
     args = ap.parse_args(argv)
 
-    from .mathstruct import pair_stats
+    from .mathstruct import pair_stats, region_overrun
     from .pngio import read_png, auto_mask
     from .warp import resample
 
@@ -608,9 +630,9 @@ def cmd_compare(argv) -> int:
 
     header = (["page", "line", "label"]
               + [f"L {k}" for k in keys] + [f"R {k}" for k in keys]
-              + ["A=B", "B stable"])
+              + ["A=B", "B stable", "overrun"])
     rows_out = []
-    mismatch = unstable = 0
+    mismatch = unstable = overruns = 0
     for r in range(min(nrows.values())):
         row = [str(args.page_number), str(r)]
         lab = cells["A"].get((r, 0))
@@ -624,10 +646,15 @@ def cmd_compare(argv) -> int:
         else:
             row.append(f"row {r}")
         agree, stable = True, True
+        ncomp = {}
+        right_crop = None
         for col in (0, 1):
             fa = feats_of("A", r, col)
             fb = feats_of("B", r, col)
             sta = fa[0] if fa else {}
+            ncomp[col] = sta.get("components", 0)
+            if col == 1 and fa:
+                right_crop = fa[1]
             row.extend(str(sta.get(kk, 0)) for kk in keys)
             if (sta or {}) != ((fb[0] if fb else {}) or {}):
                 agree = False
@@ -641,6 +668,22 @@ def cmd_compare(argv) -> int:
                     stable = False
         row.append("yes" if agree else "NO")
         row.append("yes" if stable else "NO")
+        # The right column's SURPLUS components, when every one of them
+        # is both separated from the main ink and cut by a crop border,
+        # is ink the crop should not contain -- a cropping defect, not
+        # the missing-symbol finding the count would otherwise read as.
+        # Reported, never subtracted: the five-tuple stays the measured
+        # one and the caller decides (102).
+        over = ""
+        surplus = ncomp[1] - ncomp[0]
+        if surplus > 0 and right_crop is not None:
+            ro = region_overrun(right_crop, gap_scale=args.gap_scale,
+                                edge_tol=args.edge_tol,
+                                anchor=args.anchor)
+            if ro["overrun"] and len(ro["overrun"]) >= surplus:
+                over = f"REGION-OVERRUN {len(ro['overrun'])}"
+                overruns += 1
+        row.append(over)
         mismatch += not agree
         unstable += not stable
         rows_out.append(row)
@@ -660,6 +703,11 @@ def cmd_compare(argv) -> int:
     if unstable:
         print(f"WARNING: {unstable} of {len(rows_out)} rows change "
               f"features at half scale", file=sys.stderr)
+    if overruns:
+        print(f"{overruns} of {len(rows_out)} rows: the right column's "
+              f"surplus components are REGION OVERRUN (separated from "
+              f"the main ink and cut by a crop border) -- a cropping "
+              f"defect, not a missing symbol", file=sys.stderr)
     return 0
 
 
