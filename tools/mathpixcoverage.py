@@ -67,7 +67,13 @@ def _pages_of(lj):
     import subprocess as _sp
     pdf = lj.parent / (lj.name[:-len(".lines.json")] + ".pdf")
     if not pdf.exists():
-        pdf = next((q for q in lj.parent.glob("*.pdf")
+        # sorted: which source pdf is chosen must not depend on
+        # filesystem order. A folder with two of them would otherwise
+        # be measured against a different file on a different machine,
+        # silently. (pdfdrill hit the neighbouring form of this today:
+        # take-the-first-then-test skipped 163 documents that had a
+        # source pdf, and reported them as "no pdf".)
+        pdf = next((q for q in sorted(lj.parent.glob("*.pdf"))
                     if q.name != "report.pdf"), None)
     if pdf is None:
         return 0
@@ -109,7 +115,7 @@ for lj in docs:
         d = lj.parent; name = lj.name[:-len(".lines.json")]
         pdf = d / (name + ".pdf")
         if not pdf.exists():
-            pdf = next((p for p in d.glob("*.pdf")
+            pdf = next((p for p in sorted(d.glob("*.pdf"))
                         if p.name != "report.pdf"), None)
         if pdf is None:
             print(f"{name}: no source pdf, skipped", flush=True)
