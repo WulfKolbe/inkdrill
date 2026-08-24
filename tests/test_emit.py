@@ -1786,3 +1786,87 @@ class T1_15_RuleContext(unittest.TestCase):
         c = rule_context(m, free_rules(m, pt=pt)[0], pt=pt)
         self.assertEqual(c["band_above_px"], 10)   # not 100
         self.assertAlmostEqual(c["above"], 0.9, places=2)
+
+
+class T1_16_CompareRefusesAnUnusablePage(unittest.TestCase):
+    """`compare` on a page it cannot read must REFUSE, by name.
+
+    Two failure modes, reported from pages 9 and 8 of
+    1605.05775/report.pdf -- the "Unrecovered image regions" pages,
+    which every document with unrecovered regions has, so this is the
+    common case in that corpus and not an edge.
+
+      EMPTY LATTICE   `_table_cells` has two empty answers: None ("no
+                      ink region has >= 2 holes") and an empty dict
+                      ("a region was found, no cell survived the
+                      filters"). Only the first was guarded, so the
+                      second reached `max()` on an empty generator and
+                      raised ValueError four frames down.
+      ONE COLUMN      worse, because it did NOT raise. `--cols`
+                      defaults to `(nc - 2, nc - 1)`, which at nc == 1
+                      is `(-1, 0)`: a negative index wrapping to the
+                      last column, compared against the first. It
+                      emitted a full table whose left five-tuple was
+                      all zeroes and whose `A=B` said NO on every row.
+                      A confident, complete-looking, meaningless
+                      answer, which is worse than a crash.
+
+    Both sides asserted: a two-column lattice must still WORK, or the
+    guard could be made unconditional and the suite would not notice.
+
+    Grid dimensions are measured, not chosen: 1605.05775 p1 at 300 dpi
+    is a 6-column lattice whose rows run about 100 px.
+    """
+
+    @staticmethod
+    def _grid(cols, rows=3, cw=140, ch=100, t=4):
+        from tests.test_pngio import build_png
+        W = cols * cw + t
+        H = rows * ch + t
+        g = [[(255, 255, 255)] * W for _ in range(H)]
+
+        def box(x0, y0, x1, y1):
+            for y in range(y0, min(H, y1)):
+                for x in range(x0, min(W, x1)):
+                    g[y][x] = (0, 0, 0)
+        for i in range(cols + 1):
+            box(i * cw, 0, i * cw + t, H)
+        for j in range(rows + 1):
+            box(0, j * ch, W, j * ch + t)
+        for r in range(rows):                      # ink inside each cell
+            for cidx in range(cols):
+                x = cidx * cw + 30
+                y = r * ch + 30
+                box(x, y, x + 20, y + 20)
+        return build_png(g)
+
+    def _run(self, png_bytes):
+        import io, tempfile, pathlib as pl
+        from contextlib import redirect_stdout, redirect_stderr
+        from inkdrill.__main__ import main
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(png_bytes)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = main(["compare", str(tmp / "A.png"), str(tmp / "A.png"),
+                       "--threshold", "128", "--tol", "6"])
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_a_two_column_lattice_is_accepted(self):
+        rc, out, err = self._run(self._grid(2))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("| page | line |", out)
+
+    def test_a_one_column_lattice_is_refused_not_answered(self):
+        rc, out, err = self._run(self._grid(1))
+        self.assertEqual(rc, 1)
+        self.assertIn("column", err)
+        self.assertNotIn("| page | line |", out)
+
+    def test_a_blank_page_is_refused_by_name_not_by_ValueError(self):
+        from tests.test_pngio import build_png
+        blank = build_png([[(255, 255, 255)] * 200 for _ in range(200)])
+        rc, out, err = self._run(blank)
+        self.assertEqual(rc, 1)
+        self.assertIn("no cells", err)
+        self.assertNotIn("| page | line |", out)

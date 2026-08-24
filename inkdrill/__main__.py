@@ -583,9 +583,22 @@ def cmd_compare(argv) -> int:
     cells = {k: _table_cells(m, args.tol, debug=dbg[k])
              for k, m in masks.items()}
     for k, c in cells.items():
-        if c is None:
-            print(f"{k}: no table found (no ink region with >= 2 holes)",
-                  file=sys.stderr)
+        # `_table_cells` has TWO empty answers and they mean different
+        # things: None is "no ink region has >= 2 holes, so there is no
+        # table region at all", and an empty dict is "a table region was
+        # found and no cell survived the filters". Only the first was
+        # guarded, so the second reached `max()` on an empty generator
+        # and raised ValueError from four frames down -- reported from
+        # page 9 of 1605.05775/report.pdf, the "Unrecovered image
+        # regions" page. A page with no cells is a NORMAL condition in
+        # these reports: every document with unrecovered regions has
+        # one, which was 6 of 7 documents in the run that hit this.
+        if c is None or not c:
+            why = ("no ink region with >= 2 holes -- no table on this "
+                   "page" if c is None else
+                   "a table region was found but no cell survived the "
+                   "lattice filters")
+            print(f"{k}: no cells ({why})", file=sys.stderr)
             return 1
     if args.table_debug:
         from .nest import ink_only
@@ -611,6 +624,21 @@ def cmd_compare(argv) -> int:
                           f"chi {comps - hs}", file=sys.stderr)
     nrows = {k: max(r for r, _ in c) + 1 for k, c in cells.items()}
     ncols = {k: max(cc for _, cc in c) + 1 for k, c in cells.items()}
+    # Two columns are the minimum this subcommand can mean anything
+    # with: it compares the LAST TWO, and `--cols` defaults to
+    # `(nc - 2, nc - 1)`, which at nc == 1 is `(-1, 0)` -- a NEGATIVE
+    # index that silently wraps to the last column and compares it
+    # against the first. Page 8 of the same report is a 1-column
+    # lattice and produced a full table of rows whose left five-tuple
+    # was 0,0,0,0,0 and whose `A=B` said NO for every row: a
+    # confident, complete-looking, meaningless answer. A crash is a
+    # better failure than that, and a named refusal is better still.
+    for k, nc in ncols.items():
+        if nc < 2:
+            print(f"{k}: lattice has {nc} column(s); compare needs at "
+                  f"least 2 (it reads the last two). Nothing was "
+                  f"compared.", file=sys.stderr)
+            return 1
     if nrows["A"] != nrows["B"]:
         print(f"row counts differ: A {nrows['A']} vs B {nrows['B']}; "
               f"comparing the first {min(nrows.values())}",
