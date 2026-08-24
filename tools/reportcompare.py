@@ -48,11 +48,35 @@ RESULTS = pathlib.Path(__file__).resolve().parent.parent / "results"
 if not LIST.is_file():
     raise SystemExit(__doc__.strip().splitlines()[2] +
                      f"\n  no such list: {LIST}")
-ALL_DIRS = re.findall(r"-> ~/pdfdrill-library/(\S+)/report\.pdf",
-                      LIST.read_text())
+# `(\S+)` here silently dropped 18 of 199 documents on 2026-08-22 --
+# every one whose directory name contains a SPACE ("Uebungsblatt 01",
+# "Geometric algebra for physicists - errata"). The roster pdfdrill
+# supplies has none, so the bug was invisible until this side
+# generated its own. `(.+?)` anchored at end of line takes the whole
+# name; a directory name cannot contain a newline, and "/report.pdf"
+# at end of line is the only place the capture can stop.
+_LINES = [l for l in LIST.read_text(errors="replace").splitlines()
+          if l.strip()]
+ALL_DIRS = re.findall(r"-> ~/pdfdrill-library/(.+?)/report\.pdf\s*$",
+                      "\n".join(_LINES), re.M)
 if not ALL_DIRS:
     raise SystemExit(f"{LIST}: no '-> ~/pdfdrill-library/<dir>/report.pdf' "
                      f"lines found")
+# The RECONCILIATION is the guard, not the pattern. A regex that
+# matches fewer lines than the file holds is a filter nobody chose,
+# and this one read as "199 documents" while running 181. Refused
+# rather than warned: the count is the population of every number the
+# run produces, and a warning about it scrolls past in a two-hour
+# batch.
+if len(ALL_DIRS) != len(_LINES):
+    missed = [l for l in _LINES
+              if not re.search(r"-> ~/pdfdrill-library/(.+?)/report\.pdf\s*$",
+                               l)]
+    raise SystemExit(
+        f"{LIST}: {len(_LINES)} non-empty lines but only "
+        f"{len(ALL_DIRS)} parsed as a report path. The population "
+        f"would silently be {len(ALL_DIRS)}. Unparsed, first 5:\n  " +
+        "\n  ".join(missed[:5]))
 
 def check_fresh(name, pdf):
     """Refuse a report.pdf older than its own report.tex.

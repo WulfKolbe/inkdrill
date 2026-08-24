@@ -149,14 +149,15 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
+from typing import Iterable, NamedTuple, Sequence
 
 from .raster import InkMask
 
 __all__ = ["signature_features", "template_of",
            "Template", "Prediction", "Channels", "Classifier",
            "normalise", "bitmap_distance", "signature_distance",
-           "extents_distance", "confusion", "NoTemplates"]
+           "extents_distance", "confusion", "confusion_table",
+           "ClassRow", "NoTemplates"]
 
 GRID = 12
 
@@ -476,6 +477,61 @@ class Classifier:
                      <= extents_tol for t in ok):
                 out.append((lab, dist))
         return tuple(out)
+
+
+class ClassRow(NamedTuple):
+    """One class's row of a confusion table."""
+    support: int
+    correct: int
+    recall: float
+
+
+def confusion_table(pairs: Iterable[tuple[str, str]]
+                    ) -> tuple[dict[str, ClassRow], Counter]:
+    """Per-class (support, correct, recall) and the off-diagonal pairs.
+
+    `pairs` is EVERY classification as `(truth, predicted)`, correct
+    ones included -- unlike `confusion`, whose Counter holds only the
+    errors and therefore cannot tell how many chances a class had.
+    `confusion` is unchanged; this is a second reading of the same
+    data, not a replacement.
+
+    WHY A PER-CLASS TABLE AND NOT AN ACCURACY. A single accuracy is a
+    MICRO average: it weights each query equally, so a class holding
+    90% of the population sets it almost alone. Macro recall weights
+    each CLASS equally. The two answer different questions and can be
+    far apart:
+
+        micro = sum(r.correct for r in table.values()) \
+                / sum(r.support for r in table.values())
+        macro = mean(r.recall for r in table.values())
+
+    On a 90/5/5 population where the large class is perfect and the
+    two small ones are never right, micro is 0.90 and macro is 0.33.
+    Quoting the first as "accuracy" says the classifier works; the
+    second says two of its three classes do not exist as far as it is
+    concerned. This project's standing rule -- state the population
+    beside the number -- has a sharper form here: state which AVERAGE,
+    because the population is inside the average.
+
+    Classes appear by TRUTH. A label that was only ever predicted, and
+    never true, has no support and no recall, so it is absent from the
+    table and present in the off-diagonal Counter -- which is where a
+    reader should look for it, not at a row of zeroes implying it was
+    tested.
+    """
+    support: Counter = Counter()
+    correct: Counter = Counter()
+    off: Counter = Counter()
+    for truth, got in pairs:
+        support[truth] += 1
+        if got == truth:
+            correct[truth] += 1
+        else:
+            off[(truth, got)] += 1
+    return ({lab: ClassRow(support[lab], correct[lab],
+                           correct[lab] / support[lab])
+             for lab in support}, off)
 
 
 def confusion(classifier: "Classifier",

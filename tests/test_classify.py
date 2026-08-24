@@ -410,3 +410,96 @@ class T13_10_Prune(unittest.TestCase):
         cands = (("ring", 1.0), ("bar", 2.0), ("two", 3.0))
         self.assertEqual(len(c.prune(q, cands, sig_tol=0)), 1)
         self.assertGreater(len(c.prune(q, cands, sig_tol=2)), 1)
+
+
+class T13_11_ConfusionTable(unittest.TestCase):
+    """A1a: per-class support/correct/recall, and the two averages it
+    exists to separate.
+
+    The 90/5/5 case is the whole argument. One class holding 90% of
+    the population and answered perfectly, two small classes never
+    answered right: micro-accuracy 0.90, macro-recall 0.33. Both are
+    asserted, AND their difference is asserted, so the test fails if
+    the table is ever computed in a way that collapses them.
+    """
+
+    POP = ([("A", "A")] * 90 + [("B", "A")] * 5 + [("C", "A")] * 5)
+
+    @staticmethod
+    def _averages(table):
+        micro = (sum(r.correct for r in table.values())
+                 / sum(r.support for r in table.values()))
+        macro = sum(r.recall for r in table.values()) / len(table)
+        return micro, macro
+
+    def test_micro_is_high_and_macro_is_low_on_the_same_data(self):
+        from inkdrill.classify import confusion_table
+        table, off = confusion_table(self.POP)
+        micro, macro = self._averages(table)
+        self.assertGreaterEqual(micro, 0.90)
+        self.assertLessEqual(macro, 0.50)
+        # and they are not the same number, which is the finding
+        self.assertGreater(micro - macro, 0.5)
+
+    def test_the_rows_are_per_class_and_carry_their_support(self):
+        from inkdrill.classify import confusion_table
+        table, off = confusion_table(self.POP)
+        self.assertEqual(sorted(table), ["A", "B", "C"])
+        self.assertEqual(table["A"], (90, 90, 1.0))
+        self.assertEqual(table["B"], (5, 0, 0.0))
+        self.assertEqual(table["C"], (5, 0, 0.0))
+        self.assertEqual(sum(r.support for r in table.values()), 100)
+
+    def test_the_off_diagonal_holds_the_errors_and_only_those(self):
+        from inkdrill.classify import confusion_table
+        table, off = confusion_table(self.POP)
+        self.assertEqual(dict(off), {("B", "A"): 5, ("C", "A"): 5})
+        self.assertEqual(sum(off.values()),
+                         sum(r.support - r.correct for r in table.values()))
+        self.assertFalse([k for k in off if k[0] == k[1]])
+
+    def test_a_label_only_ever_predicted_gets_no_row(self):
+        """A row of zeroes would claim the class was tested. It was
+        not: it has no support, so it belongs in the off-diagonal and
+        nowhere else."""
+        from inkdrill.classify import confusion_table
+        table, off = confusion_table([("A", "A"), ("A", "Z")])
+        self.assertEqual(sorted(table), ["A"])
+        self.assertEqual(table["A"], (2, 1, 0.5))
+        self.assertIn(("A", "Z"), off)
+
+    def test_confusion_is_unchanged_and_still_off_diagonal_only(self):
+        """A1a says `confusion()` unchanged. Asserted rather than
+        assumed: the two functions read the same data differently and
+        a later edit that unified them would break every caller of
+        the older one."""
+        from inkdrill.classify import (Channels, Classifier, confusion,
+                                       confusion_table, template_of)
+        from inkdrill.raster import InkMask
+
+        # Two SHAPES, not two rectangles: the bitmap channel
+        # normalises to a 12x12 box, so a solid 8x8 and a solid 4x16
+        # are the same picture and no classifier could separate them.
+        # A fixture that cannot be answered proves nothing about the
+        # function under test.
+        def solid(n=12):
+            return InkMask(bytes([0xFF] * (n * n)), n, n)
+
+        def ring(n=12):
+            buf = bytearray([0xFF] * (n * n))
+            for y in range(3, n - 3):
+                for x in range(3, n - 3):
+                    buf[y * n + x] = 0x00
+            return InkMask(bytes(buf), n, n)
+        clf = Classifier(channels=Channels(1.0, 0.0, 0.0))
+        clf.add(template_of(solid(), "solid"))
+        clf.add(template_of(ring(), "ring"))
+        qs = [("solid", template_of(solid(), "solid")),
+              ("ring", template_of(ring(), "ring"))]
+        acc, pairs = confusion(clf, qs)
+        self.assertEqual(acc, 1.0)
+        self.assertEqual(dict(pairs), {})
+        table, off = confusion_table(
+            [(truth, clf.classify(q).label) for truth, q in qs])
+        self.assertEqual(dict(off), {})
+        self.assertEqual(sorted(table), ["ring", "solid"])

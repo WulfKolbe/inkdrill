@@ -2419,6 +2419,73 @@ def _crop_ink(mask):
 _template_of = template_of
 
 
+def check_accepted_subset(accepted, allwrong):
+    """The verifier can only ever REMOVE confusions, never add one.
+
+    `accepted` counts wrong pairs the signature let through;
+    `allwrong` counts every wrong pair. The first is the second
+    filtered by one condition, so `set(accepted) <= set(allwrong)` and
+    each pair's accepted count cannot exceed its total. A violation is
+    a counting error -- the two counters have drifted apart and are no
+    longer readings of the same loop -- and it is raised rather than
+    warned, because both tables get printed either way and a wrong
+    subset relation is invisible in the output.
+    """
+    extra = set(accepted) - set(allwrong)
+    if extra:
+        raise AssertionError(
+            f"{len(extra)} accepted confusion(s) the classifier never "
+            f"produced: {sorted(extra)[:3]}")
+    over = [k for k, v in accepted.items() if v > allwrong[k]]
+    if over:
+        raise AssertionError(
+            f"accepted count exceeds total for {len(over)} pair(s): "
+            f"{sorted(over)[:3]}")
+    return True
+
+
+def argv_line(what, args):
+    """The fully-expanded command line for one measurement.
+
+    `# argv: measure.py <what> --flag value ...`, every option
+    present with its effective value, options sorted so two runs are
+    comparable by eye and by diff. It round-trips: parsing the line
+    back yields the same dict the run used, which is what the test
+    asserts -- a provenance line that does not parse is decoration.
+
+    `what` is the single measurement, not `args.what`: a run of three
+    subcommands prints three lines, each naming only its own, so a
+    number lifted out of a combined log still carries a command that
+    reproduces it alone.
+    """
+    parts = ["# argv: measure.py", str(what)]
+    for key in sorted(vars(args)):
+        if key == "what":
+            continue
+        val = getattr(args, key)
+        flag = "--" + key.replace("_", "-")
+        parts += [flag, "None" if val is None else str(val)]
+    return " ".join(parts)
+
+
+def parse_argv_line(line):
+    """`argv_line` inverted: the line back to a dict. Used by the test
+    that keeps the two in step, and by anyone re-running a figure out
+    of a log."""
+    toks = line.split()
+    if toks[:3] != ["#", "argv:", "measure.py"]:
+        raise ValueError(f"not an argv line: {line[:40]!r}")
+    rest = toks[3:]
+    out = {"what": rest[0]}
+    i = 1
+    while i < len(rest):
+        if not rest[i].startswith("--"):
+            raise ValueError(f"expected a flag at {rest[i]!r}")
+        out[rest[i][2:].replace("-", "_")] = rest[i + 1]
+        i += 2
+    return out
+
+
 def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
             candidate_families=0):
     """**The measurement this whole chain was built for.**
@@ -2540,6 +2607,12 @@ def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
             clf.add(t)
         right = detected = missed = false_reject = 0
         worst = Counter()
+        # A2a: EVERY wrong pair, conditioned on nothing. `worst` is
+        # conditioned on the verifier accepting, so it answers "which
+        # errors get through" and cannot answer "which errors the
+        # classifier makes". Two questions, two counters; the existing
+        # one is untouched.
+        allwrong = Counter()
         by_label = defaultdict(list)
         for t in templates:
             by_label[t.label].append(t)
@@ -2579,6 +2652,7 @@ def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
                 if not clf_q.agrees(q, pred.label, extents_tol=extents_tol):
                     false_reject += 1
             else:
+                allwrong[(q.label, pred.label)] += 1
                 # A wrong answer the signature REJECTS is a DETECTED
                 # error -- the product. One it accepts is the dangerous
                 # class.
@@ -2592,10 +2666,26 @@ def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
               f"wrong-and-detected {detected/tot:6.2%}  "
               f"WRONG AND ACCEPTED {missed/tot:6.2%}  "
               f"correct-but-REJECTED {false_reject/max(right,1):6.2%}")
-        if name == "all channels" and worst:
-            print("      most dangerous confusions (wrong, accepted):")
+        # A2b: both tables, each headed by WHAT IT IS CONDITIONED ON.
+        # The old heading said "most dangerous confusions", which
+        # names the consequence and not the conditioning, and a reader
+        # comparing it against a classifier's confusion matrix would
+        # be comparing two different populations without being told.
+        if name == "all channels" and (allwrong or worst):
+            check_accepted_subset(worst, allwrong)
+            print(f"      confusions of the classifier "
+                  f"({len(allwrong)} distinct pairs, "
+                  f"{sum(allwrong.values())} queries):")
+            for (a, b), k in allwrong.most_common(6):
+                print(f"        {a}  read as  {b}   x{k}")
+            print(f"      confusions surviving the verifier "
+                  f"({len(worst)} distinct pairs, "
+                  f"{sum(worst.values())} queries):")
             for (a, b), k in worst.most_common(6):
                 print(f"        {a}  read as  {b}   x{k}")
+            only_clf = set(allwrong) - set(worst)
+            print(f"      pairs the verifier removed entirely: "
+                  f"{len(only_clf)} of {len(allwrong)}")
 
     # C2: `prune` as a FILTER rather than an accept/reject.
     #
@@ -3583,7 +3673,17 @@ def main():
     todo = sorted(MEASUREMENTS) if "all" in args.what else args.what
     for name in todo:
         fn, default_n = MEASUREMENTS[name]
+        # A3a: the FIRST line of every measurement is the command that
+        # produced it, fully expanded. Not the argv the user typed --
+        # that omits every default, and a default is a decision like
+        # any other. This project's standing rule is that a figure
+        # without its population is not a result; the flags ARE part
+        # of the population, and three of them (--split, --candidates,
+        # --extents-tol) have changed an answer by more than the
+        # effect being measured. A number pasted into a document
+        # without this line cannot be re-run.
         print(f"\n=== {name} " + "=" * (62 - len(name)))
+        print(argv_line(name, args))
         if name == "white":
             fn(root, args.n or default_n, random.Random(args.seed),
                min_len=args.min_len, doc=args.doc)

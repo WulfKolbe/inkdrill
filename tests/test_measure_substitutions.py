@@ -356,3 +356,132 @@ class TC_6_MergeBoxes(unittest.TestCase):
         self.assertEqual(self._m([(0, 0, 10, 10),
                                                (5, 5, 15, 15)], 0),
                          [(0, 0, 15, 15)])
+
+
+class T13_12_AcceptedIsASubsetOfAllWrong(unittest.TestCase):
+    """A2b: the verifier can only remove confusions, never add one.
+
+    `measure.py maths` now prints two tables -- every wrong pair the
+    classifier produced, and the subset of those the signature
+    accepted. The relation between them is the reason both can be
+    printed side by side, so it is checked in code rather than left
+    to the reader, and BOTH sides are asserted: the accepting path as
+    well as the refusal, or the guard could be made unconditional
+    without a failure.
+    """
+
+    @staticmethod
+    def _fn():
+        import importlib.util, pathlib, sys
+        p = (pathlib.Path(__file__).resolve().parent.parent
+             / "tools" / "premise" / "measure.py")
+        spec = importlib.util.spec_from_file_location("_m_sub", p)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["_m_sub"] = mod
+        spec.loader.exec_module(mod)
+        return mod.check_accepted_subset
+
+    def test_a_proper_subset_is_accepted(self):
+        from collections import Counter
+        f = self._fn()
+        allw = Counter({("a", "b"): 5, ("c", "d"): 2, ("e", "f"): 1})
+        acc = Counter({("a", "b"): 3, ("c", "d"): 2})
+        self.assertTrue(f(acc, allw))
+
+    def test_an_equal_pair_of_counters_is_accepted(self):
+        """The verifier accepting everything is a legitimate outcome
+        and must not raise -- otherwise the guard would forbid the
+        case where the signature rejects nothing."""
+        from collections import Counter
+        c = Counter({("a", "b"): 5, ("c", "d"): 2})
+        self.assertTrue(self._fn()(Counter(c), c))
+
+    def test_an_empty_accepted_set_is_accepted(self):
+        from collections import Counter
+        self.assertTrue(self._fn()(Counter(),
+                                   Counter({("a", "b"): 5})))
+
+    def test_a_pair_the_classifier_never_produced_raises(self):
+        from collections import Counter
+        with self.assertRaises(AssertionError):
+            self._fn()(Counter({("x", "y"): 1}),
+                       Counter({("a", "b"): 5}))
+
+    def test_an_accepted_count_above_the_total_raises(self):
+        """Same keys, impossible counts. The subset test on keys alone
+        would pass this, which is why the counts are checked too."""
+        from collections import Counter
+        with self.assertRaises(AssertionError):
+            self._fn()(Counter({("a", "b"): 9}),
+                       Counter({("a", "b"): 5}))
+
+
+class T13_13_ArgvProvenanceLine(unittest.TestCase):
+    """A3a: every measurement's first line is the command that made it.
+
+    The round trip is the test. A provenance line that does not parse
+    back to the arguments the run actually used is decoration -- it
+    looks like reproducibility and is not -- so the assertion is
+    equality with the parsed args, not a substring match on the text.
+    """
+
+    @staticmethod
+    def _mod():
+        import importlib.util, pathlib, sys
+        p = (pathlib.Path(__file__).resolve().parent.parent
+             / "tools" / "premise" / "measure.py")
+        spec = importlib.util.spec_from_file_location("_m_argv", p)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["_m_argv"] = mod
+        spec.loader.exec_module(mod)
+        return mod
+
+    @staticmethod
+    def _args(**over):
+        import argparse
+        d = dict(corpus="/tmp/corpus", n=None, seed=20260807,
+                 candidates=0, candidate_families=0, extents_tol=None,
+                 min_len=60, quantise=0, doc=None, fill_max=0.10,
+                 hole_measure="bbox", merge_tol=0, iou=0.5,
+                 min_block=200, truth_tex=None, ocr_dir=None,
+                 first_page=0, split="document", what=["maths"])
+        d.update(over)
+        return argparse.Namespace(**d)
+
+    def test_the_line_parses_back_to_the_arguments_it_was_built_from(self):
+        m = self._mod()
+        args = self._args()
+        got = m.parse_argv_line(m.argv_line("maths", args))
+        want = {"what": "maths"}
+        want.update({k: "None" if v is None else str(v)
+                     for k, v in vars(args).items() if k != "what"})
+        self.assertEqual(got, want)
+
+    def test_a_changed_flag_changes_the_line(self):
+        """The line must be a function of the arguments, not a
+        constant that happens to look right. Two runs differing only
+        in --split must produce different provenance."""
+        m = self._mod()
+        a = m.argv_line("classify", self._args(split="document"))
+        b = m.argv_line("classify", self._args(split="font"))
+        self.assertNotEqual(a, b)
+        self.assertEqual(m.parse_argv_line(b)["split"], "font")
+
+    def test_it_names_one_measurement_not_the_whole_run(self):
+        """A run of three subcommands prints three lines. A number
+        lifted out of a combined log must carry a command that
+        reproduces IT, not the batch it happened to be in."""
+        m = self._mod()
+        args = self._args(what=["maths", "classify", "fonts"])
+        self.assertEqual(
+            m.parse_argv_line(m.argv_line("classify", args))["what"],
+            "classify")
+
+    def test_a_line_that_is_not_provenance_is_refused(self):
+        """Both sides: the accepting path is asserted above, so the
+        guard cannot be made unconditional."""
+        m = self._mod()
+        with self.assertRaises(ValueError):
+            m.parse_argv_line("    bitmap only  79.44%")
+        with self.assertRaises(ValueError):
+            m.parse_argv_line("# argv: measure.py maths notaflag 1")
