@@ -391,6 +391,19 @@ for name in DIRS:
         id_mismatch.append((name, len(recs), len(idents), why))
     (LIB / name / "report.compare.tsv").write_text(
         "\n".join([hdr] + rows) + "\n")
+    # THE THIRD FACE of the empty-row defect: a positional field that
+    # outlives the document it indexes. `report_page` and `line` are
+    # indices into a specific BUILD of report.pdf; rebuild the pdf and
+    # they stay in range, stay plausible, and quietly point at the
+    # wrong rows -- observed as ten displacements in a published
+    # 0902.0431, one per page-break, after the legend row was added.
+    # Nothing in the file can reveal that, so the build is stamped
+    # beside it. A sidecar rather than a header line, because the tsv
+    # has consumers that would have to change to skip a comment.
+    st = pdf.stat()
+    (LIB / name / "report.compare.source").write_text(
+        f"path\t{pdf}\nmtime\t{int(st.st_mtime)}\n"
+        f"size\t{st.st_size}\nrows\t{len(rows)}\n")
     print(f"{name}: {len(rows)} rows -> report.compare.tsv", flush=True)
     if not rows:
         zero_rows.append(
