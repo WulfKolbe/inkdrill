@@ -137,6 +137,25 @@ measurement; a fresh pass is ~2 hours.
   components are". Inherited from pdfdrill's variant B, where 1 of 19
   crops contained the notation the hint addressed, so its +196
   measured the cost of an irrelevant hint rather than the hint.
+- **An absence reported as a result is always the reassuring one.**
+  Three instances in one day, each a tempting collapse of two states
+  that look alike from one end: a table region found with NO SURVIVING
+  CELL is not "no table on this page" (it was an empty dict past a
+  `is None` guard, and it raised `ValueError` four frames down); a
+  ZERO-VS-ZERO comparison is not "clean" (distance 0, the best
+  possible score, from a comparison that did not happen); a file
+  measured BEFORE a provenance stamp existed is not "verified
+  current". Every time, the collapsed reading is the flattering one,
+  and every time it is invisible from inside the artifact. Name the
+  two states separately even when one of them is rare.
+- **Guard the derived side, not only the source side.**
+  `check_fresh` refuses a `report.pdf` older than its `report.tex` --
+  the source direction -- and nothing compared the DERIVED
+  `report.compare.tsv` against the pdf it came from. 100 of 352 were
+  stale, carrying `report_page` indices into a build that no longer
+  existed, all of them in range and plausible. An asymmetric guard
+  looks complete from either end on its own; ask which direction is
+  unwatched.
 - **Identity claims need an identity, and position does not supply
   one.** Per-component correspondence between a LaTeX render and a
   scan of the same expression is not recoverable by position:
