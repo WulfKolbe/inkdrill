@@ -1870,3 +1870,91 @@ class T1_16_CompareRefusesAnUnusablePage(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("no cells", err)
         self.assertNotIn("| page | line |", out)
+
+
+class T1_17_BothCellsEmptyIsNotClean(unittest.TestCase):
+    """A row with no ink in either compared cell scores distance 0 and
+    reads CLEAN -- the best possible result from a comparison that did
+    not happen.
+
+    Reported by pdfdrill-github-io-a2 across seven documents: exactly
+    one such row per page, always LAST on its page, never on the final
+    page. Reproduced here on 1605.05775/report.pdf, where it is a real
+    lattice row and not a phantom -- a longtable page-break
+    CONTINUATION FOOTER, 49 px tall at 300 dpi, which clears the 40 px
+    sliver floor and survives every filter.
+
+    MARKED, NEVER DROPPED. Callers pair rows to identifiers by
+    position, so removing one shifts every row after it. The same
+    defect produced 501 phantom changes in a peer's output and 320
+    mislabelled rows in this project's overrun harness. And an empty
+    pair is not always a footer -- an equation whose render AND scan
+    are both missing looks identical and DOES own an identifier, so
+    dropping it would mis-pair. The row keeps its slot and says what
+    it is.
+
+    Both sides asserted: a row with ink in either cell must NOT be
+    marked, or the column would be a constant.
+    """
+
+    @staticmethod
+    def _page(*, last_row_empty):
+        """A 3-row, 3-column grid. Row heights come from the measured
+        report: 1605.05775 at 300 dpi has body rows of 100-800 px and
+        a 49 px continuation footer."""
+        from tests.test_pngio import build_png
+        cw, t = 140, 4
+        heights = [100, 100, 49]
+        W = 3 * cw + t
+        H = sum(heights) + t
+        g = [[(255, 255, 255)] * W for _ in range(H)]
+
+        def box(x0, y0, x1, y1):
+            for y in range(y0, min(H, y1)):
+                for x in range(x0, min(W, x1)):
+                    g[y][x] = (0, 0, 0)
+        for i in range(4):
+            box(i * cw, 0, i * cw + t, H)
+        y = 0
+        tops = []
+        for h in heights:
+            box(0, y, W, y + t)
+            tops.append(y)
+            y += h
+        box(0, y, W, y + t)
+        for r, y0 in enumerate(tops):
+            if r == len(tops) - 1 and last_row_empty:
+                continue
+            for cidx in range(3):
+                box(cidx * cw + 30, y0 + 20, cidx * cw + 50, y0 + 40)
+        return build_png(g)
+
+    def _rows(self, png_bytes):
+        import io, tempfile, pathlib as pl
+        from contextlib import redirect_stdout, redirect_stderr
+        from inkdrill.__main__ import main
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(png_bytes)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = main(["compare", str(tmp / "A.png"), str(tmp / "A.png"),
+                       "--threshold", "128", "--tol", "6"])
+        self.assertEqual(rc, 0, err.getvalue())
+        rows = [[c.strip() for c in l.split("|")[1:-1]]
+                for l in out.getvalue().splitlines()
+                if l.startswith("| 1 |")]
+        return rows, err.getvalue()
+
+    def test_an_empty_last_row_is_marked_and_keeps_its_slot(self):
+        rows, err = self._rows(self._page(last_row_empty=True))
+        self.assertEqual(rows[-1][-1], "BOTH-EMPTY")
+        # its five-tuples really are the all-zero pair that reads clean
+        self.assertEqual(rows[-1][3:13], ["0"] * 10)
+        # and it was NOT removed: the row count is unchanged
+        self.assertEqual(len(rows), 3)
+        self.assertIn("NO INK", err)
+
+    def test_a_row_with_ink_is_not_marked(self):
+        rows, err = self._rows(self._page(last_row_empty=False))
+        self.assertEqual([r[-1] for r in rows], ["", "", ""])
+        self.assertNotIn("NO INK", err)

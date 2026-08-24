@@ -316,6 +316,7 @@ from findings import flag_of        # one definition (P19)
 
 run_rows = []
 demoted_rows = []
+empty_rows = []
 id_mismatch = []
 for name in DIRS:
     d = S / name
@@ -339,7 +340,14 @@ for name in DIRS:
             L = [int(x) for x in c[3:8]]; R = [int(x) for x in c[8:13]]
             dis = sum(abs(x - y) for x, y in zip(L, R))
             rows.append("\t".join(map(str, [p, ln, dis, c[13]] + L + R)))
-            recs.append((dis, abs(L[0] - R[0]), c[13] == "yes"))
+            # A row with NO INK in either compared cell scores distance
+            # 0 and reads CLEAN -- the best possible result from a
+            # comparison that did not happen. Kept in `recs` so the
+            # positional pairing with the equation list is undisturbed,
+            # and excluded from the findings after the zip, exactly as
+            # a demoted row is.
+            recs.append((dis, abs(L[0] - R[0]), c[13] == "yes",
+                         not any(L) and not any(R)))
     # P19: identifiers come from the report's own tex, in table order.
     # A count mismatch means the row<->equation correspondence broke;
     # ids are then withheld ("?") and the document is named in the
@@ -357,7 +365,11 @@ for name in DIRS:
         if pages else False
     if len(idents) >= len(recs) and contiguous:
         dem = demoted_idents(name)
-        for (ident, srcpage), (dis, cd, stable) in zip(idents, recs):
+        for (ident, srcpage), (dis, cd, stable, empty) in zip(idents,
+                                                              recs):
+            if empty:
+                empty_rows.append(name)
+                continue
             if ident in dem:
                 demoted_rows.append(name)
                 continue
@@ -399,6 +411,17 @@ _by = {}
 for r in run_rows:
     _by[r[5]] = _by.get(r[5], 0) + 1
 print(f"{len(run_rows)} rows -> {run_file}", flush=True)
+if empty_rows:
+    import collections as _c
+    by = _c.Counter(empty_rows)
+    print(f"  excluded {len(empty_rows)} rows with NO INK in either "
+          f"compared cell across {len(by)} documents; worst: "
+          f"{', '.join(f'{k} {v}' for k, v in by.most_common(3))}",
+          flush=True)
+    print(f"    These score distance 0 and would have counted as CLEAN. "
+          f"On 1605.05775 they are a longtable page-break continuation "
+          f"footer -- 49 px at 300 dpi, above the 40 px sliver floor -- "
+          f"one per page, never on the last page.", flush=True)
 if demoted_rows:
     import collections as _c
     by = _c.Counter(demoted_rows)

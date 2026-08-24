@@ -658,9 +658,9 @@ def cmd_compare(argv) -> int:
 
     header = (["page", "line", "label"]
               + [f"L {k}" for k in keys] + [f"R {k}" for k in keys]
-              + ["A=B", "B stable", "overrun"])
+              + ["A=B", "B stable", "overrun", "empty"])
     rows_out = []
-    mismatch = unstable = overruns = 0
+    mismatch = unstable = overruns = empties = 0
     for r in range(min(nrows.values())):
         row = [str(args.page_number), str(r)]
         lab = cells["A"].get((r, 0))
@@ -712,6 +712,27 @@ def cmd_compare(argv) -> int:
                 over = f"REGION-OVERRUN {len(ro['overrun'])}"
                 overruns += 1
         row.append(over)
+        # BOTH CELLS EMPTY is not a clean row, it is an ABSENT one, and
+        # the difference is invisible in the five-tuple: 0,0,0,0,0
+        # against 0,0,0,0,0 is distance 0, component delta 0, and every
+        # downstream flag reads CLEAN -- the best possible score, from a
+        # comparison that did not happen.
+        #
+        # It is a real lattice row, not a phantom: a longtable's
+        # page-break CONTINUATION FOOTER is 49 px tall at 300 dpi on
+        # 1605.05775, which clears the 40 px sliver floor, so it
+        # survives every filter and lands N-of-N on every page except
+        # the last. Six unrelated documents showed exactly one per
+        # page.
+        #
+        # MARKED, NEVER DROPPED. Callers pair rows to identifiers by
+        # POSITION, so removing a row here shifts every row after it --
+        # the same defect that put 501 phantom changes in a peer's
+        # output and 320 mislabelled rows in this project's own
+        # overrun harness. The row keeps its slot and says what it is.
+        both_empty = (ncomp[0] == 0 and ncomp[1] == 0)
+        row.append("BOTH-EMPTY" if both_empty else "")
+        empties += both_empty
         mismatch += not agree
         unstable += not stable
         rows_out.append(row)
@@ -731,6 +752,12 @@ def cmd_compare(argv) -> int:
     if unstable:
         print(f"WARNING: {unstable} of {len(rows_out)} rows change "
               f"features at half scale", file=sys.stderr)
+    if empties:
+        print(f"WARNING: {empties} of {len(rows_out)} rows have NO INK "
+              f"in either compared cell. They score distance 0 and read "
+              f"as CLEAN; they are marked BOTH-EMPTY in the last column "
+              f"and a consumer must exclude them from any clean count.",
+              file=sys.stderr)
     if overruns:
         print(f"{overruns} of {len(rows_out)} rows: the right column's "
               f"surplus components are REGION OVERRUN (separated from "
