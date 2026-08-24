@@ -2486,38 +2486,19 @@ def parse_argv_line(line):
     return out
 
 
-def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
-            candidate_families=0):
-    """**The measurement this whole chain was built for.**
+def maths_corpus(n, rng):
+    """Templates and queries for the maths population.
 
-    Every accuracy figure in this repository is body text. U13's class
-    filter (>=12 instances) excluded every maths symbol and the only
-    non-ASCII survivors were the quotes and the fi ligature. So maths
-    classification has never been measured, and two units are partial on
-    it.
+    Lifted VERBATIM out of `m_maths` so `m_calibration`
+    measures the same population rather than a second one
+    that happens to be built the same way. Two copies of a
+    construction drift, and this one costs a ghostscript call
+    per glyph, so a second copy would also double the run.
 
-    PROTOCOL: templates rendered from the FONT by
-    `type1 -> charstring -> scan`; queries rendered from the same font by
-    GHOSTSCRIPT. That is the real deployment shape -- a template comes
-    from the document's own font and a query comes from the page -- and
-    `measure.py rasterisers` established what the two paths do differ
-    by: an 18.8% ink bias at body-text size and 15 bits in 1024.
-
-    POPULATION: every glyph of the TeX maths families, so the class
-    count is in the hundreds rather than U13's 23. **State the class
-    count beside the accuracy** -- a 300-class problem and a 23-class
-    problem are not comparable, and chance alone differs by an order of
-    magnitude.
-
-    WHAT THIS DOES NOT TEST: the same font is on both sides, so this is
-    cross-RASTERISER, not cross-font. It also has no page noise, no
-    neighbouring ink and no baseline variation. It is the ceiling, and a
-    figure measured here is an upper bound on a real page.
-
-    THE RESIDUAL IS THE PRODUCT. A wrong answer that the signature
-    channel REJECTS is a detected error, which is what this project is
-    for; a wrong answer it accepts is the dangerous class. Both are
-    reported, never one accuracy.
+    Templates come from the FONT by `type1 -> charstring ->
+    scan`; queries from the same font by GHOSTSCRIPT. Returns
+    `(templates, queries)`, index-aligned, or `(None, None)`
+    when the Type 1 tree is absent.
     """
     import subprocess
     from inkdrill.type1 import _split_pfb
@@ -2525,7 +2506,7 @@ def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
                                        "/usr/share/texmf-dist/fonts/type1"))
     if not tree.is_dir():
         print(f"  no Type 1 tree at {tree}; set INKDRILL_TYPE1")
-        return
+        return None, None
     pt, dpi = 10, 400
     px_em = pt * dpi / 72.0
     tmp = pathlib.Path(os.environ.get("TMPDIR", "/tmp"))
@@ -2576,6 +2557,188 @@ def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
             queries.append(q)
             made += 1
         print(f"  {src.stem:10} {made} glyphs")
+    return templates, queries
+
+
+def _decile_bins(vals, k=10):
+    """Equal-COUNT bins, not equal-width.
+
+    Calibration wants every bin populated: equal-width bins over a
+    long-tailed score put 90% of the mass in the first one and leave
+    the rest with counts too small to read, so the curve becomes a
+    statement about the binning. Equal-count bins put the choice in
+    ONE place -- how many bins -- and the edges are printed so the
+    reader can see what each one spans.
+
+    Ties are the awkward case and they are frequent here: `margin` is
+    0.0 whenever the top two candidates tie, and inf when there is
+    only one. Boundaries are pushed past a run of equal values rather
+    than splitting it, so two identical scores are never in different
+    bins. That makes bin sizes UNEVEN, which is printed.
+    """
+    s = sorted(vals)
+    if not s:
+        return []
+    edges = []
+    for i in range(1, k):
+        j = i * len(s) // k
+        while j < len(s) and s[j] == s[j - 1]:
+            j += 1
+        if j < len(s) and (not edges or s[j] > edges[-1]):
+            edges.append(s[j])
+    return edges
+
+
+def _calibration_rows(scores, correct, k=10):
+    """(lo, hi, n, n_correct, p) per bin, ascending."""
+    edges = _decile_bins(scores, k)
+
+    def which(v):
+        i = 0
+        while i < len(edges) and v >= edges[i]:
+            i += 1
+        return i
+    n = len(edges) + 1
+    tot = [0] * n
+    hit = [0] * n
+    lo = [float("inf")] * n
+    hi = [float("-inf")] * n
+    for v, ok in zip(scores, correct):
+        b = which(v)
+        tot[b] += 1
+        hit[b] += ok
+        lo[b] = min(lo[b], v)
+        hi[b] = max(hi[b], v)
+    return [(lo[b], hi[b], tot[b], hit[b],
+             hit[b] / tot[b] if tot[b] else float("nan"))
+            for b in range(n) if tot[b]]
+
+
+def _print_calibration(title, rows):
+    print(f"      {title}")
+    print(f"        {'bin lo':>10} {'bin hi':>10} {'n':>6} "
+          f"{'correct':>8} {'P(correct)':>11}")
+    for lo, hi, n, c, pc in rows:
+        f = (lambda v: "  inf" if v == float("inf") else f"{v:10.4f}")
+        print(f"        {f(lo)} {f(hi)} {n:6d} {c:8d} {pc:11.4f}")
+
+
+def _monotone_report(rows, what):
+    """B4c: is P(correct) monotone non-decreasing in the score?
+
+    Reported as a FINDING either way. A score a caller is invited to
+    threshold on -- `margin` is documented as "a caller rejecting on
+    a small margin is the intended use" -- has to be monotone for a
+    threshold to mean anything. If it is not, there is no cut such
+    that "above it" is reliably better than "below it", and the
+    number cannot be used the way its docstring offers it.
+    """
+    ps = [r[4] for r in rows]
+    drops = [(i, ps[i - 1], ps[i]) for i in range(1, len(ps))
+             if ps[i] < ps[i - 1] - 1e-12]
+    if not drops:
+        print(f"        MONOTONE non-decreasing in {what} "
+              f"across {len(ps)} bins")
+        return True
+    worst = max(drops, key=lambda d: d[1] - d[2])
+    print(f"        NOT MONOTONE in {what}: {len(drops)} of "
+          f"{len(ps) - 1} steps fall, worst {worst[1]:.4f} -> "
+          f"{worst[2]:.4f} at bin {worst[0]}")
+    return False
+
+
+def m_calibration(root, n, rng, extents_tol=None):
+    """B4: does the classifier's confidence mean anything?
+
+    `Prediction.margin` is offered to callers as a rejection signal --
+    its docstring says so -- and `distance` is the raw top-1 score.
+    Neither has ever been checked against whether the answer was
+    actually right. This bins each score and reports the EMPIRICAL
+    P(correct) per bin, which is the only thing that makes a
+    threshold meaningful.
+
+    Both scores are reported for every channel set, because the sum
+    is MIXED-UNIT: `Channels` weights a bitmap Hamming fraction, a
+    signature edit distance and an extents ratio into one float.
+    Adding quantities with different units gives a number that
+    orders, and an ordering is not a scale -- so the question is
+    whether more of it really is better, per channel set, measured.
+    """
+    templates, queries = maths_corpus(n, rng)
+    if templates is None:
+        return
+    if not queries:
+        print("  nothing rendered; is ghostscript on PATH?")
+        return
+    labels = {t.label for t in templates}
+    print(f"  {len(templates)} templates, {len(queries)} queries, "
+          f"{len(labels)} CLASSES (chance = {1/len(labels):.3%})")
+    for name, ch in (("bitmap only", Channels(1.0, 0.0, 0.0)),
+                     ("extents only", Channels(0.0, 0.0, 1.0)),
+                     ("signature only", Channels(0.0, 1.0, 0.0)),
+                     ("all channels", Channels(1.0, 1.0, 1.0))):
+        clf = Classifier(channels=ch)
+        for t in templates:
+            clf.add(t)
+        margins, dists, correct = [], [], []
+        for q in queries:
+            pred = clf.classify(q)
+            margins.append(pred.margin)
+            dists.append(pred.distance)
+            correct.append(1 if pred.label == q.label else 0)
+        acc = sum(correct) / len(correct)
+        n_inf = sum(1 for m in margins if m == float("inf"))
+        print(f"    {name:15} accuracy {acc:7.2%}   "
+              f"margin inf (single candidate) {n_inf}")
+        mrows = _calibration_rows(margins, correct)
+        _print_calibration("P(correct) by MARGIN "
+                           "(bigger = more confident)", mrows)
+        _monotone_report(mrows, "margin")
+        drows = _calibration_rows(dists, correct)
+        _print_calibration("P(correct) by TOP-1 DISTANCE "
+                           "(smaller = more confident)", drows)
+        # distance runs the other way, so monotonicity is checked on
+        # the reversed bins -- a well-behaved score should have
+        # P(correct) FALLING as distance grows.
+        _monotone_report(list(reversed(drows)), "decreasing distance")
+
+
+def m_maths(root, n, rng, doc=None, extents_tol=None, candidates=0,
+            candidate_families=0):
+    """**The measurement this whole chain was built for.**
+
+    Every accuracy figure in this repository is body text. U13's class
+    filter (>=12 instances) excluded every maths symbol and the only
+    non-ASCII survivors were the quotes and the fi ligature. So maths
+    classification has never been measured, and two units are partial on
+    it.
+
+    PROTOCOL: templates rendered from the FONT by
+    `type1 -> charstring -> scan`; queries rendered from the same font by
+    GHOSTSCRIPT. That is the real deployment shape -- a template comes
+    from the document's own font and a query comes from the page -- and
+    `measure.py rasterisers` established what the two paths do differ
+    by: an 18.8% ink bias at body-text size and 15 bits in 1024.
+
+    POPULATION: every glyph of the TeX maths families, so the class
+    count is in the hundreds rather than U13's 23. **State the class
+    count beside the accuracy** -- a 300-class problem and a 23-class
+    problem are not comparable, and chance alone differs by an order of
+    magnitude.
+
+    WHAT THIS DOES NOT TEST: the same font is on both sides, so this is
+    cross-RASTERISER, not cross-font. It also has no page noise, no
+    neighbouring ink and no baseline variation. It is the ceiling, and a
+    figure measured here is an upper bound on a real page.
+
+    THE RESIDUAL IS THE PRODUCT. A wrong answer that the signature
+    channel REJECTS is a detected error, which is what this project is
+    for; a wrong answer it accepts is the dangerous class. Both are
+    reported, never one accuracy.
+    """
+    templates, queries = maths_corpus(n, rng)
+    if templates is None:
+        return
     if not queries:
         print("  nothing rendered; is ghostscript on PATH?")
         return
@@ -3579,6 +3742,7 @@ MEASUREMENTS = {
     "edges": (m_edges, 8),
     "spacing": (m_spacing, 12),
     "maths": (m_maths, 0),
+    "calibration": (m_calibration, 0),
     "rasterisers": (m_rasterisers, 20),
     "white": (m_white, 8),
     "classify": (m_classify, 6),
@@ -3687,6 +3851,9 @@ def main():
         if name == "white":
             fn(root, args.n or default_n, random.Random(args.seed),
                min_len=args.min_len, doc=args.doc)
+        elif name == "calibration":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               extents_tol=args.extents_tol)
         elif name == "maths":
             fn(root, args.n or default_n, random.Random(args.seed),
                extents_tol=args.extents_tol, candidates=args.candidates,

@@ -1,0 +1,101 @@
+
+=== calibration ===================================================
+# argv: measure.py calibration --candidate-families 0 --candidates 0 --corpus /home/wkolbe/pdfdrill-library --doc None --extents-tol None --fill-max 0.1 --first-page 0 --hole-measure bbox --iou 0.5 --merge-tol 0 --min-block 200 --min-len 60 --n None --ocr-dir None --quantise 0 --seed 20260807 --split document --truth-tex None
+  cmmi10     128 glyphs
+  cmsy10     128 glyphs
+  cmex10     140 glyphs
+  msam10     128 glyphs
+  msbm10     123 glyphs
+  647 templates, 647 queries, 647 CLASSES (chance = 0.155%)
+    bitmap only     accuracy  79.44%   margin inf (single candidate) 0
+      P(correct) by MARGIN (bigger = more confident)
+            bin lo     bin hi      n  correct  P(correct)
+            0.0000     0.0000     64       11      0.1719
+            1.0000     2.0000     66       25      0.3788
+            3.0000     6.0000     90       67      0.7444
+            7.0000     8.0000     39       38      0.9744
+            9.0000    12.0000     83       81      0.9759
+           13.0000    15.0000     55       55      1.0000
+           16.0000    19.0000     60       60      1.0000
+           20.0000    23.0000     68       66      0.9706
+           24.0000    28.0000     65       64      0.9846
+           29.0000    39.0000     57       47      0.8246
+        NOT MONOTONE in margin: 2 of 9 steps fall, worst 0.9846 -> 0.8246 at bin 9
+      P(correct) by TOP-1 DISTANCE (smaller = more confident)
+            bin lo     bin hi      n  correct  P(correct)
+            0.0000     2.0000     83       41      0.4940
+            3.0000     4.0000     66       46      0.6970
+            5.0000     6.0000     76       64      0.8421
+            7.0000     7.0000     42       33      0.7857
+            8.0000     9.0000     74       62      0.8378
+           10.0000    11.0000     57       51      0.8947
+           12.0000    12.0000     56       40      0.7143
+           13.0000    15.0000     79       76      0.9620
+           16.0000    19.0000     60       56      0.9333
+           20.0000    35.0000     54       45      0.8333
+        NOT MONOTONE in decreasing distance: 5 of 9 steps fall, worst 0.9620 -> 0.7143 at bin 3
+    extents only    accuracy  34.47%   margin inf (single candidate) 0
+      P(correct) by MARGIN (bigger = more confident)
+            bin lo     bin hi      n  correct  P(correct)
+            0.0000     0.0001     64       15      0.2344
+            0.0001     0.0004     66       18      0.2727
+            0.0004     0.0014     74       19      0.2568
+            0.0014     0.0025     54       17      0.3148
+            0.0027     0.0066     66       21      0.3182
+            0.0066     0.0119     65       16      0.2462
+            0.0123     0.0237     63       24      0.3810
+            0.0237     0.0555     65       21      0.3231
+            0.0555     0.1218     65       28      0.4308
+            0.1236     2.5754     65       44      0.6769
+        NOT MONOTONE in margin: 3 of 9 steps fall, worst 0.3182 -> 0.2462 at bin 5
+      P(correct) by TOP-1 DISTANCE (smaller = more confident)
+            bin lo     bin hi      n  correct  P(correct)
+            0.0022     0.0505     64        1      0.0156
+            0.0513     0.0729     65       24      0.3692
+            0.0731     0.0840     65       26      0.4000
+            0.0842     0.1001     64       21      0.3281
+            0.1001     0.1133     65       26      0.4000
+            0.1136     0.1300     65       29      0.4462
+            0.1301     0.1494     64       19      0.2969
+            0.1501     0.1835     65       19      0.2923
+            0.1836     0.2668     65       34      0.5231
+            0.2669    11.6402     65       24      0.3692
+        NOT MONOTONE in decreasing distance: 5 of 9 steps fall, worst 0.3692 -> 0.0156 at bin 9
+    signature only  accuracy  10.66%   margin inf (single candidate) 0
+      P(correct) by MARGIN (bigger = more confident)
+            bin lo     bin hi      n  correct  P(correct)
+            0.0000     0.0000    608       36      0.0592
+            1.0000     3.0000     39       33      0.8462
+        MONOTONE non-decreasing in margin across 2 bins
+      P(correct) by TOP-1 DISTANCE (smaller = more confident)
+            bin lo     bin hi      n  correct  P(correct)
+            0.0000     0.0000    630       66      0.1048
+            1.0000     9.0000     17        3      0.1765
+        NOT MONOTONE in decreasing distance: 1 of 1 steps fall, worst 0.1765 -> 0.1048 at bin 1
+    all channels    accuracy  88.10%   margin inf (single candidate) 0
+      P(correct) by MARGIN (bigger = more confident)
+            bin lo     bin hi      n  correct  P(correct)
+            0.0145     1.0005     64       34      0.5312
+            1.0073     3.7793     65       46      0.7077
+            3.8791     8.0806     65       52      0.8000
+            8.4878    12.0406     64       62      0.9688
+           12.0419    15.7879     65       65      1.0000
+           15.9978    19.0002     65       65      1.0000
+           19.0011    22.7645     64       62      0.9688
+           22.7944    26.8599     65       65      1.0000
+           26.9332    32.0022     65       55      0.8462
+           32.0662    51.9555     65       64      0.9846
+        NOT MONOTONE in margin: 2 of 9 steps fall, worst 1.0000 -> 0.8462 at bin 8
+      P(correct) by TOP-1 DISTANCE (smaller = more confident)
+            bin lo     bin hi      n  correct  P(correct)
+            0.0607     3.0994     64       54      0.8438
+            3.0995     5.0705     65       52      0.8000
+            5.0711     6.1155     65       52      0.8000
+            6.1210     8.1133     64       55      0.8594
+            8.1136     9.4108     65       52      0.8000
+            9.5052    12.0833     65       60      0.9231
+           12.0866    13.1372     64       62      0.9688
+           13.1483    15.1760     65       63      0.9692
+           15.1986    19.2598     65       64      0.9846
+           20.0578    49.1621     65       56      0.8615
+        NOT MONOTONE in decreasing distance: 5 of 9 steps fall, worst 0.9231 -> 0.8000 at bin 5
