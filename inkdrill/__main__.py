@@ -61,6 +61,10 @@ def _table_cells(mask, tol, debug=None):
             best, holes = r, hs
     if best is None or len(holes) < 2:
         return None
+    if debug is not None:
+        # the table region's own height, so a caller can ask what
+        # fraction of it the detected rows actually cover
+        debug["span"] = best.y1 - best.y0 + 1
     boxes = [(n.regions[h].x0, n.regions[h].y0,
               n.regions[h].x1 + 1, n.regions[h].y1 + 1) for h in holes]
     grid = cell_grid(boxes, tol=tol)
@@ -580,8 +584,13 @@ def cmd_compare(argv) -> int:
     masks = {"A": load(args.a), "B": load(args.b)}
     dbg = {k: {} for k in masks} if args.table_debug else \
         {k: None for k in masks}
-    cells = {k: _table_cells(m, args.tol, debug=dbg[k])
-             for k, m in masks.items()}
+    _table_span = {}
+    cells = {}
+    for k, m in masks.items():
+        if dbg[k] is None:
+            dbg[k] = {}
+        cells[k] = _table_cells(m, args.tol, debug=dbg[k])
+        _table_span[k] = dbg[k].get("span", 0)
     for k, c in cells.items():
         # `_table_cells` has TWO empty answers and they mean different
         # things: None is "no ink region has >= 2 holes, so there is no
@@ -633,6 +642,39 @@ def cmd_compare(argv) -> int:
     # was 0,0,0,0,0 and whose `A=B` said NO for every row: a
     # confident, complete-looking, meaningless answer. A crash is a
     # better failure than that, and a named refusal is better still.
+    # ROW COVERAGE: the detected rows' heights against the table
+    # region's own height. A row whose content touches the rules on
+    # both sides stops being an enclosed hole and is not detected at
+    # all -- 0902.0431 p13 and p19 are a single oversized aligned
+    # block beside a 113 mm crop, and the lattice finds ONLY the 49 px
+    # header, covering 1.5% of a 3,296 px table.
+    #
+    # That is worse than a crash and worse than a false clean: a row
+    # missing MID-SEQUENCE does not truncate the pairing, it SHIFTS
+    # it, so every row after it is attached to the following equation
+    # and nothing downstream can see it. It shipped, and a peer's
+    # audit misattributed the displacement to a different defect of
+    # mine before measurement separated them.
+    #
+    # The floor is a separation, not a tuned constant: over 50 corpus
+    # pages the minimum coverage is 0.891 and the median 0.986,
+    # against 0.015 on the failing page. Two orders of magnitude, so
+    # any value in the gap is safe and the strictest is free.
+    for k, c in cells.items():
+        nr = nrows[k]
+        got = sum(c[(r, 0)][3] - c[(r, 0)][1] for r in range(nr)
+                  if (r, 0) in c)
+        span = _table_span[k]
+        cov = got / span if span else 0.0
+        print(f"{k}: lattice {nr} rows x {ncols[k]} cols, row coverage "
+              f"{cov:.3f} of the table region", file=sys.stderr)
+        if cov < 0.5:
+            print(f"{k}: row coverage {cov:.3f} -- the detected rows "
+                  f"cover less than half the table region, so rows are "
+                  f"MISSING. A missing row shifts every row after it "
+                  f"onto the wrong equation, which no downstream check "
+                  f"can see. Nothing was compared.", file=sys.stderr)
+            return 1
     for k, nc in ncols.items():
         if nc < 2:
             print(f"{k}: lattice has {nc} column(s); compare needs at "

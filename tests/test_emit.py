@@ -1958,3 +1958,90 @@ class T1_17_BothCellsEmptyIsNotClean(unittest.TestCase):
         rows, err = self._rows(self._page(last_row_empty=False))
         self.assertEqual([r[-1] for r in rows], ["", "", ""])
         self.assertNotIn("NO INK", err)
+
+
+class T1_18_RowCoverageCatchesAMissingRow(unittest.TestCase):
+    """A row whose content touches the rules on both sides stops being
+    an enclosed hole and is not detected at all.
+
+    Reported by pdfdrill-github-io-a2 from 0902.0431 pages 13 and 19 --
+    a single oversized aligned block beside a 113 mm crop, where the
+    lattice finds ONLY the 49 px header and covers 1.5% of a 3,296 px
+    table region. It is not a height threshold, which was the offered
+    hypothesis: it is ENCLOSURE. The cell background escapes to the
+    outside region, so there is no hole to cluster into a row.
+
+    Worse than a crash and worse than a false clean: a row missing
+    MID-SEQUENCE does not truncate the pairing, it SHIFTS it, so every
+    row after lands on the following equation. It shipped, and an
+    audit misattributed the displacement to a different defect before
+    measurement separated them.
+
+    THE FLOOR IS A SEPARATION, NOT A TUNED CONSTANT. Over 50 corpus
+    pages the minimum coverage is 0.891 and the median 0.986, against
+    0.015 on the failing page -- two orders of magnitude, so any value
+    in the gap is safe and 0.5 is free.
+
+    Both sides asserted: a fully-detected lattice must still pass.
+    """
+
+    @staticmethod
+    def _page(*, bridge):
+        """A 3-row grid. With `bridge`, the middle row's content spans
+        rule to rule, so its background is not enclosed and the row
+        cannot be found. Row heights are the measured ones: 0902.0431
+        at 300 dpi has a 49 px header and body rows of 400-1,400 px,
+        scaled down here by 10."""
+        from tests.test_pngio import build_png
+        cw, t = 140, 4
+        heights = [49, 140, 49]
+        W = 3 * cw + t
+        H = sum(heights) + t
+        g = [[(255, 255, 255)] * W for _ in range(H)]
+
+        def box(x0, y0, x1, y1):
+            for y in range(max(0, y0), min(H, y1)):
+                for x in range(max(0, x0), min(W, x1)):
+                    g[y][x] = (0, 0, 0)
+        for i in range(4):
+            box(i * cw, 0, i * cw + t, H)
+        y, tops = 0, []
+        for h in heights:
+            box(0, y, W, y + t)
+            tops.append(y)
+            y += h
+        box(0, y, W, y + t)
+        for r, y0 in enumerate(tops):
+            for cidx in range(3):
+                box(cidx * cw + 30, y0 + 12, cidx * cw + 50, y0 + 32)
+        if bridge:
+            # the middle row's ink reaches BOTH horizontal rules, so
+            # its background joins the outside and stops being a hole
+            mid = tops[1]
+            for cidx in range(3):
+                box(cidx * cw + t, mid, cidx * cw + cw, mid + heights[1] + t)
+        return build_png(g)
+
+    def _run(self, png_bytes):
+        import io, tempfile, pathlib as pl
+        from contextlib import redirect_stdout, redirect_stderr
+        from inkdrill.__main__ import main
+        tmp = pl.Path(tempfile.mkdtemp())
+        (tmp / "A.png").write_bytes(png_bytes)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = main(["compare", str(tmp / "A.png"), str(tmp / "A.png"),
+                       "--threshold", "128", "--tol", "6"])
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_a_fully_detected_lattice_passes_and_reports_its_shape(self):
+        rc, out, err = self._run(self._page(bridge=False))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("row coverage", err)
+        self.assertIn("rows x 3 cols", err)
+
+    def test_a_row_that_cannot_be_enclosed_is_refused(self):
+        rc, out, err = self._run(self._page(bridge=True))
+        self.assertEqual(rc, 1)
+        self.assertIn("rows are MISSING", err)
+        self.assertNotIn("| page | line |", out)

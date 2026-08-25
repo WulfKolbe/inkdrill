@@ -165,6 +165,27 @@ measurement; a fresh pass is ~2 hours.
   dot into its stem. Count claims survive this; identity claims do
   not, so say which one you are making.
 
+## Two sessions consume this project's output format
+
+Recorded here because neither side wrote it down and each assumed the
+other held it. Nothing is frozen — a QC instrument that cannot change
+its classes is worse than one that breaks consumers who fail loudly —
+but a rename is now a DELIBERATE act with a known blast radius.
+
+| consumer | reads | fails how |
+|---|---|---|
+| pdfdrill-7b's refine metric | `ink.components`, `ink.holes` from `emit`'s lines.json | asserts on key PRESENCE, not value: `"holes": 0` is a hole-free page, a missing key raises `InkUnavailable` naming the field |
+| pdfdrill.github.io deploy gate | `rows` and each row's `flag` from `report.ink.json` | a sixth flag value fails the deploy by name, telling whoever sees it the legend needs updating in the same commit |
+
+The flag vocabulary they depend on is `tools/findings.py`'s `FLAGS`,
+exactly five: **component, weak, stable, noise, clean**. That tuple
+is the published legend of a website. Adding a class is allowed and
+breaks the deploy loudly; it must not be added silently.
+
+Key presence over key value is the distinction worth keeping: a
+genuinely hole-free page and a renamed field are the same number and
+different keys, and only the second is a defect.
+
 ## Coordination
 
 pdfdrill runs in `~/MX/PDFDRILL` as a peer session, owns the reports
