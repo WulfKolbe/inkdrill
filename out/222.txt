@@ -1,0 +1,151 @@
+222 - corpus sweep: ring labels against ring topology
+========================================================================
+
+ANSWER:
+
+    unslashed-ring labels whose ink has holes 2 / chi -1     1
+    slashed-ring labels whose ink has holes 1 / chi  0       0
+
+The one is EQ0133 of Voloshin's Introduction to Graph and Hypergraph
+Theory -- the case 218 found by hand. Sweeping 1,101 documents turned
+up no second instance and no inverse instance at all.
+
+AND THE SWEEP CORRECTS 218. See section 4: a blackboard-bold
+`\mathbb{O}` is NOT a one-hole ring, so hole count alone does not
+separate it from `\emptyset`. 218's separation was sound on the pair
+it measured and its general statement was too strong.
+
+--------------------------------------------------------------------
+1. POPULATION AND THE RULE THAT BUILT IT
+
+1,101 documents with both a `report.tex` and a `report-crops/`
+directory. Measured on MathPix's OWN crop of each equation, so no
+region mapping stands between a label and its ink.
+
+A row enters the population only when a ring command is the LAST
+MATHS TOKEN of its LaTeX -- because that is the one case where
+POSITION SUPPLIES IDENTITY. 117 established that per-component
+correspondence between a render and a scan is not recoverable by
+position; the exception is an endpoint, where "the last symbol" and
+"the last glyph" name the same thing.
+
+    unslashed  \mathbb{O}, \mathrm{O}, O, \circ, \bigcirc     27 rows
+    slashed    \emptyset, \varnothing, \slashed{0}            18 rows
+
+ONE CORRECTION TO THAT RULE, MADE BEFORE THE COUNT. The first version
+stripped ANY trailing `\text{...}` when deciding what the last token
+was, so `\circ \text{ for all } x` read as ending in `\circ` -- final
+in the LaTeX and not in the ink, leaving the rightmost component a
+letter. Trailing text is now stripped only when it contains nothing
+but punctuation and space. That moved 5 rows into the population and
+took the consistent-unslashed count from 13 to 19.
+
+--------------------------------------------------------------------
+2. FINDING THE GLYPH: A SHAPE TEST, NOT A PUNCTUATION HEURISTIC
+
+The measured glyph is the rightmost component that HAS AT LEAST ONE
+HOLE and whose bbox aspect lies between 0.4 and 1.5. The label names
+a ring, so the search is for a ring.
+
+Two punctuation heuristics were tried first and both are recorded
+because the way they failed is the point. Skip components shorter
+than half the row MEDIAN: a 4x11 comma cleared that on crops full of
+subscripts, and five rows were measured on the comma. Skip components
+shorter than 0.35 of the TALLEST: that skipped the `\emptyset` itself
+on crops carrying a tall delimiter, and two slashed rows went to
+zero holes.
+
+Each fixed one class and broke the other, and choosing between them
+by which answer looked better is tuning a threshold to the result.
+The shape test needs no height threshold at all: a comma has no
+hole, a delimiter is not ring-shaped.
+
+--------------------------------------------------------------------
+3. THE COUNTS
+
+    UNSLASHED-RING LABELS                                27
+      holes 1, chi  0   consistent                       22
+      holes 2, chi -1   CONTRADICTION                     1
+      holes 3, 4, 4, 6  see section 4                     4
+
+    SLASHED-RING LABELS                                  18
+      holes 2, chi -1   consistent                       18
+      holes 1, chi  0   INVERSE CONTRADICTION             0
+
+    no ring-shaped component found (excluded, named)      0
+
+THE CONTRADICTION:
+
+    Introduction to Graph and Hypergraph Theory (Voloshin)
+    EQ0133   label \mathbb{O}   ink 20 x 32, holes 2, chi -1
+
+Identical in size and shape to EQ0124's `\emptyset` in the same
+document, which 218 shows side by side.
+
+--------------------------------------------------------------------
+4. THE CORRECTION TO 218
+
+Four `\mathbb{O}` rows measured 3, 4, 4 and 6 holes. They are not
+errors and not contradictions -- a blackboard-bold O is DOUBLE
+STRUCK, an outer ring and an inner ring joined by doubling strokes,
+and those strokes enclose extra regions. Rendered from 2306.13098
+EQ0005, 26 x 26 px:
+
+    ............###...........
+    ........###########.......
+    ......#####....#####......
+    ....#####.......######....
+    ...###.##........##.###...
+    ..###.##..........#..##...
+    ..##..##..........##..##..
+    .##...#...........##...##.
+    .#...##............##...#.
+    ##...##............##...##
+    .#....#............##..##.
+    .##...##..........##...##.
+    ..##..##..........##.##...
+    ...###.##........##.###...
+    ....#####........#####....
+    .....######....######.....
+    .......############.......
+    ..........######..........
+
+Nested rings, no diagonal. So:
+
+  218 SAID: an O is holes 1 / chi 0, a slashed zero is holes 2 /
+      chi -1, and the classes differ by an integer.
+  TRUE FOR a plain `O` and `\circ`: all 22 measured at holes 1.
+  FALSE FOR `\mathbb{O}`: measured at 3, 4, 4 and 6, and a
+      double-struck ring could in principle reach exactly 2.
+
+Hole count alone therefore does NOT separate `\mathbb{O}` from
+`\emptyset`. 218's conclusion on its own pair still holds, because
+that rested on the SHAPE as well -- EQ0133's glyph is a single ring
+with one diagonal, pixel-identical to EQ0124's, and nothing like the
+nested rings above. But the general claim was too strong and this
+sweep is what caught it: the corpus contained the counterexample and
+the pair did not.
+
+The narrower true statement: a single ring with a rim-to-rim stroke
+has one more hole than the same ring without it. That is still an
+identity. It just does not license reading a hole count without
+knowing how many rings are in the glyph.
+
+--------------------------------------------------------------------
+5. WHAT THIS DOES NOT SAY
+
+- NOT that MathPix substitutes ring commands once per corpus. The
+  population is only rows where the ring command is FINAL -- 45 of
+  many thousands of equations. A substitution mid-expression is
+  invisible here, and that is most of them.
+- NOT that the 22 consistent unslashed rows are right. Holes 1 is
+  consistent with `O`; it is equally consistent with `0`, `D`, `o`
+  and any other single-ring glyph. Consistency is not confirmation.
+- NOT an error rate. One contradiction in 45 rows is a count, and 45
+  rows selected by an endpoint rule are not a sample of anything.
+
+--------------------------------------------------------------------
+6. RE-RUN
+
+  python3 tools/ringscan.py cand.tsv        # 1,101 documents -> rows
+  python3 tools/ringmeasure.py cand.tsv res.tsv
