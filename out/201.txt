@@ -1,0 +1,137 @@
+201 - the component split: bracket versus rule crossing
+========================================================================
+
+ANSWER, on the two equations 196 and 200 measured:
+
+    equation        vertical    horizontal   brackets wrongly split
+    EQ0192            3 / 3        3 / 3          0 / 6
+    EQ1059 (yellow)   1 / 1        1 / 1          0 / 2
+
+Every fused crossing splits into its constituent rules. No delimiter
+is split. `ink.rules[]` reports 0 on both, unchanged -- the split is a
+new function, not a change to `is_rule`.
+
+--------------------------------------------------------------------
+1. THE DISCRIMINATOR, AS MEASURED IN 200
+
+Both a crossing and a bracket are tall components with a full-height
+vertical band, so the vertical band alone cannot separate them. The
+horizontal bands do:
+
+    delimiter   full-width bands at BOTH ENDS of the stem
+                measured normalised positions 0.005 and 0.985
+    crossing    ONE band, interior
+                measured 0.50 (the three 2x2 arrays) and 0.743 (4x4)
+
+`end = 0.1` sits in a gap two orders of magnitude wide. It is a
+separation, not a tuned constant.
+
+--------------------------------------------------------------------
+2. TWO MORE GUARDS WERE NEEDED, AND BOTH CAME FROM REAL INK
+
+The band-position test alone is not sufficient. Run on the real
+pages it produced FALSE POSITIVES immediately, and each needed a
+condition that is also measured rather than chosen:
+
+BAND THICKNESS. A SOLID block has every column full-height and every
+row full-width, so it presents exactly one vertical band and one
+horizontal band whose centre is at 0.5 -- arithmetically identical to
+a crossing. On EQ0192 that split ten components, including all three
+equals signs (28x3 px, fill 1.00) and five 4x4 dots.
+
+    measured band thickness / perpendicular extent
+      real crossings   3/548 = 0.005   and   3/202 = 0.015
+      a solid bar      1.000
+
+    `band = 0.25` sits in that gap.
+
+ARM ASPECT. A 5x5 dot with one 1 px column and one 1 px row passes
+every band test at a 5 px extent. Each piece the split emits must
+itself be rule-shaped.
+
+    measured arm aspect
+      real crossings   27, 34, 34, 67, 183
+      false positives  5
+
+    `min_aspect = 10` sits in that gap. It is BELOW `is_rule`'s 20 on
+    purpose: a crossing's arm is bounded by the MATRIX, not by the
+    page, so a 2x2 array's rule is legitimately short.
+
+After both, EQ0192 splits exactly 3 components and EQ1059 exactly 1.
+
+--------------------------------------------------------------------
+3. WHAT SPLIT, AND INTO WHAT
+
+EQ0192, source page 81 -- three `{c|c}` arrays:
+
+      82 x 103  fill 0.065  at (117,10)   -> 1 vertical + 1 horizontal
+     103 x 103  fill 0.057  at (298,10)   -> 1 vertical + 1 horizontal
+      82 x 103  fill 0.065  at (453,10)   -> 1 vertical + 1 horizontal
+
+EQ1059, source page 346 -- one `{lll|l}` array with a fourth-row rule:
+
+     548 x 202  fill 0.020  at (140,11)   -> 1 vertical + 1 horizontal
+
+Six rules on EQ0192 and two on EQ1059: eight in total, against eight
+in the LaTeX, and `ink.rules[]` finds none of them.
+
+BRACKETS REFUSED: 6 on EQ0192 (three arrays x two delimiters) and 2
+on EQ1059. Zero wrongly split in either.
+
+--------------------------------------------------------------------
+4. A MUTATION SWEEP FOUND THE TESTS ONE LEVEL TOO SHALLOW
+
+Worth recording because the fixtures LOOKED thorough. The first
+sweep over the seven guards reported SIX SURVIVORS. None was dead
+code. Every one was redundant ON MY FIXTURES: a solid 28x3 bar is
+refused by the vertical band-thickness test AND the horizontal one,
+so deleting either changes nothing and both read as unkilled.
+
+The fix was a fixture per guard, each refused by exactly one:
+
+    vertical band too thick      40 x 400, 20 px stem
+    horizontal band too thick   400 x  40, 20 px bar
+    vertical arm too short      400 x  20, aspect 6.7
+    horizontal arm too short     20 x 400
+    bands at both ends          the bracket, 40 px wide
+    two vertical bands          an H -- one crossbar, two stems
+
+Second sweep: all seven killed.
+
+The bracket fixture had to be WIDENED from 20 px to 40 to make the
+end-position guard the thing under test. At 20 px its serifs are too
+short to be rules, so the arm-aspect guard refuses it first, and a
+fixture that two guards both reject cannot show which one works.
+
+The H is the case the single-vertical-band guard exists for: one
+crossbar between two stems cannot be attributed to either, so the
+component is refused rather than split on whichever stem comes
+first. Without that guard it emits a confident wrong answer.
+
+--------------------------------------------------------------------
+5. NOT DONE
+
+`crossing_rules` is NOT wired into `free_rules` or `ink.rules[]`.
+Wiring it changes what a published key contains, and two sessions
+consume this project's output -- pdfdrill-7b reads `ink.components`
+and `ink.holes`, and the github.io deploy gate reads `rows` and each
+row's `flag`. Adding rules to `ink.rules[]` is a change to the
+instrument's answer, not to its plumbing, and it needs the premise
+measurement 196 and 200 both flagged: how often a crossing occurs
+across the corpus, and what else on a page has a full-span band in
+one axis. Two pages is enough to build the discriminator and not
+enough to turn it on.
+
+--------------------------------------------------------------------
+6. POPULATION
+
+Two equations, one document, measured against the report's own LaTeX
+as ground truth. 44 ink regions in one bbox and 97 in the other, both
+checkable by hand. Eight rules expected, eight recovered, eight
+delimiters refused. No rate is quoted and none should be read from
+this.
+
+RE-RUN:  the two crops named in out/196.txt and out/200.txt, then
+         `emit.crossing_rules(mask, region)` per ink region.
+TESTS:   tests.test_emit.T1_19_CrossingRulesSplit -- eight tests, all
+         seven guards mutated to a failure.

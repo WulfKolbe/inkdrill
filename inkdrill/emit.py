@@ -1083,6 +1083,119 @@ def free_rules(mask, *, pt: float, regions=None) -> list[dict]:
     return sorted(out, key=lambda d: (d["y0"], d["x0"]))
 
 
+def _full_bands(counts, total, span):
+    """Contiguous runs of lines whose ink reaches `span` x `total`.
+
+    Returns [(lo, hi)] in index space, inclusive.
+    """
+    need = span * total
+    out, run = [], None
+    for i, c in enumerate(counts):
+        if c >= need:
+            run = (run[0], i) if run else (i, i)
+        elif run:
+            out.append(run)
+            run = None
+    if run:
+        out.append(run)
+    return out
+
+
+def crossing_rules(mask, region, *, span: float = 0.9,
+                   end: float = 0.1, band: float = 0.25,
+                   min_aspect: float = 10.0) -> list:
+    """Split one component into the rules it fuses, or refuse.
+
+    A `{c|c}` array's column rule and its horizontal rule
+    INTERSECT, so
+    8-connectivity merges them into a single component -- a cross,
+    fill about 0.02-0.06, aspect near 1. `is_rule` refuses it on both
+    counts and `ink.rules[]` reports neither rule. Measured on
+    Mielke's report: three 2x2 arrays (196) and one 4x4 (200), six
+    rules in all, none of them found.
+
+    THE DISCRIMINATOR IS MEASURED, and it is what separates a rule
+    crossing from a BRACKET -- both are tall, thin-inked components
+    with a full-height vertical band, so the vertical band alone
+    cannot tell them apart:
+
+      a DELIMITER has full-width horizontal bands at BOTH ENDS of
+      its stem -- a stem with two serifs. Measured: bands at
+      y-offsets 0-2 and 197 of 200, i.e. 0.005 and 0.985 normalised.
+      a CROSSING has ONE, in the middle. Measured: 0.50 on the 2x2
+      arrays, 0.743 on the 4x4.
+
+    The separation is two orders of magnitude wide in normalised
+    position -- 0.005/0.985 against 0.50/0.74 -- so `end` at 0.1 is
+    free rather than tuned. `span` is likewise not delicate: every
+    measured band reached 100% of its axis, not 90%.
+
+    Returns a list of rule records, one per constituent rule, or an
+    EMPTY LIST when the component is not a crossing. Refusing is the
+    common case and must stay cheap: this is called on every low-fill
+    component on a page.
+    """
+    x0, y0, x1, y1 = region.x0, region.y0, region.x1, region.y1
+    w, h = x1 - x0 + 1, y1 - y0 + 1
+    if w < 3 or h < 3:
+        return []
+    data, W = mask.data, mask.width
+    cols = [sum(1 for y in range(y0, y1 + 1) if data[y * W + x])
+            for x in range(x0, x1 + 1)]
+    rows_ = [sum(1 for x in range(x0, x1 + 1) if data[y * W + x])
+             for y in range(y0, y1 + 1)]
+    vb = _full_bands(cols, h, span)
+    hb = _full_bands(rows_, w, span)
+    if len(vb) != 1 or not hb:
+        return []
+    # A RULE IS THIN. Without this, any SOLID blob qualifies: every
+    # column of a 28x3 bar is full-height and every row full-width, so
+    # it presents exactly one vertical band and one horizontal band
+    # whose centre sits at 0.5 -- arithmetically identical to a
+    # crossing. Ten such components split on the first run, including
+    # three equals signs and five 4x4 dots.
+    #
+    # Measured band thickness as a fraction of the perpendicular
+    # extent: the real crossings are 3/548 = 0.005 and 3/202 = 0.015;
+    # a solid bar is 1.000. Two orders of magnitude, so 0.25 is free.
+    if (vb[0][1] - vb[0][0] + 1) > band * w:
+        return []
+    hb = [b for b in hb if (b[1] - b[0] + 1) <= band * h]
+    if not hb:
+        return []
+    # a band whose CENTRE sits within `end` of either extreme is a
+    # serif, not a rule: that is the bracket's signature.
+    def interior(b):
+        c = (b[0] + b[1]) / 2.0 / max(1, h - 1)
+        return end < c < 1.0 - end
+    inner = [b for b in hb if interior(b)]   # [] means a delimiter
+    # EVERY PIECE THE SPLIT EMITS MUST ITSELF BE RULE-SHAPED. Without
+    # this a 5x5 dot with one 1 px column and one 1 px row satisfies
+    # every band condition -- it has a full-height vertical band, a
+    # full-width horizontal band, and the band is thin relative to a
+    # 5 px extent. Measured aspects of the real crossings' arms: 27,
+    # 34, 34, 67 and 183. The false positives sit at 5.
+    #
+    # The floor is 10 rather than `is_rule`'s 20 because a crossing's
+    # arm is bounded by the MATRIX, not by the page: a 2x2 array's
+    # rule is legitimately short. 10 is below every measured real arm
+    # and above every measured false one.
+    vt = vb[0][1] - vb[0][0] + 1
+    if h < min_aspect * vt:
+        return []
+    inner = [b for b in inner if w >= min_aspect * (b[1] - b[0] + 1)]
+    if not inner:
+        return []
+    out = [{"orientation": "vertical",
+            "x0": x0 + vb[0][0], "x1": x0 + vb[0][1],
+            "y0": y0, "y1": y1}]
+    for b in inner:
+        out.append({"orientation": "horizontal",
+                    "x0": x0, "x1": x1,
+                    "y0": y0 + b[0], "y1": y0 + b[1]})
+    return out
+
+
 def rule_context(mask, rule, *, pt: float, reach: float = 1.0) -> dict:
     """Ink above and below one rule, within `reach` x its own length.
 

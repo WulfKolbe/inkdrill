@@ -2045,3 +2045,204 @@ class T1_18_RowCoverageCatchesAMissingRow(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("rows are MISSING", err)
         self.assertNotIn("| page | line |", out)
+
+
+class T1_19_CrossingRulesSplit(unittest.TestCase):
+    """201: split a fused rule crossing into its two rules, and refuse
+    a delimiter.
+
+    A `{c|c}` array's column rule and its horizontal rule intersect,
+    so 8-connectivity merges them into one component -- fill 0.02 to
+    0.07, aspect near 1 -- and `is_rule` refuses it on both counts.
+    196 and 200 measured six such rules in one document, none found.
+
+    THE DISCRIMINATOR IS MEASURED. Both a crossing and a BRACKET are
+    tall components with a full-height vertical band, so the vertical
+    band alone cannot separate them:
+
+        delimiter   full-width horizontal bands at BOTH ENDS of the
+                    stem -- measured at normalised 0.005 and 0.985
+        crossing    ONE, interior -- measured at 0.50 (2x2 arrays)
+                    and 0.743 (the 4x4)
+
+    Fixture dimensions are the measured ones: the real crossings are
+    82x103, 103x103 and 548x202 px with 3 px arms, and the brackets
+    19-20 x 200 px.
+
+    All three guards are asserted, because each closed a real false
+    positive found on real ink:
+
+      band thickness  a SOLID 28x3 bar has one full vertical band and
+                      one full horizontal band whose centre is at
+                      0.5 -- arithmetically identical to a crossing.
+                      Ten components split before this existed,
+                      including three equals signs.
+      arm aspect      a 5x5 dot with a 1 px column and a 1 px row
+                      satisfies every band test at a 5 px extent.
+      end position    the bracket itself.
+    """
+
+    @staticmethod
+    def _mask(kind, w=200, h=100, t=3):
+        from inkdrill.raster import InkMask
+        buf = bytearray(w * h)
+
+        def box(x0, y0, x1, y1):
+            for y in range(max(0, y0), min(h, y1)):
+                for x in range(max(0, x0), min(w, x1)):
+                    buf[y * w + x] = 0xFF
+        if kind == "cross":                      # rule crossing at 0.75
+            box(int(0.75 * w), 0, int(0.75 * w) + t, h)
+            box(0, int(0.75 * h), w, int(0.75 * h) + t)
+        elif kind == "cross_mid":
+            box(w // 2, 0, w // 2 + t, h)
+            box(0, h // 2, w, h // 2 + t)
+        elif kind == "bracket":                  # stem with two serifs
+            box(0, 0, t, h)
+            box(0, 0, w, t)
+            box(0, h - t, w, h)
+        elif kind == "solid":
+            box(0, 0, w, h)
+        elif kind == "stem":                     # a bare vertical rule
+            box(w // 2, 0, w // 2 + t, h)
+        return InkMask(bytes(buf), w, h)
+
+    def _split(self, kind, **kw):
+        from inkdrill.emit import crossing_rules
+        from inkdrill.nest import ink_only
+        m = self._mask(kind, **kw)
+        regs = list(ink_only(m).regions)
+        self.assertEqual(len(regs), 1, f"{kind} is not one component")
+        return crossing_rules(m, regs[0])
+
+    def test_a_crossing_splits_into_one_vertical_and_one_horizontal(self):
+        for kind in ("cross", "cross_mid"):
+            out = self._split(kind)
+            self.assertEqual(len(out), 2, kind)
+            self.assertEqual(sorted(o["orientation"] for o in out),
+                             ["horizontal", "vertical"], kind)
+
+    def test_the_split_puts_the_rules_where_the_grid_says(self):
+        """0.75 of the extent is the boundary after column 3 of 4 --
+        the measured position on the 4x4 was 0.752 and 0.743."""
+        out = self._split("cross", w=200, h=100)
+        v = next(o for o in out if o["orientation"] == "vertical")
+        hh = next(o for o in out if o["orientation"] == "horizontal")
+        self.assertAlmostEqual((v["x0"] + v["x1"]) / 2 / 199, 0.75,
+                               delta=0.02)
+        self.assertAlmostEqual((hh["y0"] + hh["y1"]) / 2 / 99, 0.75,
+                               delta=0.02)
+
+    def test_a_bracket_is_refused(self):
+        # 40 px wide, not 20: at 20 the serifs are too SHORT to be
+        # rules and the arm-aspect guard refuses it first, so the
+        # end-position guard would never be the thing under test. A
+        # fixture that two guards both reject cannot show which one
+        # works.
+        self.assertEqual(self._split("bracket", w=40, h=200, t=3), [])
+
+    def test_a_solid_block_is_refused(self):
+        """Every column full-height, every row full-width, single band
+        centred at 0.5. The band-thickness guard is the only thing
+        that separates it from a crossing."""
+        self.assertEqual(self._split("solid", w=28, h=3), [])
+        self.assertEqual(self._split("solid", w=60, h=60), [])
+
+    def test_a_tiny_dot_is_refused(self):
+        """5x5 with a 1 px arm passes every band test; the arm-aspect
+        floor is what refuses it."""
+        from inkdrill.emit import crossing_rules
+        from inkdrill.nest import ink_only
+        from inkdrill.raster import InkMask
+        w = h = 5
+        buf = bytearray(w * h)
+        for y in range(h):
+            buf[y * w + 2] = 0xFF
+        for x in range(w):
+            buf[2 * w + x] = 0xFF
+        m = InkMask(bytes(buf), w, h)
+        r = list(ink_only(m).regions)[0]
+        self.assertEqual(crossing_rules(m, r), [])
+
+    def test_a_bare_stem_with_no_crossbar_is_refused(self):
+        self.assertEqual(self._split("stem", w=40, h=200), [])
+
+    def test_the_guards_are_not_inert(self):
+        """Each guard relaxed in turn must admit what it was added to
+        refuse -- otherwise it could be deleted and nothing would
+        fail."""
+        from inkdrill.emit import crossing_rules
+        from inkdrill.nest import ink_only
+        solid = self._mask("solid", w=60, h=60)
+        rs = list(ink_only(solid).regions)[0]
+        self.assertEqual(crossing_rules(solid, rs), [])
+        self.assertTrue(crossing_rules(solid, rs, band=1.0,
+                                       min_aspect=1.0))
+        brk = self._mask("bracket", w=40, h=200, t=3)
+        rb = list(ink_only(brk).regions)[0]
+        self.assertEqual(crossing_rules(brk, rb), [])
+        self.assertTrue(crossing_rules(brk, rb, end=0.0))
+
+    def test_each_guard_is_isolated_by_a_fixture_only_it_refuses(self):
+        """A mutation sweep found six of seven guards surviving --
+        not because they are dead but because the earlier fixtures are
+        refused by TWO guards at once, so removing either changes
+        nothing. Each case below is refused by exactly one, so every
+        guard now has a fixture that fails when it alone is deleted.
+        """
+        from inkdrill.emit import crossing_rules
+        from inkdrill.nest import ink_only
+        from inkdrill.raster import InkMask
+
+        def cross(w, h, vt, ht):
+            """A crossing with independently chosen arm thicknesses."""
+            buf = bytearray(w * h)
+            vx = (w - vt) // 2
+            hy = (h - ht) // 2
+            for y in range(h):
+                for x in range(vx, vx + vt):
+                    buf[y * w + x] = 0xFF
+            for y in range(hy, hy + ht):
+                for x in range(w):
+                    buf[y * w + x] = 0xFF
+            m = InkMask(bytes(buf), w, h)
+            return m, list(ink_only(m).regions)[0]
+
+        # the vertical band is too THICK for its width: 20 of 40 px
+        m, r = cross(40, 400, 20, 3)
+        self.assertEqual(crossing_rules(m, r), [])
+        self.assertTrue(crossing_rules(m, r, band=1.0))
+
+        # the horizontal band is too THICK for its height: 20 of 40 px
+        m, r = cross(400, 40, 3, 20)
+        self.assertEqual(crossing_rules(m, r), [])
+        self.assertTrue(crossing_rules(m, r, band=1.0))
+
+        # the vertical ARM is too short to be a rule: 20 px over a
+        # 3 px stem is aspect 6.7
+        m, r = cross(400, 20, 3, 3)
+        self.assertEqual(crossing_rules(m, r), [])
+        self.assertTrue(crossing_rules(m, r, min_aspect=1.0))
+
+        # the horizontal ARM is too short: 20 px over a 3 px bar
+        m, r = cross(20, 400, 3, 3)
+        self.assertEqual(crossing_rules(m, r), [])
+        self.assertTrue(crossing_rules(m, r, min_aspect=1.0))
+
+        # TWO full-height vertical bands -- an H, or a `||` double
+        # rule. One crossbar cannot be attributed to one stem, so the
+        # component is refused rather than split on whichever stem
+        # happens to come first. Without the single-band guard this
+        # emits a confident wrong answer, which is why the guard is
+        # not merely defensive.
+        w, h, t = 200, 300, 3
+        buf = bytearray(w * h)
+        for y in range(h):
+            for x in list(range(20, 20 + t)) + list(range(160, 160 + t)):
+                buf[y * w + x] = 0xFF
+        for y in range(h // 2, h // 2 + t):
+            for x in range(20, 163):
+                buf[y * w + x] = 0xFF
+        m = InkMask(bytes(buf), w, h)
+        r = list(ink_only(m).regions)[0]
+        self.assertEqual(crossing_rules(m, r), [])
