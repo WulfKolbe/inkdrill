@@ -1,0 +1,191 @@
+225 - open-task audit: what has no result file and no commit
+========================================================================
+
+Reported before doing any of the work, as asked. Two of the six named
+should NOT be done as written, one is already done, and the reasons
+are below rather than the work.
+
+--------------------------------------------------------------------
+SUMMARY
+
+    task  file  commit   verdict
+    179    no    no      STANDS -- need the original wording
+    186    no    no      DO NOT DO AS WRITTEN -- 117 may have retired
+                         its framing; re-state first
+    191    no    no      STANDS, and is the right guard. Recommend it
+                         next.
+    201    YES   YES     ALREADY DONE -- out/201.txt, commit cda653b
+    214    no    no      BLOCKED on pdfdrill 215, and carries two
+                         conditions that must be stated with it
+    220    no    no      DO NOT DO AS WRITTEN -- premise unsettled and
+                         one clause measurably empty
+
+    also open, not in the list:
+    029    no    no      probably RETIRED, never confirmed
+    030    no    no      depends on 029
+    B5a    no    no      STANDS
+    B5b    no    no      STANDS
+    B6     no    no      STANDS -- its precondition is now met
+
+--------------------------------------------------------------------
+201 IS DONE, AND THE BELIEF THAT IT IS OPEN IS WRONG
+
+    out/201.txt          committed cda653b, pushed
+    tests                T1_19_CrossingRulesSplit, 8 tests, all seven
+                         guards mutated to a failure
+
+    equation          vertical   horizontal   brackets wrongly split
+    EQ0192              3 / 3       3 / 3           0 / 6
+    EQ1059              1 / 1       1 / 1           0 / 2
+
+`emit.crossing_rules` is the bracket-versus-cross discriminator 201
+asked for. It is NOT wired into `ink.rules[]`, deliberately and
+stated there: that changes what a published key contains and needs a
+corpus premise measurement first.
+
+--------------------------------------------------------------------
+220 -- DO NOT DO AS WRITTEN. THREE REASONS, ANY ONE SUFFICIENT
+
+The task gives the signature as "arrows and rules dominant, glyph
+density low, no delimiter pair".
+
+1 ONE CLAUSE IS SATISFIED BY 93% OF THE POPULATION. 203 measured
+  "no delimiter pair" on 1,979 of 2,135 equation regions across five
+  books. A clause that fires on 93% of everything carries almost no
+  information, and a three-clause signature resting on it is really a
+  two-clause one.
+
+2 "RULES DOMINANT" CANNOT BE MEASURED WITH THE CURRENT DETECTOR.
+  116 found `ink.rules[]` EMPTY on the Heim page -- 0 of 1,087
+  regions pass `is_rule`, with 205 solid bars sitting at aspect 10-20
+  against 3 at >= 20. 196 and 200 found 0 of 8 matrix rules, because
+  a crossing fuses into one component that is neither bar-shaped nor
+  thin-filled. So the channel this signature leans on reads zero on
+  exactly the material it is meant to discriminate. 201 built the
+  split that would fix half of it and it is not wired in.
+
+3 THE PREMISE IS UNSETTLED, and this is the user's own point. Whether
+  EQ0114 (TikZ), EQ1276 (division layout) and EQ0005/EQ0014
+  (annotated tables) are REGION-TYPE errors -- MathPix labelled a
+  figure as maths -- or READING errors -- it labelled the region
+  correctly and read the content wrong -- decides what the detector
+  is for. A region-type detector belongs upstream and its output is
+  "this is not an equation"; a reading detector belongs here and its
+  output is "this equation is wrong". They are not the same
+  instrument and the four named cases have not been separated.
+
+WHAT WOULD MAKE 220 DOABLE: settle (3) first, on the four named cases
+alone, and re-take (2) with `crossing_rules` in the loop. Then the
+signature can be written against a channel that can see its subject.
+
+--------------------------------------------------------------------
+186 -- DO NOT DO AS WRITTEN, RE-STATE IT FIRST
+
+186 asks to restate every gate using the floor of 7 against the
+measured render-vs-scan distribution, POOLED rather than one
+document.
+
+The floor of 7 is sound and I would not reopen it: 6 -> 23 -> 7, and
+the 23 came from a control group built on pdfdrill's SLT parser
+collapsing `\begin{aligned}` to a single UNRESOLVED node, so 45% of
+"content-identical" rows were nothing of the kind. 7 is the p95 over
+the 813 rows carrying no multi-line or array environment, split
+independently of their fix. That history is in `tools/findings.py`.
+
+WHAT MAKES THE TASK'S FRAMING SUSPECT is 117, measured after 186 was
+written. On the deficit-near-a-rule question the POOLED figure said
+17.2% against an 11.5% null -- enrichment -- and the same data
+compared PER ROW against each row's own density inverted it: below
+its own null on 80 rows of 110, sign test z = -4.84. Sixteen rows
+carrying 10% of the deficit and 60% of the near count produced the
+pooled number.
+
+"The pooled measurement, not one document" is exactly the instruction
+that produced that inversion. Pooling is the right answer to "one
+document dominates"; it is the wrong answer when the units differ in
+the denominator that matters. 186 and 191 are the two halves of this
+and 191 is the one that survives 117.
+
+RECOMMENDATION: do 191 first. If its with-and-without split shows the
+gates are stable, 186 reduces to a restatement and can be written
+from 191's output. If it does not, 186 as written would restate every
+gate on a number 117 has already shown can inverte.
+
+--------------------------------------------------------------------
+191 -- STANDS, AND IS THE RIGHT ONE TO DO NEXT
+
+Pooled distribution with a with-and-without split for any document
+supplying more than ~15% of rows.
+
+This is the guard 117 argues for and the guard my own corpus needs.
+0902.0431 supplied 320 of the 1,666 flagged rows in the 76-document
+cached set -- 19%, over the threshold -- and 1,213 rows of the
+library-wide compare output. Every corpus figure I have quoted from
+that set has a single document at a fifth of it and no
+with-and-without beside it.
+
+It is also cheap: the per-row results already exist in
+`results/overrun-*.tsv` and `results/compare-*.tsv`, so it is a
+recomputation, not a re-measurement.
+
+--------------------------------------------------------------------
+179 -- STANDS, BUT I DO NOT HOLD THE ORIGINAL WORDING
+
+"locate restricted to the parent line box". `locate` exists (T29/T30,
+commit ff8329c) with the page-sweep cache. Restricting the search
+window to the candidate's parent line box is a well-formed change and
+nothing measured since contradicts it.
+
+I cannot reconstruct the acceptance condition from the summary line
+-- whether "parent line box" means the `mathstruct.rows` row, the
+MathPix line region, or the report cell. Those give three different
+windows. Send the original and it can be done directly.
+
+--------------------------------------------------------------------
+214 -- BLOCKED, AND CARRIES TWO CONDITIONS
+
+Residual measurement on the rebuilt reports, waiting on pdfdrill 215.
+Genuinely blocked rather than stale. Two things must be stated when
+it runs, or its numbers will be wrong in ways nothing downstream can
+see:
+
+  RE-MEASURE, DO NOT REUSE. 100 of my 352 `report.compare.tsv` files
+  are older than the `report.pdf` beside them (9baa73f). Their
+  `report_page` and `line` fields index a build that no longer
+  exists, and every value in them is in range and plausible.
+  `tools/comparestale.py` reports which; today every file predates
+  the stamp and reads UNKNOWN, which is not FRESH.
+
+  THE ROW COUNTS WILL MOVE, AND NOT BECAUSE THE INK CHANGED. The
+  probe now reads the column count per document from its own
+  report.tex (97bc335), because pdfdrill's 099 added a Confidence
+  column and the corpus holds both eras. Any before/after comparison
+  across that change is measuring a column that was added.
+
+--------------------------------------------------------------------
+NOT IN THE LIST, ALSO OPEN
+
+029  Add `--trim-trailing-punct` to compare, report how many rows it
+     fires on. PROBABLY RETIRED: I reported to pdfdrill that 025's
+     docmodel separation likely makes it unnecessary, and it was
+     never cancelled or confirmed. One line settles it either way.
+030  Re-run the bh2 compare with 029 enabled. Depends on 029.
+
+B5a  Write the semantic-cost pair file; test that every pair resolves
+     to two labels present in the population. STANDS.
+B5b  Re-report the 647-class run weighted by it, expectation recorded
+     BEFORE running. STANDS.
+B6   Only if B4c showed non-monotonicity. IT DID -- margin falls in
+     2-3 of 9 steps in every non-degenerate channel set, and top-1
+     distance is anti-calibrated, P(correct) 0.844 at the smallest
+     distances against 0.985 at the largest (out/B4-calibration.txt,
+     commit f0d80c9). So B6's precondition is met and it stands.
+
+--------------------------------------------------------------------
+METHOD
+
+`out/` listed against `git log`. A task counts as done only with BOTH
+a result file and a commit; 201 has both. For 179, 186, 191 and 214 I
+hold the one-line summaries in the request and not the original task
+text, so the verdicts above are about whether the WORK still makes
+sense, not about whether I can execute it verbatim.
