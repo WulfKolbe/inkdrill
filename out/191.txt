@@ -1,0 +1,144 @@
+191 - the pooled distribution, with and without a dominant document
+========================================================================
+
+RULE: any document supplying more than 15% of a population's rows is
+reported separately, and every figure previously quoted over that
+population is restated with and without it. The threshold is the
+task's; it is applied per POPULATION, because the same corpus run
+produces three different populations and a different document
+dominates each.
+
+    population                    rows   docs   over 15%
+    102 flagged rows              1666     59   0902.0431 19.2%
+                                                0911.3722 15.2%
+    117 negative-delta rows        426     34   0911.3722 59.4%
+    compare run, all flags        5755    169   0902.0431 20.5%
+
+--------------------------------------------------------------------
+1. THE ONE THAT CHANGES A PUBLISHED FIGURE: 117
+
+0911.3722 supplies 253 of 426 rows -- 59.4% -- and this is the case
+the rule exists for.
+
+    figure                          as quoted   without 0911.3722
+    negative-delta rows                   426                 173
+    rows with a rule in the render        110                 110
+    rows with NO rule                     316                  63
+    "cannot answer the question"        74.2%               36.4%
+
+117 SAID: "74% of the population has no rule in the rendered cell.
+Those rows are counted and named, not dropped: a measurement about
+rules over a population that is three-quarters ruleless would be
+quoting a subgroup as a corpus."
+
+The sentence was right and the number was one document. 0911.3722
+contributes 253 ruleless rows and ZERO rule-bearing ones. Take it out
+and the ruleless share falls from 74.2% to 36.4%.
+
+THE ANSWER ITSELF IS UNTOUCHED, and for a reason worth stating: all
+110 rule-bearing rows come from the other 33 documents, so removing
+the dominant document removes nothing from the measured subset.
+
+    pooled deficit near a rule    73/425 = 17.2%   unchanged
+    null                        968/8398 = 11.5%   unchanged
+    paired: above 29, below 80, median -0.0560, z -4.88   unchanged
+
+Identical to the digit. 117's conclusion -- that the deficit is NOT
+near the rules, and that the pooled figure said otherwise -- stands
+without qualification. What was distorted was the DENOMINATOR I used
+to describe the population, not the finding.
+
+--------------------------------------------------------------------
+2. THE ONE THAT MOVES EVERY PERCENTAGE: 102
+
+Two documents clear 15%: 0902.0431 at 19.2% and 0911.3722 at 15.2%,
+together 573 of 1,666 rows -- 34.4%.
+
+    figure                    as quoted   without both   only those two
+    rows                           1666           1093              573
+    edge@g1.0e0                 7  0.4%       5  0.5%         2  0.3%
+    extreme@g0.5             1590 95.4%    1083 99.1%       507 88.5%
+    extreme@g1.0             1221 73.3%     914 83.6%       307 53.6%
+    extreme@g1.5              860 51.6%     642 58.7%       218 38.0%
+    scan has MORE components  734 44.1%     582 53.2%       152 26.5%
+    margin right, p50             604            514              846
+
+`extreme@g1.0` spans THIRTY POINTS between the two halves -- 83.6%
+outside the dominant pair against 53.6% inside it. Every percentage
+in out/102.txt sits between two numbers that far apart, and the file
+quotes only the middle one.
+
+102's CONCLUSIONS SURVIVE, in both directions:
+
+  `edge` is dead everywhere -- 0.4%, 0.5%, 0.3%. The 604 px median
+  right margin that explains it is 514 outside the pair and 846
+  inside, so the cell-layout diagnosis holds in both halves and is
+  worse in the dominant one.
+  `extreme` fires on far too much everywhere -- the smallest figure
+  in the table is 53.6%, which is still not a class.
+
+So the file's two findings hold. Its numbers should be read as a
+range, not a point, and the range is wide.
+
+--------------------------------------------------------------------
+3. THE ONE THAT DOES NOT MOVE: THE FLAG DISTRIBUTION
+
+0902.0431 supplies 1,182 of 5,755 rows -- 20.5%.
+
+    flag        as quoted    without 0902.0431    only 0902.0431
+    clean      1305 22.7%        1033 22.6%          272 23.0%
+    noise      2769 48.1%        2201 48.1%          568 48.1%
+    weak        922 16.0%         693 15.2%          229 19.4%
+    stable      139  2.4%         122  2.7%           17  1.4%
+    component   620 10.8%         524 11.5%           96  8.1%
+
+`noise` is 48.1% in all three columns and `clean` within four tenths
+of a point. The two that move are `weak` (19.4% inside against 15.2%
+outside) and `component` (8.1% against 11.5%) -- 0902.0431 produces
+proportionally more weak findings and fewer component ones, which is
+consistent with it being a dense multi-line document where the
+distance channel fires and the component count does not.
+
+This is the case where the split shows the pooled figure was SAFE.
+That is a result too, and it is the reason to run the split rather
+than assume either way.
+
+--------------------------------------------------------------------
+4. RESTATEMENTS
+
+The following figures should be read as amended:
+
+  out/117.txt sec 2: "74% of the population has no rule in the
+  rendered cell" -> 74.2% pooled, 36.4% without 0911.3722, which
+  supplies 59.4% of the rows and no rule-bearing ones. The measured
+  answer in sec 3 and sec 5 is unchanged to the digit.
+
+  out/102.txt sec 4: the firing-rate table is a pooled figure over a
+  population 34.4% of which is two documents. `extreme@g1.0` is
+  73.3% pooled, 83.6% without them, 53.6% within. `edge` and the
+  conclusion are unaffected.
+
+  out/102.txt sec 3: median right margin 604 px -> 514 without the
+  pair, 846 within. The argument that the condition measures CELL
+  LAYOUT is strengthened, not weakened.
+
+  The compare run's flag distribution needs no amendment.
+
+--------------------------------------------------------------------
+5. WHAT THIS DOES NOT SAY
+
+- NOT that 15% is a principled threshold. It is the task's, and it
+  happens to separate cleanly here: the next-largest contributors are
+  11.8% (102) and 6.6% (117), so no document sits near the line.
+- NOT that a document under 15% cannot distort a figure. 117's
+  measured subset is 110 rows over 33 documents; a document supplying
+  20 of those would move it and would not be caught by this rule.
+- NOT a re-measurement. Every number here is arithmetic over
+  `results/overrun-20260822-141104.tsv`,
+  `results/ruledeficit-20260822-201421.tsv` and
+  `results/compare-roster-scan-20260823-014120.tsv`, which is why it
+  was cheap and why it should have been done when those files were
+  written.
+
+RE-RUN: arithmetic only; group each results TSV by `bibkey`, take
+documents over 15% of the row count, and recompute.
