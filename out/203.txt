@@ -1,0 +1,138 @@
+203 / 209 - labels outside the delimiters, three classes, five books
+========================================================================
+
+ANSWER, over 2,135 equation regions in five books:
+
+    class                                       equations
+    1  delimited, labels RIGHT-AND-BELOW             146
+    2  delimited, LEFT-HAND SIDE only                 10
+    3  delimited, NOTHING outside                      0
+       -- no delimiter pair (nothing to be outside)  1979
+       total                                        2135
+
+    delimited (the three classes)                    156
+    class 1 as a share of all equations              6.8%
+    class 1 as a share of DELIMITED equations       93.6%
+
+CLASS 3 IS EMPTY AND THAT IS A FACT ABOUT THE CORPUS, NOT AN
+UNREACHABLE BRANCH -- checked, not asserted. See section 4.
+
+--------------------------------------------------------------------
+1. THE DETECTOR
+
+Built from 200's geometry and nothing else:
+
+  1 the region's components, from the SOURCE page raster at 300 dpi
+    -- each document's own pdf, never its report;
+  2 the outermost delimiter pair: leftmost and rightmost components
+    that `emit.is_delimiter` accepts -- a thin full-height stem with
+    a full-width serif at each end and none in between, which is
+    200's bracket measurement (normalised band centres 0.005 and
+    0.985) read as a test;
+  3 components lying entirely RIGHT of the right delimiter or BELOW
+    the pair's common bottom;
+  4 those grouped into text rows by `mathstruct.rows`.
+
+`is_delimiter` and `crossing_rules` read the same band structure the
+opposite way -- a crossing has an interior horizontal band, a
+delimiter has none -- so neither can claim a component the other
+claims. Asserted in the suite.
+
+--------------------------------------------------------------------
+2. PER BOOK
+
+    book              equations   class 1   class 2   no pair
+    BH1org_OCR              240        35         1       204
+    bh2                     344        53         1       290
+    BH3FR                   324        35         4       285
+    WDorg4                   78         0         0        78
+    Mielke Geometrodynamics 1149       23         4      1122
+
+    outside components (class 1, sum)               6,163
+    outside rows (class 1, sum)                       985
+    left-hand-side components (class 2, sum)          232
+
+Worst pages by outside rows:
+
+    BH3FR   p147  43 rows / 123 components
+    BH1org  p175  42 rows / 173 components
+    bh2     p125  21 rows / 318 components
+    Mielke  p366  11 rows / 101 components
+
+WDorg4 CONTRIBUTES NOTHING and the reason is stated rather than
+averaged away: none of its 78 equations has a detected delimiter
+pair. `is_delimiter` reads a straight stem with serifs -- `[`, `]`,
+`|` -- and a PARENTHESIS has no straight stem, so a book whose
+display maths uses `( )` throughout is invisible to this detector.
+That is a limit of the instrument, and WDorg4 is where it shows.
+
+--------------------------------------------------------------------
+3. THE CORRECTION THAT PRODUCED CLASS 2
+
+The first run reported 156 qualifying and ZERO delimited-with-nothing
+-outside. Every equation with a delimiter pair had something outside
+it, which is implausible, and an empty class in a two-class
+comparison built to make that comparison is the first thing to check.
+
+The cause was immediate. The test included components LEFT of the
+opening bracket, and everything left of an opening bracket is the
+equation's LEFT-HAND SIDE. On EQ1059 -- the very case this detector
+was built from -- `\psi =` sits there. A left-hand side is part of
+the expression, not a label.
+
+    before  156 class 1,  0 elsewhere
+    after   146 class 1, 10 class 2, 0 class 3
+
+Ten equations moved. Without the empty-class check, "156 of 2,135
+equations carry labels outside their delimiters" would have gone into
+this file looking entirely reasonable.
+
+--------------------------------------------------------------------
+4. WHY CLASS 3 IS EMPTY
+
+The requirement is that each class has a member or the absence is
+explained. Class 3 has none, so the branch was tested for
+REACHABILITY on a synthetic region holding only `[ ... ]` -- two
+bracket components and four cell blobs, nothing to the left, right or
+below. It classifies as 3. The branch fires.
+
+So the zero is a property of display equations rather than of the
+code: a MathPix `math` region is drawn around a whole display
+equation, and a display equation essentially always carries something
+outside its brackets -- an `=`, a variable, a subscript, a trailing
+period. A region that is only a bracketed matrix and nothing else did
+not occur in 156 delimited equations across five books.
+
+That is an observation about 156 cases, not a law. It would be
+falsified by one region cropped tightly to a bare matrix, and the
+test in the suite is exactly that region.
+
+--------------------------------------------------------------------
+5. WHAT IS NOT CLAIMED
+
+- NOT that the outside rows are words. This project reads no text and
+  has no word former: `group()` joins STACKED components -- an `i`
+  with its dot -- never adjacent letters. The unit is the ROW. A
+  label count would be the LaTeX's number, not the ink's.
+- NOT that every class-1 equation carries prose labels. The class is
+  geometric: ink right of or below the delimiters. On 200's case that
+  ink is `up`, `down`, `strange`, `charm`, `flavors`, `red`,
+  `yellow`, `blue`, `lilac`; elsewhere it may be a trailing
+  punctuation mark or an equation number. Separating those needs
+  symbol identity, which this project does not have.
+- NOT a rate for the corpus. Five books chosen by the task, four of
+  them from one publisher, and one of the five contributes zero for
+  an instrument reason.
+
+--------------------------------------------------------------------
+6. POPULATION
+
+2,135 regions of type `math` from each book's own lines.json, on
+1,419 source pages, rendered at 300 dpi from the document's own pdf.
+Regions smaller than 10 px in either axis are excluded and counted:
+zero occurred.
+
+RE-RUN:  python3 tools/outsidelabels.py --jobs 5
+TESTS:   tests.test_emit.T1_20_DelimiterAndOutsideClasses -- three
+         tests; all three classes asserted to fire, and the
+         delimiter/crossing disjointness asserted.

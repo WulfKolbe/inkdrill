@@ -2246,3 +2246,98 @@ class T1_19_CrossingRulesSplit(unittest.TestCase):
         m = InkMask(bytes(buf), w, h)
         r = list(ink_only(m).regions)[0]
         self.assertEqual(crossing_rules(m, r), [])
+
+
+class T1_20_DelimiterAndOutsideClasses(unittest.TestCase):
+    """203/209: `is_delimiter`, and that all three outside-classes are
+    REACHABLE.
+
+    Class 3 -- a delimited expression with nothing outside the pair --
+    is EMPTY on all five books, 0 of 156 delimited equations. A zero
+    in a class a measurement was built to compare against is the first
+    thing to check, so the branch is exercised here on a synthetic
+    region containing only `[ ... ]`. It fires. The corpus zero is
+    therefore a fact about display equations, not an unreachable
+    branch.
+
+    `is_delimiter` and `crossing_rules` read the SAME band structure
+    the opposite way -- a crossing has an interior horizontal band, a
+    delimiter has none -- so neither can claim a component the other
+    claims. Asserted, because that disjointness is what makes them
+    safe to run over one page.
+    """
+
+    @staticmethod
+    def _region(*, left, right, below):
+        """A bracketed 2x2 matrix, with content optionally placed to
+        the left of the pair, to its right, or below it. Dimensions
+        follow the measured page: 200's brackets are 19-20 x 200 px
+        with 3 px strokes."""
+        from inkdrill.raster import InkMask
+        W, H, t = 340, 240, 3
+        buf = bytearray(W * H)
+
+        def box(x0, y0, x1, y1):
+            for y in range(max(0, y0), min(H, y1)):
+                for x in range(max(0, x0), min(W, x1)):
+                    buf[y * W + x] = 0xFF
+        # `[` : stem at x=60 with serifs running RIGHT to x=95
+        box(60, 20, 60 + t, 180)
+        box(60, 20, 95, 23)
+        box(60, 177, 95, 180)
+        # `]` : stem at x=250 with serifs running LEFT to x=215
+        box(250, 20, 250 + t, 180)
+        box(215, 20, 253, 23)
+        box(215, 177, 253, 180)
+        for r in range(2):
+            for c in range(2):
+                box(100 + c * 70, 50 + r * 70, 120 + c * 70, 70 + r * 70)
+        if left:
+            box(10, 90, 40, 120)
+        if right:
+            box(280, 90, 320, 120)
+        if below:
+            box(80, 200, 200, 225)
+        return InkMask(bytes(buf), W, H)
+
+    def _classify(self, **kw):
+        from inkdrill.emit import is_delimiter
+        from inkdrill.nest import ink_only
+        m = self._region(**kw)
+        regs = list(ink_only(m).regions)
+        delims = sorted((r for r in regs if is_delimiter(m, r)),
+                        key=lambda r: r.x0)
+        self.assertGreaterEqual(len(delims), 2, "brackets not detected")
+        L, R = delims[0], delims[-1]
+        bottom = max(L.y1, R.y1)
+        lhs = [r for r in regs if r.x1 < L.x0]
+        out = [r for r in regs if r.x0 > R.x1 or r.y0 > bottom]
+        return 1 if out else (2 if lhs else 3), len(lhs), len(out)
+
+    def test_all_three_classes_fire(self):
+        self.assertEqual(self._classify(left=False, right=True,
+                                        below=False)[0], 1)
+        self.assertEqual(self._classify(left=False, right=False,
+                                        below=True)[0], 1)
+        self.assertEqual(self._classify(left=True, right=False,
+                                        below=False)[0], 2)
+        self.assertEqual(self._classify(left=False, right=False,
+                                        below=False)[0], 3)
+
+    def test_a_left_hand_side_alone_is_not_a_label(self):
+        """The defect this split exists for: including `r.x1 < L.x0`
+        put every `lhs = [...]` in class 1 and left class 3 with zero
+        members across 2,135 equations."""
+        cls, lhs, out = self._classify(left=True, right=False,
+                                       below=False)
+        self.assertEqual(cls, 2)
+        self.assertGreater(lhs, 0)
+        self.assertEqual(out, 0)
+
+    def test_a_delimiter_and_a_crossing_are_never_the_same_component(self):
+        from inkdrill.emit import crossing_rules, is_delimiter
+        from inkdrill.nest import ink_only
+        m = self._region(left=False, right=False, below=False)
+        for r in ink_only(m).regions:
+            self.assertFalse(is_delimiter(m, r) and crossing_rules(m, r),
+                             "a component claimed by both")

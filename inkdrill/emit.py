@@ -1101,6 +1101,54 @@ def _full_bands(counts, total, span):
     return out
 
 
+def is_delimiter(mask, region, *, span: float = 0.9, end: float = 0.1,
+                 band: float = 0.25, min_aspect: float = 3.0) -> bool:
+    """Is this component a bracket -- a stem with a serif at each end?
+
+    The other half of 200's measurement. `crossing_rules` answers "is
+    this two rules fused"; this answers "is this a delimiter", and the
+    two are decided by the SAME structure read the opposite way:
+
+        stem      exactly one full-height vertical band, thin
+        serifs    full-width horizontal bands, ALL of them at an END
+                  -- measured at normalised 0.005 and 0.985
+
+    A rule crossing has an INTERIOR band and is refused here; a
+    delimiter has none and is refused by `crossing_rules`. Neither
+    function can claim a component the other claims, which is the
+    property that makes them safe to run over the same page.
+
+    `min_aspect` is 3 rather than 10: a delimiter is bounded by the
+    expression it encloses and a two-row matrix's bracket is squat.
+    It exists only to refuse a solid blob, which the band tests
+    already largely do.
+
+    A parenthesis has no straight stem and is NOT detected. That is a
+    stated limit, not an oversight -- this reads `[`, `]` and `|`,
+    which is what the corpus's matrices use.
+    """
+    x0, y0, x1, y1 = region.x0, region.y0, region.x1, region.y1
+    w, h = x1 - x0 + 1, y1 - y0 + 1
+    if w < 2 or h < min_aspect * w:
+        return False
+    data, W = mask.data, mask.width
+    cols = [sum(1 for y in range(y0, y1 + 1) if data[y * W + x])
+            for x in range(x0, x1 + 1)]
+    rows_ = [sum(1 for x in range(x0, x1 + 1) if data[y * W + x])
+             for y in range(y0, y1 + 1)]
+    vb = _full_bands(cols, h, span)
+    if len(vb) != 1 or (vb[0][1] - vb[0][0] + 1) > band * w:
+        return False
+    hb = _full_bands(rows_, w, span)
+    if not hb:
+        return False
+
+    def interior(b):
+        c = (b[0] + b[1]) / 2.0 / max(1, h - 1)
+        return end < c < 1.0 - end
+    return not any(interior(b) for b in hb)
+
+
 def crossing_rules(mask, region, *, span: float = 0.9,
                    end: float = 0.1, band: float = 0.25,
                    min_aspect: float = 10.0) -> list:
