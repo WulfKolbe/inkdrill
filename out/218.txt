@@ -1,0 +1,132 @@
+218 - does topology separate a slashed zero from an O?
+========================================================================
+
+ANSWER: YES, and it does more than that. The two glyphs differ by
+exactly one hole, which is a difference no threshold has to be chosen
+for. And on the two equations named, the topology CONTRADICTS the
+labels: both final glyphs are the same slashed ring, and MathPix
+called one `\emptyset` and the other `\mathbb{O}`.
+
+--------------------------------------------------------------------
+1. THE MEASUREMENT
+
+Document: Introduction to Graph and Hypergraph Theory (Voloshin).
+Measured on the report CROPS -- `report-crops/..._EQ0124.jpg` and
+`..._EQ0133.jpg` -- which are MathPix's own cut of each equation, so
+no region mapping stands between the label and the ink.
+
+    EQ0124   crop 531 x 104,  38 components
+    EQ0133   crop 873 x  53,  44 components
+
+Final glyph of each, punctuation excluded:
+
+    equation   glyph box   holes   chi   crossing strokes
+    EQ0124      20 x 32      2     -1          1
+    EQ0133      20 x 32      2     -1          1
+
+The two are the same size to the pixel and the same shape to the eye:
+a ring with one diagonal stroke running rim to rim.
+
+    EQ0124 final glyph            EQ0133 final glyph
+    ...........####.....          ...........####.....
+    ......#########.....          ......#########.....
+    ....############....          ....############....
+    ...##############...          ....#############...
+    ...#####..#######...          ...#####..#######...
+    ..#####...########..          ..#####...########..
+    ..####...####.####..          ..####...####.####..
+    .#####...####.#####.          .#####...####.#####.
+    .####....####..####.          .####....###...####.
+    #####...###....#####          #####...####...#####
+    #####..####.....####          ####...####.....####
+    .########......#####          .########......#####
+    ..######.....#####..          ..######.....#####..
+    ...##############...          ...##############...
+    ..####..####........          ..####..####........
+
+--------------------------------------------------------------------
+2. WHY THE SEPARATION NEEDS NO THRESHOLD
+
+For a connected component, chi = 1 - holes. A ring encloses one
+region, so holes = 1 and chi = 0. A stroke crossing that interior
+from rim to rim divides it in two, so holes = 2 and chi = -1.
+
+    O                 holes 1   chi  0   crossing strokes 0
+    slashed zero      holes 2   chi -1   crossing strokes 1
+
+    crossing strokes = holes - 1,  for any ring-based glyph.
+
+That is an identity, not a measured cut. Nothing is tuned, nothing
+depends on dpi or stroke weight, and the two classes cannot be
+brought together by a threshold because they differ by an INTEGER.
+
+A single-hole glyph of the same size class on the same page, for
+contrast: 21 x 31, holes 1, chi 0, fill 0.37.
+
+--------------------------------------------------------------------
+3. THE CONTRADICTION -- THE ACTUAL FINDING
+
+    equation   MathPix's label      the ink
+    EQ0124     \neq \emptyset       ring + 1 crossing stroke
+    EQ0133     \neq \mathbb{O}      ring + 1 crossing stroke
+
+`\mathbb{O}` is a blackboard-bold capital O -- a ring, no crossing
+stroke, holes 1, chi 0. The glyph printed in EQ0133 has TWO holes.
+It is not a `\mathbb{O}`; it is the same `\emptyset` that EQ0124
+carries, and the two crops agree to the pixel.
+
+So the topology does not merely separate the classes in principle --
+on this pair it detects a specific wrong label, from ink alone,
+without naming a single symbol. That is what this project is for: the
+residual is the product.
+
+The direction matters too. A tool that returns `\mathbb{O}` where the
+page reads a slashed zero produces LaTeX that compiles, renders a
+plausible glyph, and is wrong. Nothing downstream of the conversion
+can catch it, because nothing downstream sees the ink.
+
+--------------------------------------------------------------------
+4. ONE MEASUREMENT THAT SURPRISED ME, RECORDED BECAUSE IT WOULD
+   OTHERWISE BE ASSUMED
+
+The `\neq` preceding each glyph has ZERO holes:
+
+    EQ0124   26 x 35   holes 0   chi 1
+    EQ0133   25 x 35   holes 0   chi 1
+
+Two horizontal bars with a diagonal through them would be expected to
+enclose two regions. They do not, because the bars OVERHANG the
+diagonal at both ends, so the would-be regions are open at the sides
+and connect to the background. A reader predicting the topology of
+`\neq` from its shape would have written 2 and been wrong.
+
+That is worth stating beside the `\emptyset` result: the same
+reasoning that gets the slashed zero right gets `\neq` wrong, and the
+difference is whether the strokes CLOSE. Only measurement settles it.
+
+--------------------------------------------------------------------
+5. WHAT THIS DOES NOT SAY
+
+- NOT that holes = 2 identifies `\emptyset`. Other glyphs have two
+  holes -- `8`, `B`, `theta` with a crossbar, several script capitals
+  on these very pages. The topology separates a slashed ring FROM an
+  unslashed one; it does not name either.
+- NOT a corpus rate. Two equations, one document, chosen by the task.
+  How often MathPix substitutes `\mathbb{O}` for `\emptyset` is a
+  different measurement and is not taken here.
+- NOT that the crossing stroke is always detectable. It divides the
+  interior only if it reaches the rim on both sides. A short slash
+  that stops inside the ring leaves one hole and is invisible to this
+  test -- the same closure question section 4 raises for `\neq`.
+
+--------------------------------------------------------------------
+6. POPULATION
+
+Two equation crops, 38 and 44 components, both produced by MathPix
+from its own regions. Ground truth for the labels is the report's own
+tex; ground truth for the ink is the crop. Every number above is
+checkable by hand from the ASCII in section 1.
+
+RE-RUN:
+  magick "report-crops/..._EQ0124.jpg" -define png:color-type=2 a.png
+  then `nest.ink_only` and read `regions` with `cycles`.
