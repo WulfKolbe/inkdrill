@@ -1,0 +1,132 @@
+200 - the flavour/colour matrix: rules, the merged cross, and the labels
+========================================================================
+
+FIRST, A CORRECTION TO THE TASK'S IDENTIFIER. The task names EQ0192.
+The equation containing the word "yellow" is EQ1059. EQ0192 is a
+different equation in the same document -- the 2x2 `{c|c}` triple
+measured in 196 -- and it contains no labels and no 4x4 matrix. There
+is exactly ONE row in this document's report whose LaTeX mentions
+"yellow", and everything below is measured on it.
+
+  document  Geometrodynamics of Gauge Fields ... (Mielke) (Z-Library)
+  row       ...__EQ1059,  source page 346
+  region    MathPix `math` line 36, top_left (257, 1694), 879 x 303,
+            on a 1526 x 2313 page
+  render    source page 346 at 300 dpi -> 1831 x 2775, scale 1.1999
+  bbox      (308, 2032) - (1363, 2395) in page px, 1055 x 363
+
+The LaTeX confirms the described structure exactly:
+
+    \begin{array}{lll|l}
+      P_a & P_b & P_c | nu_e \\
+      eta_a & eta_b & eta_c | e^- \\
+      lambda_a & lambda_b & lambda_c | mu^- \\
+      \hline
+      c_a & c_b & c_c | nu_mu
+    \end{array}
+
+four columns with the rule after column 3, four rows with the rule
+after row 3, plus label arrays outside the bracket carrying `up`,
+`down`, `strange`, `charm`, `flavors` on the right and `red`,
+`yellow`, `blue`, `lilac` below.
+
+--------------------------------------------------------------------
+1. ink.rules[]
+
+    ink regions inside the bbox        97
+    passing `is_rule`                   0
+    ink.rules[]  (free_rules)           0
+
+Zero, on a matrix that demonstrably has two rules. Same result as 196
+and the same cause.
+
+--------------------------------------------------------------------
+2. THE MERGED-CROSS COMPONENT
+
+ONE, and it carries both rules:
+
+    size      548 x 202 px      fill 0.020      area 2,241 px
+    at        (140, 11) in the bbox
+    vertical band    x-offset 411-413, spanning 202 of 202 px  (full)
+    horizontal band  y-offset 149-151, spanning 548 of 548 px  (full)
+
+A 3 px vertical line running the matrix's whole height and a 3 px
+horizontal line running its whole width, meeting once. The `|` of
+`{lll|l}` and the `\hline` intersect, and 8-connectivity fuses them
+into a single component.
+
+POSITION RELATIVE TO THE CELL GRID:
+
+    vertical    centre x-offset 412 of 548  =  0.752 of the width
+    horizontal  centre y-offset 150 of 202  =  0.743 of the height
+
+For a 4-column, 4-row grid the boundaries after column 3 and row 3
+lie at 0.750. Measured 0.752 and 0.743. The rules are where
+`{lll|l}` and a fourth-row `\hline` put them, to within a pixel and
+a half.
+
+TWO OTHER TALL COMPONENTS ARE NOT RULES and are correctly excluded:
+
+    19 x 200  fill 0.183  at x 120     the left bracket
+    20 x 200  fill 0.175  at x 689     the right bracket
+
+Each has a full-height vertical band AND full-width horizontal bands
+at BOTH ends (y-offsets 0-2 and 197) -- a stem with two serifs, which
+is what a bracket is. The cross has one horizontal band, in the
+middle. That difference is measurable and is what separates a rule
+crossing from a delimiter; nothing in the current code uses it.
+
+--------------------------------------------------------------------
+3. THE LABELS -- ALL OF THEM ARE INSIDE THE EQUATION'S OWN BBOX
+
+    components outside the bracket pair, inside the bbox     59
+      to the RIGHT of the right bracket                      25
+      BELOW the bracket                                      34
+    text rows (mathstruct.rows) over those 59                 7
+      right of the bracket, y 28-197                          5
+      below the bracket,     y 269-356                        2
+
+All 59 fall inside the region MathPix labelled `math`. The LaTeX
+names nine label WORDS -- up, down, strange, charm, flavors, red,
+yellow, blue, lilac -- plus two arrows, and every one of them is
+inside the equation's bbox. None is outside it.
+
+A COUNT OF WORDS IS NOT AVAILABLE FROM THIS SIDE, and saying so is
+part of the answer. `mathstruct.group()` returns 58 clusters from
+those 59 components, because G6 joins only STACKED components -- an
+`i` with its dot -- and never horizontally adjacent letters. It is a
+glyph former, not a word former, and this project has no word former
+because it reads no text. The defensible units are 59 components and
+7 rows; "nine labels" is the LaTeX's count, not the ink's.
+
+THE REGION BOUNDARY IS CLEAN, which is worth recording because 102
+found the opposite case elsewhere: the 80 scanlines immediately below
+the region carry ZERO ink across the full page width. The region ends
+where the content ends. These labels are inside the equation's bbox
+because MathPix put them there, not because the crop overran.
+
+--------------------------------------------------------------------
+4. WHAT THIS ADDS TO 196
+
+196 found the merged cross on three 2x2 arrays where the rule crossed
+at the centre. This is the same defect at 0.75 rather than 0.50, on a
+4x4, which rules out any reading that depends on the rule being
+central. One component, two rules, and `ink.rules[]` reports neither.
+
+It also adds the bracket contrast, which 196 did not have cleanly: a
+bracket and a rule crossing are both tall low-fill components, and
+they differ in the NUMBER and POSITION of their full-span horizontal
+bands -- two at the ends against one in the middle. Any future split
+must separate them, and the profile computed here already does.
+
+--------------------------------------------------------------------
+5. POPULATION
+
+One equation on one page of one document. 97 ink regions in a
+1055 x 363 px bbox, checkable by hand. Ground truth is the report's
+own LaTeX. No rate is quoted and none should be read from this.
+
+RE-RUN:
+  gs -q -dNOPAUSE -dBATCH -sDEVICE=png16m -r300 -dFirstPage=346 \
+     -dLastPage=346 -sOutputFile=p346.png "<document>.pdf"
+  then crop (308,2032)-(1363,2395) and read `emit.free_rules`.
