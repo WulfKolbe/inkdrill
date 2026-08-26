@@ -1,0 +1,144 @@
+196 - ink.rules[] inside a matrix bbox
+========================================================================
+
+ANSWER: ink.rules[] reports ZERO rules inside the matrix bbox. The
+LaTeX says there are SIX. Both the count and the reason are below,
+and the reason is not the one 116 found.
+
+--------------------------------------------------------------------
+1. THE PAGE, AND HOW IT WAS CHOSEN
+
+The task named a document but not a page, so the page was selected by
+GROUND TRUTH rather than by eye: the report's own tex was searched for
+equation rows whose LaTeX contains a ruled array. Eleven exist in this
+document; EQ0192 has the most rule structure of any of them.
+
+  document  Geometrodynamics of Gauge Fields ... (Mielke) (Z-Library)
+  row       ...__EQ0192,  source page 081
+  region    MathPix `math` line, top_left (379, 1260), 763 x 99,
+            on a 1526 x 2313 page
+  render    source page 81 at 300 dpi -> 1831 x 2775, scale 1.1999
+  bbox      (454, 1511) - (1370, 1630) in page px, 916 x 119
+
+The LaTeX, which is the ground truth for what should be found:
+
+    a:=\left[\begin{array}{c|c} g & \mathrm{a} \\ \hline 0 & 1
+      \end{array}\right]
+     =\left[\begin{array}{c|c} \mathbb{1}_{n} & \mathrm{a} \\ \hline
+      0 & 1 \end{array}\right]
+      \left[\begin{array}{c|c} g & 0 \\ \hline 0 & 1
+      \end{array}\right]
+     = a^{\mathrm{T}} \cdot a^{\mathrm{L}} \in A(n,\mathbb{R}).
+
+THREE arrays, each `{c|c}` with one `\hline`. Expected: 3 vertical
+rules and 3 horizontal rules, six in total.
+
+--------------------------------------------------------------------
+2. THE COUNT
+
+    ink regions inside the bbox        44
+    passing `is_rule`                   0
+    ink.rules[]  (free_rules)           0
+
+Zero of six.
+
+--------------------------------------------------------------------
+3. WHERE THE SIX RULES ACTUALLY ARE
+
+They are present in the ink and they are found -- as three components,
+not six, and none of them shaped like a rule. Three regions in the
+bbox have a fill of 0.06:
+
+    region        fill    vertical band        horizontal band
+    82 x 103     0.065    x-offset 40-42       y-offset 50-52
+                          103 of 103 px tall   82 of 82 px wide
+    103 x 103    0.057    x-offset 61-63       y-offset 50-52
+                          103 of 103 px        103 of 103 px
+    82 x 103     0.065    x-offset 39-41       y-offset 50-52
+                          103 of 103 px        82 of 82 px
+
+Each is a CROSS. A 3 px vertical band spanning the region's full
+height, and a 3 px horizontal band spanning its full width, meeting
+in the middle. That is exactly `{c|c}` plus `\hline`: the column rule
+and the row rule INTERSECT, so 8-connectivity merges them into one
+component per matrix.
+
+POSITION RELATIVE TO THE CELL GRID, which is what the task asked for
+and which the geometry gives directly:
+
+    matrix   vertical rule at   horizontal rule at   reading
+    1        0.50 of width      0.50 of height       {c|c} + \hline
+    2        0.60 of width      0.50 of height       {c|c} + \hline
+    3        0.49 of width      0.50 of height       {c|c} + \hline
+
+Every vertical sits between column 1 and column 2; every horizontal
+between row 1 and row 2. A 2x2 grid divided once each way, three
+times over. The structure the task set out to read is unambiguously
+there in the ink.
+
+--------------------------------------------------------------------
+4. WHY `is_rule` REFUSES THEM -- A DIFFERENT REASON FROM 116
+
+`is_rule` requires fill > 0.8 AND a long side >= 20x the short one.
+A cross fails BOTH, and not marginally:
+
+    fill    0.06   against a floor of 0.80
+    aspect  ~1.0   against a floor of 20
+
+116 found the aspect gate emptying the population on scanned pages --
+205 solid bars at aspect 10-20 against 3 at >= 20 -- and left open
+what those bars were. This is a DIFFERENT failure and it matters that
+they are not confused:
+
+  116  a real bar, correctly shaped, too THICK for the aspect gate
+  196  a real rule that is not a bar at all, because it is fused to
+       the rule it crosses
+
+Loosening the aspect constant would not recover a single rule here.
+The component is not rule-shaped; it is two rules and a junction.
+
+--------------------------------------------------------------------
+5. THE NEAR-MISSES ARE PUNCTUATION
+
+The only solid bars in the bbox are six horizontal ones in three
+pairs, fill 1.00, aspect 9.3 and 14.0, at x 52-79, 235-262, 571-598:
+
+    y-offset 57-58, 28 x 2 px      aspect 14.0
+    y-offset 65-67, 28 x 3 px      aspect  9.3
+
+Two bars, stacked, 7 px apart, three times. Those are the `:=` and
+the two `=` signs. They are correctly absent from ink.rules[] -- an
+equals sign is not a rule -- but they are the only thing in this bbox
+that a loosened aspect gate would admit. Widening the constant on the
+strength of 116 would, on this page, add three equals signs and no
+matrix rules.
+
+--------------------------------------------------------------------
+6. WHAT WOULD BE NEEDED, NOT BUILT
+
+Detecting these needs a component SPLIT, not a threshold change: a
+low-fill component whose column profile has one full-height band and
+whose row profile has one full-width band is a rule crossing, and the
+two bands are the two rules. The profiles above were computed exactly
+that way and separated all three cases cleanly on the first attempt.
+
+That is a change to what `is_rule` is, not to its constants, and it
+needs its own premise measurement -- how often a crossing occurs, and
+what else has a full-span band in one axis -- before it is built. 116
+left an open question about what the aspect 10-20 population contains;
+this adds a second, and both should be answered by one measurement
+rather than two guesses.
+
+--------------------------------------------------------------------
+7. POPULATION
+
+One page of one document, named individually. Nine numbers above come
+from 44 ink regions in a single 916 x 119 px bbox, small enough to
+check by hand, and the ground truth is the report's own LaTeX rather
+than a judgement about the image. No rate is quoted and none should
+be read from this.
+
+RE-RUN:
+  gs -q -dNOPAUSE -dBATCH -sDEVICE=png16m -r300 -dFirstPage=81 \
+     -dLastPage=81 -sOutputFile=p81.png "<document>.pdf"
+  then crop (454,1511)-(1370,1630) and read `emit.free_rules`.
