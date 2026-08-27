@@ -1,4 +1,3 @@
-2026-08-26T15:04:43Z  /  2026-08-26 17:04:43 +02:00 (Europe/Berlin)  commit 19236cb  (retrofitted: the commit that ADDED this report)
 225 - open-task audit: what has no result file and no commit
 ========================================================================
 
@@ -190,4 +189,3 @@ a result file and a commit; 201 has both. For 179, 186, 191 and 214 I
 hold the one-line summaries in the request and not the original task
 text, so the verdicts above are about whether the WORK still makes
 sense, not about whether I can execute it verbatim.
-2026-08-26T15:04:43Z  /  2026-08-26 17:04:43 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

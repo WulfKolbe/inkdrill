@@ -1,4 +1,3 @@
-2026-08-20T17:32:02Z  /  2026-08-20 19:32:02 +02:00 (Europe/Berlin)  commit 09f3050  (retrofitted: the commit that ADDED this report)
 A/B per-cell diff at 300 dpi
   PRE  /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/ab_0902.0431/PRE/report.pdf
   POST /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/ab_0902.0431/POST/report.pdf
@@ -78,4 +77,3 @@ is falsified in the way that matters least: no component-channel
 delta exceeds the noise ceiling, the scan column shows the same
 signature, and the cause is the six-row reflow they have already
 documented as a row-placement (not page-count) cost.
-2026-08-20T17:32:02Z  /  2026-08-20 19:32:02 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

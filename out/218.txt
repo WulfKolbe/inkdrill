@@ -1,4 +1,3 @@
-2026-08-26T12:07:18Z  /  2026-08-26 14:07:18 +02:00 (Europe/Berlin)  commit 960ae02  (retrofitted: the commit that ADDED this report)
 218 - does topology separate a slashed zero from an O?
 ========================================================================
 
@@ -131,4 +130,3 @@ checkable by hand from the ASCII in section 1.
 RE-RUN:
   magick "report-crops/..._EQ0124.jpg" -define png:color-type=2 a.png
   then `nest.ink_only` and read `regions` with `cycles`.
-2026-08-26T12:07:18Z  /  2026-08-26 14:07:18 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

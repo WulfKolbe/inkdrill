@@ -1,4 +1,3 @@
-2026-08-26T17:07:09Z  /  2026-08-26 19:07:09 +02:00 (Europe/Berlin)  commit ccc61c5  (retrofitted: the commit that ADDED this report)
 191 - the pooled distribution, with and without a dominant document
 ========================================================================
 
@@ -143,4 +142,3 @@ The following figures should be read as amended:
 
 RE-RUN: arithmetic only; group each results TSV by `bibkey`, take
 documents over 15% of the row count, and recompute.
-2026-08-26T17:07:09Z  /  2026-08-26 19:07:09 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

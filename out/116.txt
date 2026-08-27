@@ -1,4 +1,3 @@
-2026-08-22T17:11:27Z  /  2026-08-22 19:11:27 +02:00 (Europe/Berlin)  commit 5ec74bf  (retrofitted: the commit that ADDED this report)
 116 - rule context: what a rule DOES, from the ink around it
 ==============================================================
 
@@ -164,4 +163,3 @@ RE-RUN:  python3 tools/rulecontext.py <page.png> [--reach F] [--cut C]
 TESTS:   tests.test_emit.T1_15_RuleContext -- five tests, all four
          classes fire from their own fixtures, and all five
          non-trivial branches of rule_context mutate to a failure.
-2026-08-22T17:11:27Z  /  2026-08-22 19:11:27 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

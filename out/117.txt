@@ -1,4 +1,3 @@
-2026-08-22T18:17:25Z  /  2026-08-22 20:17:25 +02:00 (Europe/Berlin)  commit a89463d  (retrofitted: the commit that ADDED this report)
 117 - do the components a scan is MISSING sit next to a rule?
 ==============================================================
 
@@ -143,4 +142,3 @@ RE-RUN:  python3 tools/ruledeficit.py --jobs 6 [--reach F]
 FILES:   results/ruledeficit-20260822-201421.tsv -- 426 rows with
          deficit, unmatched, rule count, near-rule count, the
          rendered cell's own near/total, and the fraction.
-2026-08-22T18:17:25Z  /  2026-08-22 20:17:25 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

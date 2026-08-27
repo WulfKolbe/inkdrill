@@ -1,4 +1,3 @@
-2026-08-26T09:48:03Z  /  2026-08-26 11:48:03 +02:00 (Europe/Berlin)  commit 9559437  (retrofitted: the commit that ADDED this report)
 203 / 209 - labels outside the delimiters, three classes, five books
 ========================================================================
 
@@ -137,4 +136,3 @@ RE-RUN:  python3 tools/outsidelabels.py --jobs 5
 TESTS:   tests.test_emit.T1_20_DelimiterAndOutsideClasses -- three
          tests; all three classes asserted to fire, and the
          delimiter/crossing disjointness asserted.
-2026-08-26T09:48:03Z  /  2026-08-26 11:48:03 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

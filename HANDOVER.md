@@ -165,44 +165,21 @@ measurement; a fresh pass is ~2 hours.
   dot into its stem. Count claims survive this; identity claims do
   not, so say which one you are making.
 
-## Every report carries two timestamp lines
+## Chat reports open and close with a Berlin timestamp
 
-`tools/reportstamp.py` -- `start_line()` first, `end_line()` last:
-
-    2026-08-27T08:56:07Z  /  2026-08-27 10:56:07 +02:00 (Europe/Berlin)  commit ccc61c5 +dirty
+    2026-08-27 10:56 (MESZ, +02:00)
        ... the report ...
-    2026-08-27T09:14:22Z  /  2026-08-27 11:14:22 +02:00 (Europe/Berlin)  end
+    2026-08-27 11:14 (MESZ, +02:00)
 
-The PAIR is the point: it is the only durable record of how long a
-measurement took. The harness prints "Worked for 6m 55s" and that does
-not survive being pasted, so a nine-hour run and a nine-second one
-read alike once quoted.
+CONSOLE OUTPUT ONLY. Nothing under `out/` carries a stamp -- files
+are dated by git, and stamping them was a misread that cost three
+rounds of work and displaced the measurement eleven documents were
+waiting on.
 
-BOTH CLOCKS, because each answers a different question -- UTC orders
-two reports without anyone reasoning about a changeover, local is what
-the reader's terminal shows. Carrying one and making the reader derive
-the other is where the mistake gets made.
-
-The OFFSET is derived from `ZoneInfo("Europe/Berlin")`, never written
-down: +01:00 from late October to late March, +02:00 otherwise. A
-constant is wrong for four months and wrong in the direction that
-still looks plausible.
-
-The COMMIT is the one that PRODUCED the numbers -- `HEAD` when the
-report was written -- not the commit that later contains the file.
-`+dirty` when the tree had uncommitted changes, because then the
-numbers came from code in no commit at all.
-
-RETROFITS use each report's true instant, converted to Berlin AT THAT
-INSTANT, so a January report reads +01:00. Two traps, both hit:
-
-  `git log -1 -- <file>` returns the RETROFIT commit once the retrofit
-  has touched every file, so every report ends up stamped with the
-  same hash and the same minute -- uniform, plausible, false. Use
-  `git log --diff-filter=A`, which is stable under later edits.
-
-  A retrofitted END line must say the finish time was never recorded.
-  Repeating the start instant would claim a zero-second measurement.
+The pair gives the duration, which the harness's "Worked for 6m 55s"
+line does not, because that does not survive being pasted. The offset
+follows daylight saving and the abbreviation follows it too: MEZ at
++01:00 from late October to late March, MESZ at +02:00 otherwise.
 
 ## Two sessions consume this project's output format
 

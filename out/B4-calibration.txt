@@ -1,4 +1,3 @@
-2026-08-24T19:20:41Z  /  2026-08-24 21:20:41 +02:00 (Europe/Berlin)  commit f0d80c9  (retrofitted: the commit that ADDED this report)
 
 === calibration ===================================================
 # argv: measure.py calibration --candidate-families 0 --candidates 0 --corpus /home/wkolbe/pdfdrill-library --doc None --extents-tol None --fill-max 0.1 --first-page 0 --hole-measure bbox --iou 0.5 --merge-tol 0 --min-block 200 --min-len 60 --n None --ocr-dir None --quantise 0 --seed 20260807 --split document --truth-tex None
@@ -100,4 +99,3 @@
            15.1986    19.2598     65       64      0.9846
            20.0578    49.1621     65       56      0.8615
         NOT MONOTONE in decreasing distance: 5 of 9 steps fall, worst 0.9231 -> 0.8000 at bin 5
-2026-08-24T19:20:41Z  /  2026-08-24 21:20:41 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)
