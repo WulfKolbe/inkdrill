@@ -1,0 +1,41 @@
+247 - the diagram sweep, not built
+========================================================================
+
+246 DOES NOT SEPARATE THEM, so the sweep is not built and no count is
+reported. This file exists to say that, and why, rather than to leave
+the task looking unstarted.
+
+THE MEASUREMENT: a TikZ rotation diagram against 75 display-equation
+crops from three of the five books, on the six row-occupancy
+statistics 246 asked for.
+
+    statistic     diagram   percentile   equation range
+    rows()          18.0       96.0         1 - 22
+    comps/row med    2.0        6.7         1 - 45
+    comps/row mean   5.7       21.3       2.2 - 45
+    peak/median     13.5       98.7       1.0 - 14.9
+    rows with 1      7.0       94.7         0 - 8
+    y-spread       100.0        0.0       100 - 100
+
+Every one overlaps. The equation population on its own reaches 22
+rows, peak/median 14.9 and 8 single-component rows, so no value of
+any single statistic puts the diagram outside it. The y-spread is an
+identity -- `rows()` partitions its input, so the row extent equals
+the ink extent for any input at all -- and carries no information.
+
+A COMBINATION WOULD SEPARATE AND MUST NOT BE BUILT. Three statistics
+put the diagram above the 94th percentile, so a conjunction of them
+would isolate it. It would also be fitted to ONE positive example,
+which is the objection that refused 220: a rule chosen because it
+makes the known case come out right is not a measurement. 220 failed
+by building before measuring; building here on a single instance
+would be the same failure with a measurement attached to it.
+
+WHAT WOULD MAKE THE SWEEP WORTH RUNNING: twenty hand-labelled
+diagram regions and twenty hand-labelled equation regions, then these
+six statistics over both. That labelling is exactly the unsettled
+premise 220 was refused for -- whether the not-mathematics cases are
+region-type errors or reading errors -- so the two tasks are blocked
+on the same missing thing, and it is worth doing once for both.
+
+See out/246.txt for the full measurement.

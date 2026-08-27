@@ -1,0 +1,111 @@
+246 - does row occupancy separate a TikZ diagram from a display equation?
+==========================================================================
+
+ANSWER: NO. Every statistic asked for overlaps the equation range,
+and one of them -- the y-spread -- cannot discriminate at all,
+because as defined it is an identity rather than a measurement.
+
+--------------------------------------------------------------------
+1. THE DIAGRAM
+
+The supplied standalone compiled with pdflatex and rendered at
+300 dpi: 1615 x 961 px, 22,308 ink px.
+
+    components      102
+    rows()           18
+    comps/row       min 1, median 2.0, mean 5.7, max 27
+    rows with 1      7
+    row sizes       27 24 16 13 3 2 2 2 2 2 2 1 1 1 1 1 1 1
+
+--------------------------------------------------------------------
+2. THE COMPARISON POPULATION
+
+Two single equations are not a comparison, so the diagram is measured
+against 75 display-equation crops sampled from three of the five
+books (Johnston, Mielke, Voloshin), read from MathPix's own crops so
+each is one equation and nothing else.
+
+    statistic     p10     p50     p90     range
+    components   12.0    30.0    68.0     9 - 388
+    rows()        1.0     3.0    10.0     1 - 22
+    comps/row     2.0    10.0    27.5     1 - 45   (median)
+    comps/row     3.0    12.0    27.5   2.2 - 45   (mean)
+    peak/median   1.0     1.8     7.5   1.0 - 14.9
+    rows with 1   0.0     0.0     4.0     0 - 8
+
+For reference, the two nearest single equations:
+
+    EQ0617  ink 21,234 (within 5% of the diagram)  146 comps,
+            12 rows, median 13.5/row
+    EQ0971  115 comps (within 13%)                 115 comps,
+            40 rows, median 3.0/row
+
+--------------------------------------------------------------------
+3. WHERE THE DIAGRAM FALLS -- EVERY STATISTIC OVERLAPS
+
+    statistic     diagram   percentile   equation range
+    rows()          18.0       96.0         1 - 22
+    comps/row med    2.0        6.7         1 - 45
+    comps/row mean   5.7       21.3       2.2 - 45
+    peak/median     13.5       98.7       1.0 - 14.9
+    rows with 1      7.0       94.7         0 - 8
+    y-spread       100.0        0.0       100 - 100
+
+The diagram sits in the tail on three statistics -- many rows, a very
+uneven row profile, many single-component rows -- and at the LOW end
+on median occupancy. But the equation population reaches 22 rows,
+peak/median 14.9, and 8 single-component rows on its own. There is no
+value of any one statistic that puts the diagram outside the
+equations.
+
+--------------------------------------------------------------------
+4. THE Y-SPREAD IS AN IDENTITY, NOT A MEASUREMENT
+
+Measured as the row extent over the ink extent it is 100.0% for the
+diagram and for all 75 equations, minimum and maximum alike.
+
+That is not a finding about the corpus. `rows()` PARTITIONS its
+input -- G1, every glyph lands in exactly one row -- so the topmost
+row's top is the topmost glyph's top and the bottom row's bottom is
+the bottom glyph's bottom. The ratio is 1 by construction, for any
+input whatsoever.
+
+Measured instead against the IMAGE height it reads 73% for the
+diagram against 95-96% for the two nearest equations, which looks
+like a separation and is not: the diagram is a `standalone` with
+`border=10pt` and the crops are cut tight to their ink. That number
+measures the border setting in the supplied tex.
+
+Both readings are reported because the second is the one a reader
+would reach for and it is a trap.
+
+--------------------------------------------------------------------
+5. WHY NO COMBINATION IS PROPOSED
+
+Three of the six statistics put the diagram above the 94th
+percentile. A rule combining them would separate this diagram from
+these equations -- and it would be fitted to ONE positive example.
+
+That is the objection this project raised against its own work twice
+this week: a threshold chosen because it makes the known case come
+out right is not a measurement, and 220 was refused for building a
+signature before its premise was settled. One diagram cannot
+establish a profile, and the corpus contains no labelled set of
+diagram regions to draw more from -- that labelling is what 220's
+unsettled premise was about.
+
+WHAT WOULD MAKE THIS ANSWERABLE: twenty diagram regions and twenty
+equation regions, both labelled by hand, and then the same six
+statistics. Until that exists, any separation reported here is a
+statement about one figure.
+
+--------------------------------------------------------------------
+6. POPULATION
+
+One TikZ standalone, compiled here at 300 dpi. 75 display-equation
+crops from three books, sampled with seed 11, each a MathPix crop of
+one equation. Crops smaller than 8 components excluded (none of the
+75). No rate is claimed and none should be read from this.
+
+RE-RUN: pdflatex the supplied tex, render at 300 dpi, then
+`nest.ink_only` and `mathstruct.rows` on it and on the crops.
