@@ -1,4 +1,4 @@
-2026-08-26 14:21:04 +02:00  commit 539bd9f  (retrofitted: the commit that ADDED this report)
+2026-08-26T12:21:04Z  /  2026-08-26 14:21:04 +02:00 (Europe/Berlin)  commit 539bd9f  (retrofitted: the commit that ADDED this report)
 222 - corpus sweep: ring labels against ring topology
 ========================================================================
 
@@ -150,3 +150,4 @@ knowing how many rings are in the glyph.
 
   python3 tools/ringscan.py cand.tsv        # 1,101 documents -> rows
   python3 tools/ringmeasure.py cand.tsv res.tsv
+2026-08-26T12:21:04Z  /  2026-08-26 14:21:04 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

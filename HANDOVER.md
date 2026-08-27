@@ -165,37 +165,44 @@ measurement; a fresh pass is ~2 hours.
   dot into its stem. Count claims survive this; identity claims do
   not, so say which one you are making.
 
-## Every report opens with a UTC timestamp and a commit hash
+## Every report carries two timestamp lines
 
-`tools/reportstamp.py`, one line, first line, before any prose:
+`tools/reportstamp.py` -- `start_line()` first, `end_line()` last:
 
-    2026-08-27 10:56:07 +02:00  commit ccc61c5 +dirty
+    2026-08-27T08:56:07Z  /  2026-08-27 10:56:07 +02:00 (Europe/Berlin)  commit ccc61c5 +dirty
+       ... the report ...
+    2026-08-27T09:14:22Z  /  2026-08-27 11:14:22 +02:00 (Europe/Berlin)  end
 
-LOCAL time with the offset shown, and the offset is DERIVED from the
-system zone by `astimezone()`, never written as a constant: Berlin is
-+01:00 from late October to late March and +02:00 the rest of the
-year, so a hard-coded `+02:00` is wrong for four months and wrong in
-the direction that still looks plausible.
+The PAIR is the point: it is the only durable record of how long a
+measurement took. The harness prints "Worked for 6m 55s" and that does
+not survive being pasted, so a nine-hour run and a nine-second one
+read alike once quoted.
 
-The commit is the one that PRODUCED the numbers -- `HEAD` when the
+BOTH CLOCKS, because each answers a different question -- UTC orders
+two reports without anyone reasoning about a changeover, local is what
+the reader's terminal shows. Carrying one and making the reader derive
+the other is where the mistake gets made.
+
+The OFFSET is derived from `ZoneInfo("Europe/Berlin")`, never written
+down: +01:00 from late October to late March, +02:00 otherwise. A
+constant is wrong for four months and wrong in the direction that
+still looks plausible.
+
+The COMMIT is the one that PRODUCED the numbers -- `HEAD` when the
 report was written -- not the commit that later contains the file.
-Those differ by one, and the difference is the difference between
-"which code measured this" and "which code shipped this"; only the
-first is re-runnable. `+dirty` when the tree had uncommitted changes,
-because then the numbers came from code in no commit at all.
+`+dirty` when the tree had uncommitted changes, because then the
+numbers came from code in no commit at all.
 
-Existing reports were retrofitted with the commit that ADDED each,
-found by `git log --diff-filter=A`. **Not `git log -1`** -- after the
-first retrofit that returns the RETROFIT commit, so every report ends
-up stamped with the same hash and the same minute: uniform,
-plausible, and false. It happened, and the repair is why the filter
-is named here.
+RETROFITS use each report's true instant, converted to Berlin AT THAT
+INSTANT, so a January report reads +01:00. Two traps, both hit:
 
-The reason is not tidiness. A report arriving after a newer one is
-otherwise indistinguishable from a current one, and that happened
-twice in one session: a three-builds-stale figure quoted for three
-exchanges, and a peer's audit that attributed a displacement to the
-wrong defect because the artifact it read had been superseded.
+  `git log -1 -- <file>` returns the RETROFIT commit once the retrofit
+  has touched every file, so every report ends up stamped with the
+  same hash and the same minute -- uniform, plausible, false. Use
+  `git log --diff-filter=A`, which is stable under later edits.
+
+  A retrofitted END line must say the finish time was never recorded.
+  Repeating the start instant would claim a zero-second measurement.
 
 ## Two sessions consume this project's output format
 

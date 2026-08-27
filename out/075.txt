@@ -1,4 +1,4 @@
-2026-08-21 13:54:10 +02:00  commit 2b2e816  (retrofitted: the commit that ADDED this report)
+2026-08-21T11:54:10Z  /  2026-08-21 13:54:10 +02:00 (Europe/Berlin)  commit 2b2e816  (retrofitted: the commit that ADDED this report)
 075 - deletion of the files 074 marked unread
 ==========================================================================
 
@@ -55,3 +55,4 @@ NOT TOUCHED, and not eligible: the session's deliverables in
 VERIFIED AFTER DELETION:
   scratchpad now      1377M (p13cmp + rescue only)
   repo working tree   clean, nothing deleted inside it
+2026-08-21T11:54:10Z  /  2026-08-21 13:54:10 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

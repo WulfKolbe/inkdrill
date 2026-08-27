@@ -1,4 +1,4 @@
-2026-08-21 10:11:01 +02:00  commit 79fc284  (retrofitted: the commit that ADDED this report)
+2026-08-21T08:11:01Z  /  2026-08-21 10:11:01 +02:00 (Europe/Berlin)  commit 79fc284  (retrofitted: the commit that ADDED this report)
 053 - demoted rows excluded from the findings file
 ==========================================================================
 
@@ -69,3 +69,4 @@ because the content was never on the page. A defect that survives
 BECAUSE the number looks impressive: distance 922 reads as the
 strongest possible evidence, and the placeholder is stable across
 builds, so every consistency check confirms it.
+2026-08-21T08:11:01Z  /  2026-08-21 10:11:01 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

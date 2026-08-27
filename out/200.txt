@@ -1,4 +1,4 @@
-2026-08-26 09:59:58 +02:00  commit 8998fd5  (retrofitted: the commit that ADDED this report)
+2026-08-26T07:59:58Z  /  2026-08-26 09:59:58 +02:00 (Europe/Berlin)  commit 8998fd5  (retrofitted: the commit that ADDED this report)
 200 - the flavour/colour matrix: rules, the merged cross, and the labels
 ========================================================================
 
@@ -131,3 +131,4 @@ RE-RUN:
   gs -q -dNOPAUSE -dBATCH -sDEVICE=png16m -r300 -dFirstPage=346 \
      -dLastPage=346 -sOutputFile=p346.png "<document>.pdf"
   then crop (308,2032)-(1363,2395) and read `emit.free_rules`.
+2026-08-26T07:59:58Z  /  2026-08-26 09:59:58 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

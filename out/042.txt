@@ -1,4 +1,4 @@
-2026-08-21 08:59:07 +02:00  commit a1fb36b  (retrofitted: the commit that ADDED this report)
+2026-08-21T06:59:07Z  /  2026-08-21 08:59:07 +02:00 (Europe/Berlin)  commit a1fb36b  (retrofitted: the commit that ADDED this report)
 042 - compare on the rows out/041.txt flags as text-side differences
 ==============================================================================
 
@@ -101,3 +101,4 @@ CORRELATION BETWEEN THE TWO INSTRUMENTS
   large on BOTH (EQ0049 SLT 6 / ink 52 / compdelta 27, EQ0050 SLT 3 /
   ink 36 / compdelta 21) has a disagreement visible in the source AND
   on the page, which is the strongest evidence either side can offer.
+2026-08-21T06:59:07Z  /  2026-08-21 08:59:07 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

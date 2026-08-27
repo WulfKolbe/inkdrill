@@ -1,4 +1,4 @@
-2026-08-26 10:19:41 +02:00  commit cda653b  (retrofitted: the commit that ADDED this report)
+2026-08-26T08:19:41Z  /  2026-08-26 10:19:41 +02:00 (Europe/Berlin)  commit cda653b  (retrofitted: the commit that ADDED this report)
 201 - the component split: bracket versus rule crossing
 ========================================================================
 
@@ -136,3 +136,4 @@ RE-RUN:  the two crops named in out/196.txt and out/200.txt, then
          `emit.crossing_rules(mask, region)` per ink region.
 TESTS:   tests.test_emit.T1_19_CrossingRulesSplit -- eight tests, all
          seven guards mutated to a failure.
+2026-08-26T08:19:41Z  /  2026-08-26 10:19:41 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

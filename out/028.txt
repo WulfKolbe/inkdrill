@@ -1,4 +1,4 @@
-2026-08-20 16:46:18 +02:00  commit 143bbe9  (retrofitted: the commit that ADDED this report)
+2026-08-20T14:46:18Z  /  2026-08-20 16:46:18 +02:00 (Europe/Berlin)  commit 143bbe9  (retrofitted: the commit that ADDED this report)
 028 trailing punctuation profile -- bh2, BH1org_OCR, BH3FR, WDorg4
 population: the first 50 EQ rows whose LaTeX ends in one of '.,;:' and that have a scan crop
 measured on the CROP itself (not the report raster), both figures normalised by the crop's median glyph height
@@ -100,3 +100,4 @@ PROFILE (necessary, not sufficient):
     bh2_EQ0103 (h 5.83, b +1.17) -- a 12x70 px matrix BRACKET, not a period
 
   So a rule that drops the rightmost component when it falls in the band will drop the wrong component on an unmeasured fraction of rows: the band admits an underline fragment as readily as a period. 029 must report its firing count, and 030's distribution is what tests whether the trim helped or hurt.
+2026-08-20T14:46:18Z  /  2026-08-20 16:46:18 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

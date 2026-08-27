@@ -1,45 +1,52 @@
-"""The provenance line every report opens with (240).
+"""The two provenance lines every report carries (242).
 
-    2026-08-27 10:56:07 +02:00  commit ccc61c5 +dirty
+    2026-08-27T08:56:07Z  /  2026-08-27 10:56:07 +02:00 (Europe/Berlin)  commit ccc61c5 +dirty
+       ... the report ...
+    2026-08-27T09:14:22Z  /  2026-08-27 11:14:22 +02:00 (Europe/Berlin)  end
 
-ONE LINE, FIRST LINE, before any prose. A report arriving after a
-newer one is otherwise indistinguishable from a current one, and that
-happened twice in one session: a three-builds-stale figure was quoted
-for three exchanges, and a peer's audit attributed a displacement to
-the wrong defect because the artifact it read had been superseded.
+FIRST LINE when the report STARTED, LAST LINE when it FINISHED. The
+pair is the only durable record of how long a measurement took: the
+harness prints "Worked for 6m 55s" and that does not survive being
+pasted, so a report that took nine hours and one that took nine
+seconds are otherwise indistinguishable once they are quoted.
+
+BOTH CLOCKS, because each answers a different question. UTC orders
+two reports against each other without anyone reasoning about a
+changeover; local time is what the reader's terminal shows and what
+they can check against their own memory of the afternoon. Carrying
+one and making the reader derive the other is where the mistake gets
+made.
+
+THE OFFSET IS DERIVED, NEVER WRITTEN DOWN. `ZoneInfo("Europe/Berlin")`
+gives +02:00 now and +01:00 from late October to late March. A
+hard-coded +02:00 is wrong for four months of the year and wrong in
+the direction that still looks plausible -- the reader sees an offset,
+believes it, and is an hour out.
 
 THE COMMIT IS THE ONE THAT PRODUCED THE NUMBERS -- `HEAD` when the
 report was written -- not the commit that later contains the file.
-Those differ by exactly one commit and the difference matters: the
-question a reader asks is "which code measured this", and the
-containing commit answers "which code shipped this", which is a
-different thing and one they cannot re-run.
-
-`+dirty` when the working tree has uncommitted changes, because then
-the numbers came from code that is in no commit at all and the hash
-alone would overstate what is reproducible.
-
-LOCAL TIME WITH THE OFFSET SHOWN, not UTC. The reader works in
-Europe/Berlin and a report timed 08:56Z next to a terminal showing
-10:56 costs a mental subtraction every time. The offset is what keeps
-that unambiguous, and it is DERIVED FROM THE SYSTEM ZONE via
-`astimezone()` -- never written as a constant, because Berlin is
-+01:00 from late October to late March and +02:00 the rest of the
-year. A hard-coded `+02:00` would be wrong for four months and wrong
-in the direction that still looks plausible.
+Those differ by one, and the difference is "which code measured this"
+against "which code shipped this"; only the first is re-runnable.
+`+dirty` when the tree had uncommitted changes, because then the
+numbers came from code in no commit at all.
 """
 import datetime as _dt
 import pathlib as _pl
 import subprocess as _sp
 
+try:
+    from zoneinfo import ZoneInfo as _ZI
+    BERLIN = _ZI("Europe/Berlin")
+except Exception:                        # pragma: no cover
+    BERLIN = None
 
-def stamp(when=None) -> str:
-    """The line. `when` is for tests; default is now, local."""
+
+def _head():
     root = _pl.Path(__file__).resolve().parent.parent
     try:
         h = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=root,
-                    capture_output=True, text=True, check=True
-                    ).stdout.strip()
+                    capture_output=True, text=True,
+                    check=True).stdout.strip()
     except Exception:
         h = "unknown"
     try:
@@ -48,38 +55,46 @@ def stamp(when=None) -> str:
                              check=True).stdout.strip())
     except Exception:
         dirty = False
-    t = when or _dt.datetime.now().astimezone()
-    if t.tzinfo is None:                   # a naive `when` is local
-        t = t.astimezone()
-    # isoformat carries the offset as +HH:MM; strftime's %z gives
-    # +HHMM and %:z is 3.12+, and this package targets 3.7 syntax.
-    iso = t.isoformat(timespec="seconds")
+    return h, dirty
+
+
+def _both(t) -> str:
+    """`<utc>Z  /  <berlin> +HH:MM (Europe/Berlin)` for one instant."""
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=_dt.timezone.utc)
+    u = t.astimezone(_dt.timezone.utc)
+    b = t.astimezone(BERLIN) if BERLIN else u
+    iso = b.isoformat(timespec="seconds")
     date, rest = iso.split("T")
-    # split the offset off the clock time: it begins at the last sign,
-    # and it can be negative, so scanning from the right is what makes
-    # this work for a zone west of Greenwich as well as east of it.
+    # the offset begins at the LAST sign: a zone west of Greenwich
+    # puts a `-` there and splitting from the left would cut the date
     cut = max(rest.rfind("+"), rest.rfind("-"))
-    clock, offset = rest[:cut], rest[cut:]
-    return (f"{date} {clock} {offset}  commit {h}"
-            + (" +dirty" if dirty else ""))
+    return (f"{u.strftime('%Y-%m-%dT%H:%M:%SZ')}  /  "
+            f"{date} {rest[:cut]} {rest[cut:]} (Europe/Berlin)")
 
 
-def prepend(path) -> str:
-    """Put the line at the top of an existing report, once."""
+def start_line(t=None) -> str:
+    h, dirty = _head()
+    t = t or _dt.datetime.now(_dt.timezone.utc)
+    return f"{_both(t)}  commit {h}" + (" +dirty" if dirty else "")
+
+
+def end_line(t=None, note="end") -> str:
+    t = t or _dt.datetime.now(_dt.timezone.utc)
+    return f"{_both(t)}  {note}"
+
+
+def wrap(path, started=None, note="end") -> None:
+    """Put both lines around an existing report body, once."""
     p = _pl.Path(path)
     body = p.read_text()
-    first = body.split("\n", 1)[0]
-    if first.startswith("20") and "commit " in first:
-        return first                       # already stamped
-    line = stamp()
-    p.write_text(line + "\n" + body)
-    return line
+    lines = body.split("\n")
+    if lines and "  /  " in lines[0] and "commit " in lines[0]:
+        return                                  # already wrapped
+    p.write_text(start_line(started) + "\n" + body.rstrip("\n")
+                 + "\n" + end_line(note=note) + "\n")
 
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1:
-        for a in sys.argv[1:]:
-            print(f"{a}: {prepend(a)}")
-    else:
-        print(stamp())
+    print(start_line())
+    print(end_line())

@@ -1,4 +1,4 @@
-2026-08-21 13:56:44 +02:00  commit bc0c823  (retrofitted: the commit that ADDED this report)
+2026-08-21T11:56:44Z  /  2026-08-21 13:56:44 +02:00 (Europe/Berlin)  commit bc0c823  (retrofitted: the commit that ADDED this report)
 076 - docs/ audit: last update, and whether the claims match the code
 ==========================================================================
 
@@ -70,3 +70,4 @@ RECOMMENDATION (not done here; 076 says audit, not fix)
      this project's convention is to strike through, not overwrite.
   3. units.md  add the CLI surface, or state explicitly that the
      subcommands live in state.md and units.md covers units only.
+2026-08-21T11:56:44Z  /  2026-08-21 13:56:44 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

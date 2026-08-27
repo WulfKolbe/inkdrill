@@ -278,19 +278,22 @@ class S7_1_StaleArtifactGuard(unittest.TestCase):
         self.assertNotIn("OLDER", msg)
 
 
-class T242_ReportStampIsLocalWithADerivedOffset(unittest.TestCase):
-    """242: the report stamp is LOCAL time with the offset shown, and
-    the offset follows daylight saving rather than being written down.
+class T242_ReportStampCarriesBothClocksAndBothEnds(unittest.TestCase):
+    """242: two lines per report, each carrying UTC and Berlin local.
 
-    A hard-coded `+02:00` is wrong for the four months Berlin spends
-    at +01:00, and wrong in the direction that still looks plausible
-    -- the reader sees an offset, believes it, and is an hour out.
-    Both sides of the changeover are asserted, so a constant cannot
-    pass.
+    The pair is the durable record of DURATION -- the harness's
+    "Worked for 6m 55s" does not survive being pasted, so without it a
+    nine-hour measurement and a nine-second one read alike once
+    quoted.
+
+    Both sides of the changeover are asserted so a hard-coded offset
+    cannot pass: Berlin is +01:00 from late October to late March and
+    +02:00 the rest of the year, and a constant would be wrong for
+    four months in the direction that still looks plausible.
     """
 
     @staticmethod
-    def _stamp():
+    def _mod():
         import importlib.util, pathlib, sys
         p = (pathlib.Path(__file__).resolve().parent.parent
              / "tools" / "reportstamp.py")
@@ -302,39 +305,57 @@ class T242_ReportStampIsLocalWithADerivedOffset(unittest.TestCase):
 
     def test_the_offset_follows_daylight_saving(self):
         import datetime
-        from zoneinfo import ZoneInfo
-        s = self._stamp().stamp
-        B = ZoneInfo("Europe/Berlin")
-        winter = s(datetime.datetime(2026, 1, 15, 10, 56, 7, tzinfo=B))
-        summer = s(datetime.datetime(2026, 7, 15, 10, 56, 7, tzinfo=B))
-        self.assertIn("2026-01-15 10:56:07 +01:00", winter)
-        self.assertIn("2026-07-15 10:56:07 +02:00", summer)
-        self.assertNotEqual(winter.split("commit")[0],
-                            summer.split("commit")[0])
+        m = self._mod()
+        utc = datetime.timezone.utc
+        winter = m.start_line(datetime.datetime(2026, 1, 15, 9, 56, 7,
+                                                tzinfo=utc))
+        summer = m.start_line(datetime.datetime(2026, 7, 15, 9, 56, 7,
+                                                tzinfo=utc))
+        self.assertIn("2026-01-15T09:56:07Z", winter)
+        self.assertIn("2026-01-15 10:56:07 +01:00 (Europe/Berlin)", winter)
+        self.assertIn("2026-07-15T09:56:07Z", summer)
+        self.assertIn("2026-07-15 11:56:07 +02:00 (Europe/Berlin)", summer)
 
-    def test_a_negative_offset_keeps_its_sign_and_its_colon(self):
-        """The offset is split off the clock by scanning from the
-        RIGHT, because a zone west of Greenwich puts a `-` there and
-        splitting from the left would cut the date."""
+    def test_the_same_instant_renders_both_clocks(self):
+        """UTC and local must be the SAME moment, not two readings --
+        in July that is a two-hour difference on the clock and zero
+        difference in the instant."""
         import datetime
-        from zoneinfo import ZoneInfo
-        s = self._stamp().stamp
-        t = datetime.datetime(2026, 7, 15, 10, 56, 7,
-                              tzinfo=ZoneInfo("America/New_York"))
-        self.assertIn("2026-07-15 10:56:07 -04:00", s(t))
+        m = self._mod()
+        t = datetime.datetime(2026, 7, 15, 9, 0, 0,
+                              tzinfo=datetime.timezone.utc)
+        line = m.end_line(t)
+        self.assertIn("2026-07-15T09:00:00Z", line)
+        self.assertIn("2026-07-15 11:00:00 +02:00", line)
 
-    def test_the_default_is_local_and_tz_aware(self):
-        """No `when` must still carry an offset -- a naive local time
-        is exactly the ambiguity the offset exists to remove."""
-        import re
-        line = self._stamp().stamp()
-        self.assertRegex(
-            line,
-            r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}"
-            r"  commit \S+")
+    def test_the_commit_is_on_the_first_line_only(self):
+        m = self._mod()
+        self.assertIn("commit ", m.start_line())
+        self.assertNotIn("commit ", m.end_line())
+        self.assertTrue(m.end_line().endswith("end"))
 
-    def test_a_naive_when_is_read_as_local(self):
+    def test_wrap_adds_both_lines_and_is_idempotent(self):
+        import tempfile, pathlib as pl
+        m = self._mod()
+        d = pl.Path(tempfile.mkdtemp())
+        f = d / "r.txt"
+        f.write_text("body line one\nbody line two\n")
+        m.wrap(f)
+        first = f.read_text().split("\n")
+        self.assertIn("commit ", first[0])
+        self.assertTrue(first[-2].endswith("end"))
+        self.assertIn("body line one", f.read_text())
+        before = f.read_text()
+        m.wrap(f)
+        self.assertEqual(before, f.read_text())
+
+    def test_a_naive_instant_is_read_as_utc_not_local(self):
+        """A naive datetime here means UTC, because every stored
+        timestamp this retrofits came from `git log %aI`. Reading it
+        as local would shift every retrofitted report by the offset."""
         import datetime
-        s = self._stamp().stamp
-        naive = datetime.datetime(2026, 7, 15, 10, 56, 7)
-        self.assertRegex(s(naive), r"10:56:07 [+-]\d{2}:\d{2}")
+        m = self._mod()
+        naive = datetime.datetime(2026, 7, 15, 9, 0, 0)
+        self.assertIn("2026-07-15T09:00:00Z", m.end_line(naive))
+
+

@@ -1,4 +1,4 @@
-2026-08-26 07:28:04 +02:00  commit 42a861f  (retrofitted: the commit that ADDED this report)
+2026-08-26T05:28:04Z  /  2026-08-26 07:28:04 +02:00 (Europe/Berlin)  commit 42a861f  (retrofitted: the commit that ADDED this report)
 196 - ink.rules[] inside a matrix bbox
 ========================================================================
 
@@ -143,3 +143,4 @@ RE-RUN:
   gs -q -dNOPAUSE -dBATCH -sDEVICE=png16m -r300 -dFirstPage=81 \
      -dLastPage=81 -sOutputFile=p81.png "<document>.pdf"
   then crop (454,1511)-(1370,1630) and read `emit.free_rules`.
+2026-08-26T05:28:04Z  /  2026-08-26 07:28:04 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)

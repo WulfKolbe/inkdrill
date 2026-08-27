@@ -1,4 +1,4 @@
-2026-08-21 14:26:33 +02:00  commit 49b2e87  (retrofitted: the commit that ADDED this report)
+2026-08-21T12:26:33Z  /  2026-08-21 14:26:33 +02:00 (Europe/Berlin)  commit 49b2e87  (retrofitted: the commit that ADDED this report)
 A/B per-cell diff at 300 dpi
   PRE  /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/abrebuild/0902.0431-PRE/report.pdf
   POST /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/abrebuild/0902.0431-POST/report.pdf
@@ -44,3 +44,4 @@ cells DIFFERING: 53
   cell #1686 (rendered): 75/40/10/3/7 -> 75/36/10/4/6
   cell #1694 (rendered): 50/14/10/9/1 -> 50/19/10/9/1
   cell #1776 (rendered): 56/11/5/5/0 -> 55/11/5/5/0
+2026-08-21T12:26:33Z  /  2026-08-21 14:26:33 +02:00 (Europe/Berlin)  end (retrofitted: finish time not recorded)
