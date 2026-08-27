@@ -276,3 +276,65 @@ class S7_1_StaleArtifactGuard(unittest.TestCase):
         self.assertIn("no report.pdf", msg)
         self.assertIn("doc", msg)
         self.assertNotIn("OLDER", msg)
+
+
+class T242_ReportStampIsLocalWithADerivedOffset(unittest.TestCase):
+    """242: the report stamp is LOCAL time with the offset shown, and
+    the offset follows daylight saving rather than being written down.
+
+    A hard-coded `+02:00` is wrong for the four months Berlin spends
+    at +01:00, and wrong in the direction that still looks plausible
+    -- the reader sees an offset, believes it, and is an hour out.
+    Both sides of the changeover are asserted, so a constant cannot
+    pass.
+    """
+
+    @staticmethod
+    def _stamp():
+        import importlib.util, pathlib, sys
+        p = (pathlib.Path(__file__).resolve().parent.parent
+             / "tools" / "reportstamp.py")
+        spec = importlib.util.spec_from_file_location("_rs", p)
+        m = importlib.util.module_from_spec(spec)
+        sys.modules["_rs"] = m
+        spec.loader.exec_module(m)
+        return m
+
+    def test_the_offset_follows_daylight_saving(self):
+        import datetime
+        from zoneinfo import ZoneInfo
+        s = self._stamp().stamp
+        B = ZoneInfo("Europe/Berlin")
+        winter = s(datetime.datetime(2026, 1, 15, 10, 56, 7, tzinfo=B))
+        summer = s(datetime.datetime(2026, 7, 15, 10, 56, 7, tzinfo=B))
+        self.assertIn("2026-01-15 10:56:07 +01:00", winter)
+        self.assertIn("2026-07-15 10:56:07 +02:00", summer)
+        self.assertNotEqual(winter.split("commit")[0],
+                            summer.split("commit")[0])
+
+    def test_a_negative_offset_keeps_its_sign_and_its_colon(self):
+        """The offset is split off the clock by scanning from the
+        RIGHT, because a zone west of Greenwich puts a `-` there and
+        splitting from the left would cut the date."""
+        import datetime
+        from zoneinfo import ZoneInfo
+        s = self._stamp().stamp
+        t = datetime.datetime(2026, 7, 15, 10, 56, 7,
+                              tzinfo=ZoneInfo("America/New_York"))
+        self.assertIn("2026-07-15 10:56:07 -04:00", s(t))
+
+    def test_the_default_is_local_and_tz_aware(self):
+        """No `when` must still carry an offset -- a naive local time
+        is exactly the ambiguity the offset exists to remove."""
+        import re
+        line = self._stamp().stamp()
+        self.assertRegex(
+            line,
+            r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}"
+            r"  commit \S+")
+
+    def test_a_naive_when_is_read_as_local(self):
+        import datetime
+        s = self._stamp().stamp
+        naive = datetime.datetime(2026, 7, 15, 10, 56, 7)
+        self.assertRegex(s(naive), r"10:56:07 [+-]\d{2}:\d{2}")

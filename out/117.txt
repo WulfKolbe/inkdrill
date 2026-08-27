@@ -1,4 +1,4 @@
-2026-08-22T18:17:25Z  commit a89463d  (retrofitted: the commit that ADDED this report)
+2026-08-22 20:17:25 +02:00  commit a89463d  (retrofitted: the commit that ADDED this report)
 117 - do the components a scan is MISSING sit next to a rule?
 ==============================================================
 

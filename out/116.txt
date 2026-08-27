@@ -1,4 +1,4 @@
-2026-08-22T17:11:27Z  commit 5ec74bf  (retrofitted: the commit that ADDED this report)
+2026-08-22 19:11:27 +02:00  commit 5ec74bf  (retrofitted: the commit that ADDED this report)
 116 - rule context: what a rule DOES, from the ink around it
 ==============================================================
 

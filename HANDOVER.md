@@ -169,7 +169,13 @@ measurement; a fresh pass is ~2 hours.
 
 `tools/reportstamp.py`, one line, first line, before any prose:
 
-    2026-08-27T08:56:07Z  commit ccc61c5  +dirty
+    2026-08-27 10:56:07 +02:00  commit ccc61c5 +dirty
+
+LOCAL time with the offset shown, and the offset is DERIVED from the
+system zone by `astimezone()`, never written as a constant: Berlin is
++01:00 from late October to late March and +02:00 the rest of the
+year, so a hard-coded `+02:00` is wrong for four months and wrong in
+the direction that still looks plausible.
 
 The commit is the one that PRODUCED the numbers -- `HEAD` when the
 report was written -- not the commit that later contains the file.
@@ -178,8 +184,12 @@ Those differ by one, and the difference is the difference between
 first is re-runnable. `+dirty` when the tree had uncommitted changes,
 because then the numbers came from code in no commit at all.
 
-Existing reports were retrofitted from `git log` with the commit that
-ADDED each, and say so in the line rather than borrowing today's date.
+Existing reports were retrofitted with the commit that ADDED each,
+found by `git log --diff-filter=A`. **Not `git log -1`** -- after the
+first retrofit that returns the RETROFIT commit, so every report ends
+up stamped with the same hash and the same minute: uniform,
+plausible, and false. It happened, and the repair is why the filter
+is named here.
 
 The reason is not tidiness. A report arriving after a newer one is
 otherwise indistinguishable from a current one, and that happened
