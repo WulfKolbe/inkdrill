@@ -1,3 +1,4 @@
+2026-08-26T12:07:18Z  commit 960ae02  (retrofitted: the commit that ADDED this report)
 218 - does topology separate a slashed zero from an O?
 ========================================================================
 

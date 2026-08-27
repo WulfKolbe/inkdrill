@@ -1,3 +1,4 @@
+2026-08-26T05:28:04Z  commit 42a861f  (retrofitted: the commit that ADDED this report)
 196 - ink.rules[] inside a matrix bbox
 ========================================================================
 

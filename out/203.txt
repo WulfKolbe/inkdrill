@@ -1,3 +1,4 @@
+2026-08-26T09:48:03Z  commit 9559437  (retrofitted: the commit that ADDED this report)
 203 / 209 - labels outside the delimiters, three classes, five books
 ========================================================================
 

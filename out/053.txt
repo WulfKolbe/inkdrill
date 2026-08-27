@@ -1,3 +1,4 @@
+2026-08-21T08:11:01Z  commit 79fc284  (retrofitted: the commit that ADDED this report)
 053 - demoted rows excluded from the findings file
 ==========================================================================
 

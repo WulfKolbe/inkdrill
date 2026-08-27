@@ -1,3 +1,4 @@
+2026-08-26T15:04:43Z  commit 19236cb  (retrofitted: the commit that ADDED this report)
 225 - open-task audit: what has no result file and no commit
 ========================================================================
 

@@ -1,3 +1,4 @@
+2026-08-20T17:32:02Z  commit 09f3050  (retrofitted: the commit that ADDED this report)
 A/B per-cell diff at 300 dpi
   PRE  /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/ab_0902.0431/PRE/report.pdf
   POST /tmp/claude-1000/-home-wkolbe-MX-PDFDRILL/ae99387a-8fcf-4b96-b9d9-5dc00cc6f8da/scratchpad/ab_0902.0431/POST/report.pdf

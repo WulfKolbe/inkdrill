@@ -1,3 +1,4 @@
+2026-08-21T11:56:44Z  commit bc0c823  (retrofitted: the commit that ADDED this report)
 076 - docs/ audit: last update, and whether the claims match the code
 ==========================================================================
 

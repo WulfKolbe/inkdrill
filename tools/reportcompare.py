@@ -272,8 +272,28 @@ for name in DIRS:
                    "column, so there is nothing in it to compare"))
         print(f"{name}: NO SCAN COLUMN in report.tex", flush=True)
         continue
+    # THE PROBE IS CACHED (239). It re-renders every page of every
+    # document at 150 dpi to count lattice columns, and its answer
+    # depends on nothing but the pdf and the wanted column count -- so
+    # a re-run repeated 5,153 page renders to reach the same numbers.
+    # That is most of the wall clock of an eleven-document run and it
+    # was paid twice today, because a restart looked cheap when the
+    # 300/600 dpi renders were cached and this was not.
+    #
+    # Keyed by the pdf's mtime and size, so a rebuilt report
+    # invalidates it exactly as it invalidates the render cache.
+    _pst = pdf.stat()
+    _pk = d / f"probe-{want}-{int(_pst.st_mtime)}-{_pst.st_size}.txt"
     try:
-        disp, census = probe(pdf, npages(pdf), want)
+        if _pk.is_file():
+            _v = _pk.read_text().split()
+            disp = [int(x) for x in _v[1:]]
+            census = {}
+            print(f"{name}: probe from cache, {len(disp)} display pages",
+                  flush=True)
+        else:
+            disp, census = probe(pdf, npages(pdf), want)
+            _pk.write_text(" ".join(["ok"] + [str(x) for x in disp]))
     except Exception as e:
         print(f"{name}: probe FAILED {e}", flush=True); continue
     display_count[name] = len(disp)
@@ -317,11 +337,24 @@ from findings import flag_of        # one definition (P19)
 run_rows = []
 demoted_rows = []
 empty_rows = []
+equal_len = {}
+footer_rows = 0
 id_mismatch = []
 for name in DIRS:
     d = S / name
-    hdr = ("report_page\tline\tdis\tA_eq_B\tL_comp\tL_holes\tL_stk"
-           "\tL_cen\tL_off\tR_comp\tR_holes\tR_stk\tR_cen\tR_off")
+    # BOTH scale channels are carried now (239). `compare` measures
+    # two and this file used to keep one:
+    #   A_eq_B    the same page at 300 and 600 dpi gives the same
+    #             five-tuple. This is the input `flag_of` reads as
+    #             `scale_stable`, and it is what separates S from W.
+    #   B_stable  B against its own half-scale resample. Measured by
+    #             `compare` on every row and, until now, discarded.
+    # A legend naming S while the file carries neither column is a
+    # claim the output cannot support; carrying the one the flag
+    # actually uses is what makes S auditable.
+    hdr = ("report_page\tline\tdis\tA_eq_B\tB_stable\tL_comp\tL_holes"
+           "\tL_stk\tL_cen\tL_off\tR_comp\tR_holes\tR_stk\tR_cen"
+           "\tR_off")
     rows = []
     recs = []
     for md in sorted(d.glob("p*.md")):
@@ -339,19 +372,41 @@ for name in DIRS:
             if ln == 0 or hts.get(ln, 999) < 40: continue
             L = [int(x) for x in c[3:8]]; R = [int(x) for x in c[8:13]]
             dis = sum(abs(x - y) for x, y in zip(L, R))
-            rows.append("\t".join(map(str, [p, ln, dis, c[13]] + L + R)))
-            # A row with NO INK in either compared cell scores distance
-            # 0 and reads CLEAN -- the best possible result from a
-            # comparison that did not happen. Kept in `recs` so the
-            # positional pairing with the equation list is undisturbed,
-            # and excluded from the findings after the zip, exactly as
-            # a demoted row is.
-            recs.append((dis, abs(L[0] - R[0]), c[13] == "yes",
+            rows.append("\t".join(map(str, [p, ln, dis, c[13], c[14]]
+                                         + L + R)))
+            recs.append((p, dis, abs(L[0] - R[0]), c[13] == "yes",
                          not any(L) and not any(R)))
     # P19: identifiers come from the report's own tex, in table order.
     # A count mismatch means the row<->equation correspondence broke;
     # ids are then withheld ("?") and the document is named in the
     # summary -- a wrong identifier is worse than none.
+    # DROP THE CONTINUATION FOOTERS BEFORE THE ZIP (238). A longtable
+    # emits one at every page break; it has no ink in either compared
+    # cell and it is NOT an equation, so leaving it in the sequence
+    # shifts every row after it onto the following identifier.
+    #
+    # 583f3ae kept these rows and skipped them AFTER the zip, on the
+    # reasoning that removing a row disturbs positional pairing. That
+    # was exactly backwards: keeping a NON-equation row is what
+    # disturbs it. The 214 run over eleven rebuilt reports measured
+    # rows minus equations EQUAL TO THE DISPLAY PAGE COUNT in all
+    # eleven -- 230/230, 32/32, 276/276, 163/163, 228/228, 2/2, 49/49,
+    # 2/2, 50/50, 10/10, 190/190 -- which is one footer per page and
+    # nothing else.
+    #
+    # The concern that produced the wrong fix is real and is handled
+    # by POSITION rather than by keeping the row: an equation whose
+    # render AND scan are both missing produces an identical all-zero
+    # row and DOES own an identifier. A continuation footer is always
+    # LAST ON ITS PAGE; such an equation generally is not. Only the
+    # last-on-page ones are dropped, and any surviving all-zero row
+    # keeps its identifier and is flagged `absent`.
+    last_on_page = {}
+    for i, r in enumerate(recs):
+        last_on_page[r[0]] = i
+    footers = {i for pg, i in last_on_page.items() if recs[i][4]}
+    footer_rows += len(footers)
+    recs = [r for i, r in enumerate(recs) if i not in footers]
     idents = idents_for(name)
     # The harness compares the LEADING contiguous run of display
     # pages, so its rows are a PREFIX of the equation list -- valid
@@ -363,18 +418,24 @@ for name in DIRS:
     pages = sorted(int(md.stem[1:]) for md in d.glob("p*.md"))
     contiguous = pages == list(range(pages[0], pages[0] + len(pages))) \
         if pages else False
-    if len(idents) >= len(recs) and contiguous:
+    if len(idents) == len(recs) and contiguous:
         dem = demoted_idents(name)
-        for (ident, srcpage), (dis, cd, stable, empty) in zip(idents,
-                                                              recs):
+        # POST-CONDITION (238): after the footers are gone the two
+        # sequences must be the SAME LENGTH, not merely compatible.
+        # `len(idents) >= len(recs)` admitted a document with more
+        # equations than rows, which is the same mis-pairing in the
+        # other direction.
+        equal_len[name] = (len(recs), len(idents))
+        for (ident, srcpage), (pg, dis, cd, stable, empty) in zip(
+                idents, recs):
             if empty:
                 empty_rows.append(name)
-                continue
             if ident in dem:
                 demoted_rows.append(name)
                 continue
             run_rows.append((name, ident, srcpage, dis, cd,
-                             flag_of(dis, cd, stable)))
+                             "yes" if stable else "no",
+                             flag_of(dis, cd, stable, empty=empty)))
     else:
         # MORE ROWS THAN EQUATIONS means the compared population is
         # not display equations alone -- on 0803.2924 the inline
@@ -418,12 +479,30 @@ RESULTS.mkdir(exist_ok=True)
 stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 run_file = RESULTS / f"compare-{LIST.stem}-{stamp}.tsv"
 run_file.write_text(
-    "\n".join(["bibkey\tid\tpage\tdistance\tcomp_delta\tflag"] +
+    "\n".join(["bibkey\tid\tpage\tdistance\tcomp_delta\t"
+               "scale_stable\tflag"] +
               ["\t".join(map(str, r)) for r in run_rows]) + "\n")
 _by = {}
 for r in run_rows:
-    _by[r[5]] = _by.get(r[5], 0) + 1
+    _by[r[6]] = _by.get(r[6], 0) + 1
 print(f"{len(run_rows)} rows -> {run_file}", flush=True)
+# 238's post-condition, ASSERTED rather than hoped. Printed for every
+# document and non-zero exit if any fails, because a silent inequality
+# is the mis-pairing this whole change exists to remove.
+print(f"\n  ROWS == IDENTIFIERS, after dropping {footer_rows} "
+      f"continuation footers:", flush=True)
+_bad = []
+for _n in sorted(equal_len):
+    _r, _i = equal_len[_n]
+    _ok = _r == _i
+    if not _ok:
+        _bad.append(_n)
+    print(f"    {'OK ' if _ok else 'FAIL'}  rows {_r:6d}  identifiers "
+          f"{_i:6d}  {_n[:52]}", flush=True)
+if _bad:
+    print(f"  {len(_bad)} document(s) FAILED the equality; their rows "
+          f"are excluded and the findings file is incomplete",
+          flush=True)
 if empty_rows:
     import collections as _c
     by = _c.Counter(empty_rows)

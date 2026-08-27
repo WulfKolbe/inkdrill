@@ -165,6 +165,28 @@ measurement; a fresh pass is ~2 hours.
   dot into its stem. Count claims survive this; identity claims do
   not, so say which one you are making.
 
+## Every report opens with a UTC timestamp and a commit hash
+
+`tools/reportstamp.py`, one line, first line, before any prose:
+
+    2026-08-27T08:56:07Z  commit ccc61c5  +dirty
+
+The commit is the one that PRODUCED the numbers -- `HEAD` when the
+report was written -- not the commit that later contains the file.
+Those differ by one, and the difference is the difference between
+"which code measured this" and "which code shipped this"; only the
+first is re-runnable. `+dirty` when the tree had uncommitted changes,
+because then the numbers came from code in no commit at all.
+
+Existing reports were retrofitted from `git log` with the commit that
+ADDED each, and say so in the line rather than borrowing today's date.
+
+The reason is not tidiness. A report arriving after a newer one is
+otherwise indistinguishable from a current one, and that happened
+twice in one session: a three-builds-stale figure quoted for three
+exchanges, and a peer's audit that attributed a displacement to the
+wrong defect because the artifact it read had been superseded.
+
 ## Two sessions consume this project's output format
 
 Recorded here because neither side wrote it down and each assumed the

@@ -1,3 +1,4 @@
+2026-08-20T14:46:18Z  commit 143bbe9  (retrofitted: the commit that ADDED this report)
 028 trailing punctuation profile -- bh2, BH1org_OCR, BH3FR, WDorg4
 population: the first 50 EQ rows whose LaTeX ends in one of '.,;:' and that have a scan crop
 measured on the CROP itself (not the report raster), both figures normalised by the crop's median glyph height
