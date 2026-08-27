@@ -129,9 +129,19 @@ class P19_1_FindingVocabulary(unittest.TestCase):
                          "stable")
         self.assertEqual(flag_of(F.NOISE_DISTANCE + 1, 0, False),
                          "weak")
+        # `absent` is checked BEFORE `clean` and the order is the
+        # point: an empty row scores distance 0 and comp_delta 0, so
+        # every other branch would call it a perfect match.
+        self.assertEqual(flag_of(0, 0, True, empty=True), "absent")
+        self.assertEqual(flag_of(0, 0, True, empty=False), "clean")
+        # and `empty` overrides a row that would otherwise be a
+        # finding, because no ink on either side is not a measurement
+        # whatever the other numbers say
+        self.assertEqual(flag_of(99, 9, False, empty=True), "absent")
         # every class reachable
         self.assertEqual(set(FLAGS),
-                         {flag_of(0, 0, True), flag_of(1, 0, False),
+                         {flag_of(0, 0, True, empty=True),
+                          flag_of(0, 0, True), flag_of(1, 0, False),
                           flag_of(99, 9, False),
                           flag_of(F.NOISE_DISTANCE + 1, 0, True),
                           flag_of(F.NOISE_DISTANCE + 1, 0, False)})
