@@ -352,9 +352,16 @@ for name in DIRS:
     # A legend naming S while the file carries neither column is a
     # claim the output cannot support; carrying the one the flag
     # actually uses is what makes S auditable.
-    hdr = ("report_page\tline\tdis\tA_eq_B\tB_stable\tL_comp\tL_holes"
+    # B_stable is APPENDED, not inserted. 239 added it and put it
+    # after A_eq_B, which shifts every column a positional consumer
+    # reads -- and pdfdrill parses this file positionally, by the
+    # column list it quoted back. Inserting a column mid-row is the
+    # same silent break as dropping one; appending costs nothing and
+    # leaves every existing offset where it was. Same rule as
+    # `compare`'s own `overrun` and `empty` columns.
+    hdr = ("report_page\tline\tdis\tA_eq_B\tL_comp\tL_holes"
            "\tL_stk\tL_cen\tL_off\tR_comp\tR_holes\tR_stk\tR_cen"
-           "\tR_off")
+           "\tR_off\tB_stable")
     rows = []
     recs = []
     for md in sorted(d.glob("p*.md")):
@@ -372,8 +379,8 @@ for name in DIRS:
             if ln == 0 or hts.get(ln, 999) < 40: continue
             L = [int(x) for x in c[3:8]]; R = [int(x) for x in c[8:13]]
             dis = sum(abs(x - y) for x, y in zip(L, R))
-            rows.append("\t".join(map(str, [p, ln, dis, c[13], c[14]]
-                                         + L + R)))
+            rows.append("\t".join(map(str, [p, ln, dis, c[13]]
+                                         + L + R + [c[14]])))
             recs.append((p, dis, abs(L[0] - R[0]), c[13] == "yes",
                          not any(L) and not any(R)))
     # P19: identifiers come from the report's own tex, in table order.
