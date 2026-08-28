@@ -1,0 +1,118 @@
+285 - matching tex.zip images to lines.json regions: no population
+========================================================================
+
+ANSWER: the matcher is NOT built, because there are no old-format
+documents on this corpus to run it on. Measured, not assumed, and
+measured independently of the session that raised the same doubt.
+
+    matched      20,565 of 20,582   by DICTIONARY LOOKUP, not matching
+    ambiguous         0
+    unmatched        17             and none of them has a region
+
+--------------------------------------------------------------------
+1. THE CENSUS
+
+Every `*.tex.zip` in the library, every image entry inside it:
+
+    zips                          1,216
+    image entries                20,582
+      coordinate form            20,565    -<page>_<h>_<w>_<y>_<x>
+      collision form                  0    -<page>_<n>(<m>)
+      neither                        17
+    unreadable zips                   0
+
+The collision form is what 285 exists for -- a filename that names a
+figure by an index rather than by its geometry, so the region has to
+be recovered by comparison. There are none. I checked for `(`, `)`,
+`[`, `]`, `%28` and `%29` anywhere in the entry name or its path.
+
+--------------------------------------------------------------------
+2. THE COORDINATE FORM IS THE REGION -- VERIFIED, NOT INHERITED
+
+If the filename already carries page, height, width, top_left_y and
+top_left_x, then no comparison is needed: it is a key. That claim
+came from another session and I did not take it on trust.
+
+Over 60 documents sampled at seed 5, every coordinate-form image
+looked up against its own document's `lines.json`:
+
+    coordinate images        645
+    EXACT region match       645
+    match rate           100.00%
+
+Not "close", not "within a tolerance" -- the four numbers in the
+filename equal the four numbers in the region. Aspect ratio and the
+five-tuple have nothing to add to an exact key.
+
+--------------------------------------------------------------------
+3. THE 17 THAT ARE NOT COORDINATE FORM ARE NOT FIGURES
+
+This is where 285 could still have had a population, so it is
+enumerated rather than summarised. Eleven are `image-not-found.png`
+and six are `smile-<sha1>.png`:
+
+    document                          filename              regions
+    1802.08153v1                      image-not-found.png       755
+    A Primer of Analytic Number T     image-not-found.png    12,969
+    IEEEtran_HOWTO                    image-not-found.png     2,829
+    LATEX Graphics with TikZ          image-not-found.png     8,266
+    Qwen_latex_20250812               image-not-found.png       332
+    exploring-vibration-sensing       image-not-found.png     1,568
+    latex2-script                     image-not-found.png       254
+    loce9b3a217aa5_slides             image-not-found.png       131
+    morphisms                         image-not-found.png         1
+    scan_20260527_204203              image-not-found.png       156
+    scan_20260530_210015              image-not-found.png        72
+    Mathematics, Physics Chemistry    smile-01f51f48...png   11,430
+    Mathematics, Physics Chemistry    smile-1ebfcf97...png   11,430
+    Mathematics, Physics Chemistry    smile-15f77f51...png   11,430
+    Mathematics, Physics Chemistry    smile-5a2a3367...png   11,430
+    Nitric Oxide Biology              smile-3b694714...png   44,390
+    Number, Shape, Symmetry           smile-6da05821...png   16,214
+
+`image-not-found.png` is a PLACEHOLDER -- the extraction failed and
+this stands in its place. It corresponds to no region because there
+is no figure behind it; matching it to the nearest region by aspect
+ratio would attach a real rectangle to a failure.
+
+`smile-<sha1>.png` is a chemical structure rendered from SMILES, not
+cropped from the page. Its name is a hash of the molecule. It
+corresponds to no page region either, and its aspect ratio is a
+property of the renderer.
+
+Both classes are UNMATCHED and should stay unmatched. That is the
+answer for all 17.
+
+--------------------------------------------------------------------
+4. WHY NOT BUILD IT ANYWAY
+
+The task's own warning is the reason. It says an ambiguous match must
+not be resolved by taking the first candidate, because 282 did that
+and produced confidently wrong filenames.
+
+A matcher built here would be tested on zero positives. Its ambiguity
+handling -- the part that went wrong before -- would have no case to
+exercise it, and the first real input would be its first test. Every
+threshold in it (how close two aspect ratios must be, how close two
+five-tuples) would be chosen from nothing.
+
+The strongest form of not repeating 282's fallback defect is not
+writing the fallback. A matcher with no population is a fallback path
+waiting for its first caller.
+
+WHAT WOULD CHANGE THIS: one document carrying the collision form. If
+one exists outside this library, the census here says nothing about
+it -- 1,216 zips is what we hold, not what MathPix can emit. Send one
+and the task becomes answerable, with a real positive to test the
+ambiguous branch against.
+
+--------------------------------------------------------------------
+5. POPULATION
+
+All 1,216 `*.tex.zip` under ~/pdfdrill-library, all 20,582 image
+entries, read from the zips rather than from any index. The
+region-resolution check is 60 documents sampled at seed 5, 645
+images. The 17-image table is the complete set, not a sample.
+
+RE-RUN: the two scripts are one page each -- walk the zips, regex the
+basenames, and look each up in its own document's lines.json.

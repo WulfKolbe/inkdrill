@@ -78,6 +78,53 @@ if len(ALL_DIRS) != len(_LINES):
         f"would silently be {len(ALL_DIRS)}. Unparsed, first 5:\n  " +
         "\n  ".join(missed[:5]))
 
+def check_phase(name, pdf):
+    """Refuse a report built for READING rather than for MEASUREMENT.
+
+    pdfdrill builds each report twice: a `measure` build with the
+    legend off and no ink adopted, and a `reading` build carrying the
+    residual bullets and legend for publication. The measurement
+    belongs against the FIRST. Measuring the second pairs perfectly,
+    passes every structural check, and is then refused downstream --
+    which is exactly what happened twice on 1510.06699 and once on
+    2103.01507, the second time five minutes into a three-hour run.
+
+    The distinction is not visible in the pdf and it is not visible in
+    the row counts. It is recorded in `report.build.json`, which the
+    producer writes and nothing here was reading. A guard that costs
+    one file read removes a class of error that has already cost a
+    three-hour run and two round trips, and it removes it from EITHER
+    side making the mistake -- the producer pointing at the wrong
+    file, or this side being handed it.
+
+    Absent or unreadable build stamp: ACCEPTED, with a warning. Most
+    of the corpus predates the stamp and refusing on its absence would
+    stop every older document for a property that was never recorded.
+    """
+    bj = pdf.parent / "report.build.json"
+    if not bj.is_file():
+        print(f"{name}: no report.build.json -- phase unknown, "
+              f"measuring anyway", flush=True)
+        return
+    try:
+        import json
+        meta = json.loads(bj.read_text(errors="replace"))
+    except Exception as e:
+        print(f"{name}: report.build.json unreadable ({e}) -- phase "
+              f"unknown, measuring anyway", flush=True)
+        return
+    phase = meta.get("phase")
+    if phase == "reading" or meta.get("legend") or meta.get("ink_adopted"):
+        raise SystemExit(
+            f"{name}: this is a READING build "
+            f"(phase={phase!r}, legend={meta.get('legend')!r}, "
+            f"ink_adopted={meta.get('ink_adopted')!r}). The residual "
+            f"belongs against a MEASURE build -- legend off, no ink "
+            f"adopted -- or the measurement includes the bullets and "
+            f"legend it is supposed to produce. Rebuild with "
+            f"--no-legend and measure that.")
+
+
 def check_fresh(name, pdf):
     """Refuse a report.pdf older than its own report.tex.
 
@@ -264,6 +311,7 @@ for name in DIRS:
         for f in d.iterdir(): f.unlink()
         print(f"{name}: cleared {len(stale)} stale files", flush=True)
     check_fresh(name, pdf)
+    check_phase(name, pdf)
     want = ARGS.columns or target_columns(name)
     if want is None:
         zero_rows.append(
