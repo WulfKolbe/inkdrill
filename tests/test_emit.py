@@ -2341,3 +2341,107 @@ class T1_20_DelimiterAndOutsideClasses(unittest.TestCase):
         for r in ink_only(m).regions:
             self.assertFalse(is_delimiter(m, r) and crossing_rules(m, r),
                              "a component claimed by both")
+
+
+class T1_21_TheTableIsTheLargestRegionNotTheHolliest(unittest.TestCase):
+    """91: which ink region `_table_cells` takes as the table.
+
+    "The one with the most holes" is wrong on any table whose cells
+    contain PICTURES. On page 3 of pdfdrill's region report the frame
+    has 74 holes and an embedded figure has 85, so the figure won and
+    the lattice read a 4x6 grid of its internal contours -- x-spans
+    154 px wide on a 4961 px page. `compare` then measured four rows
+    of a diagram as table rows.
+
+    A frame is the region its cells are holes IN, so it CONTAINS
+    every competing candidate, and largest bounding box is that
+    property cheaply. On the equation table both rules agree, which
+    is why the old one survived until a table with pictures arrived.
+
+    Both rules are asserted. `select` stays a parameter because
+    comparing them on identically filtered output is the only way to
+    show the change moves nothing else -- a first attempt compared
+    raw `cell_grid` under one rule against filtered `_table_cells`
+    under the other and reported 47 of 50 pages changed, which was
+    the filters, not the selection.
+    """
+
+    @staticmethod
+    def _page():
+        """A 2x3 table frame, with a many-holed figure inside one
+        cell. Dimensions scaled from the real page: the frame is
+        4611x2662 there and the figure 640x311, so the figure is
+        about an eighth of the frame's width."""
+        from tests.test_pngio import build_png
+        W, H, t = 600, 300, 3
+        g = [[(255, 255, 255)] * W for _ in range(H)]
+
+        def box(x0, y0, x1, y1):
+            for y in range(max(0, y0), min(H, y1)):
+                for x in range(max(0, x0), min(W, x1)):
+                    g[y][x] = (0, 0, 0)
+        for i in range(4):                       # 3 columns
+            box(20 + i * 180, 20, 20 + i * 180 + t, 280)
+        for j in range(3):                       # 2 rows
+            box(20, 20 + j * 130, 560, 20 + j * 130 + t)
+        # EVERY CELL NEEDS CONTENT. The lattice's column filters
+        # require a glyph-sized region inside a column's span (P15's
+        # content test), so a grid of empty cells collapses to one
+        # column and the fixture would test nothing.
+        for cx in range(3):
+            for ry in range(2):
+                bx = 20 + cx * 180 + 40
+                by = 20 + ry * 130 + 40
+                box(bx, by, bx + 24, by + 24)
+        # A FIGURE IN THE LAST CELL, drawn as one CONNECTED mesh so
+        # it is a single region carrying many holes. Separate closed
+        # boxes would be 48 regions with one hole each and the frame
+        # would still win on holes -- the fixture has to reproduce
+        # the real page, where ONE figure out-holes the frame.
+        fx, fy, cw, ch = 390, 160, 20, 18
+        for c in range(9):
+            box(fx + c * cw, fy, fx + c * cw + 2, fy + 6 * ch + 2)
+        for r in range(7):
+            box(fx, fy + r * ch, fx + 8 * cw + 2, fy + r * ch + 2)
+        return build_png(g)
+
+    def _cols(self, select):
+        import tempfile, pathlib as pl
+        from inkdrill.pngio import read_png, auto_mask
+        from inkdrill.__main__ import _table_cells
+        d = pl.Path(tempfile.mkdtemp())
+        (d / "p.png").write_bytes(self._page())
+        img = read_png(d / "p.png")
+        m, _ = auto_mask(img.gray, img.width, img.height, 128)
+        cells = _table_cells(m, 6.0, select=select)
+        if not cells:
+            return 0, 0
+        return (max(r for r, _ in cells) + 1,
+                max(c for _, c in cells) + 1)
+
+    def test_the_area_rule_finds_the_frame(self):
+        rows, cols = self._cols("area")
+        self.assertEqual(cols, 3, f"got {rows}x{cols}")
+        self.assertEqual(rows, 2)
+
+    def test_the_holes_rule_finds_the_figure_instead(self):
+        """The defect, pinned. If this ever agrees with the area rule
+        the fixture has stopped containing the thing it exists for."""
+        rows, cols = self._cols("holes")
+        self.assertNotEqual((rows, cols), (2, 3),
+                            "the fixture no longer separates the rules")
+
+    def test_an_unknown_select_raises(self):
+        """On a page that HAS candidates -- a blank mask returns None
+        before the selection is reached, so it would pass whatever
+        the guard did."""
+        import tempfile, pathlib as pl
+        from inkdrill.pngio import read_png, auto_mask
+        from inkdrill.__main__ import _table_cells
+        d = pl.Path(tempfile.mkdtemp())
+        (d / "p.png").write_bytes(self._page())
+        img = read_png(d / "p.png")
+        m, _ = auto_mask(img.gray, img.width, img.height, 128)
+        self.assertTrue(_table_cells(m, 6.0, select="area"))
+        with self.assertRaises(ValueError):
+            _table_cells(m, 6.0, select="biggest")

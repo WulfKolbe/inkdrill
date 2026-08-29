@@ -36,7 +36,7 @@ def _cell_crop(mask, x0, y0, x1, y1):
     return InkMask(bytes(buf), w, h)
 
 
-def _table_cells(mask, tol, debug=None):
+def _table_cells(mask, tol, debug=None, select="area"):
     """The page's table as {(row, col): hole bbox}. The table is the
     ink region with the most holes. A lattice slot whose hole is
     FRAGMENTED (cell content touching a rule splits the background
@@ -52,15 +52,38 @@ def _table_cells(mask, tol, debug=None):
     from .emit import cell_grid
     from .nest import nest
     n = nest(mask)
-    best, holes = None, []
-    for r in n.regions.values():
-        if r.kind.value != "ink":
-            continue
-        hs = n.holes_of(r.id)
-        if len(hs) > len(holes):
-            best, holes = r, hs
-    if best is None or len(holes) < 2:
+    # WHICH INK REGION IS THE TABLE. "The one with the most holes" is
+    # wrong, and it is wrong on exactly the tables that carry
+    # pictures. On page 3 of pdfdrill's region report the frame has
+    # 74 holes and an embedded FIGURE has 85, so the figure was
+    # selected and the lattice read a 4x6 grid of its internal
+    # contours -- overlapping x-spans 154 px wide on a 4961 px page.
+    # `compare` then measured four rows of a diagram and called them
+    # table rows.
+    #
+    # A table frame is the region its cells are holes IN, so it
+    # CONTAINS every competing candidate. Largest bounding box is
+    # that property, cheaply: on the same page the frame is
+    # 4611x2662 against the figure's 640x311, two orders of
+    # magnitude. On the equation table both rules agree (4512x1556,
+    # 145 holes, runner-up 2 holes), which is why the old rule
+    # survived until a table with pictures in it arrived.
+    cands = [(r, n.holes_of(r.id)) for r in n.regions.values()
+             if r.kind.value == "ink" and len(n.holes_of(r.id)) >= 2]
+    if not cands:
         return None
+    # `select` is an argument so the two rules can be compared on the
+    # same filtered output. "holes" is the pre-91 behaviour and is
+    # kept for exactly that -- comparing raw cell_grid against
+    # filtered _table_cells would have made every page look changed.
+    if select == "holes":
+        best, holes = max(cands, key=lambda t: len(t[1]))
+    elif select == "area":
+        best, holes = max(cands, key=lambda t: ((t[0].x1 - t[0].x0 + 1)
+                                                * (t[0].y1 - t[0].y0 + 1)))
+    else:
+        raise ValueError(f"select must be 'area' or 'holes', not "
+                         f"{select!r}")
     if debug is not None:
         # the table region's own height, so a caller can ask what
         # fraction of it the detected rows actually cover

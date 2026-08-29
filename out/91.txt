@@ -1,0 +1,137 @@
+91 - why the region table detects five columns, not six
+========================================================================
+
+ANSWER: none of the four offered causes. No declared boundary is
+invisible. The lattice was reading a DIFFERENT OBJECT -- an embedded
+figure, not the table -- because `_table_cells` took "the ink region
+with the most holes" and a picture inside a cell has more holes than
+the frame has cells.
+
+--------------------------------------------------------------------
+STEP 1 - THE BOUNDARIES, DECLARED AND DETECTED
+
+Document 0049, report page 3, rendered at 300 dpi (4961 x 3508 px,
+A3 landscape). The region table is the third longtable in
+report.tex:
+
+    \begin{longtable}{|p{20mm}|p{7mm}|p{12mm}|p{78mm}|p{124mm}|p{123mm}|}
+    Identifier | Page | Class | Source | Rendered | Scan
+
+Each column occupies its declared width plus 2 x \tabcolsep
+(6 pt each side = 4.23 mm). At 300 dpi, 1 mm = 11.811 px:
+
+    declared   +2 tabcolsep   expected px   DETECTED px   error
+      20 mm       24.23 mm         286          285       -1
+       7 mm       11.23 mm         133          132       -1
+      12 mm       16.23 mm         192          190       -2
+      78 mm       82.23 mm         971          970       -1
+     124 mm      128.23 mm        1514         1513       -1
+     123 mm      127.23 mm        1503         1501       -2
+
+All six declared boundaries have a detected counterpart, to within
+two pixels. WHICH DECLARED BOUNDARY HAS NO COUNTERPART: none.
+
+Before the fix the answer was not "five of six found" either. The
+lattice returned six columns whose x-spans were
+(2093,2247) (2217,2252) (2259,2295) (2271,2329) (2408,2553)
+(2597,2634) -- overlapping, 35 to 154 px wide, all inside a 540 px
+window on a 4961 px page. Not a table at all.
+
+--------------------------------------------------------------------
+STEP 2 - WHY
+
+`_table_cells` chose the table as "the ink region with the most
+holes". On page 3 the candidates are:
+
+    holes  85   box   640 x  311   an embedded FIGURE      <- chosen
+    holes  85   box   639 x  311   the other figure
+    holes  74   box  4611 x 2662   THE TABLE FRAME
+    holes  43   box   360 x  416   a third figure
+
+The Rendered and Scan columns of a region table contain PICTURES, and
+a picture's internal contours outnumber a frame's cells. The frame
+has 74 holes for its cells; one figure has 85.
+
+So the cause is not in the offered list -- not a missing rule, not a
+rule under the detection floor, not merged columns, not a column
+whose content misses its edges. It is the SELECTION of which region
+is the table, made before any column is considered.
+
+WHY IT SURVIVED UNTIL NOW: on the equation table the same rule is
+safe by a wide margin. Page 2 of the same document has a frame with
+145 holes and a runner-up with 2. Every table this project had
+measured held formulas, and formulas do not out-hole their own
+frame. The first table with pictures in it broke it.
+
+--------------------------------------------------------------------
+STEP 3 - THE FIX, AND IT IS NOT A THRESHOLD
+
+A table frame is the region its cells are HOLES IN, so it contains
+every candidate competing with it. Largest bounding box is that
+property, cheaply and with no constant to tune: 4611 x 2662 against
+640 x 311 is two orders of magnitude, not a margin.
+
+    p1   5 cols (declared 5)   unchanged
+    p2   5 cols (declared 5)   unchanged
+    p3   6 cols (declared 6)   was 6 spurious, now correct
+    p4   6 cols, 1 row         was "no cells"
+
+Page 4 -- the single-row page pdfdrill reported as undetectable --
+now detects. That limit was a symptom of the same defect, not the
+lattice's two-hole minimum.
+
+WHICH SIDE WAS WRONG: mine. The report declares what it draws; the
+detector was reading the wrong object.
+
+`select` is now an argument, `area` or `holes`, because comparing
+the two rules on IDENTICALLY FILTERED output is the only way to show
+the change moves nothing else. See the corrected regression below.
+
+--------------------------------------------------------------------
+STEP 4 - BOTH TABLES, TWO DOCUMENTS EACH
+
+    document      pages     table            declared   detected
+    0049           1-2      equation             5          5
+    0049           3-4      region               6          6
+    2208.01506     1-10     equation             5          5
+    2208.01506    11-12     region               6          6
+
+Both shapes appear in one document in both cases, so a difference
+between them is the table and not the build.
+
+CORPUS REGRESSION, 25 documents x 2 pages, both selection rules
+through identical filtering:
+
+    pages compared   50
+    unchanged        50
+    CHANGED           0
+
+The area rule changes nothing on the equation-table corpus. That is
+the check against the failure this task named -- a detector that
+finds six here and a different number next door.
+
+A FIRST REGRESSION ATTEMPT SAID 47 OF 50 CHANGED, and it was wrong.
+It compared raw `cell_grid` under the old rule against fully filtered
+`_table_cells` under the new one; the width floor, containment and
+content filters always reduce the count, so every page looked changed
+whichever selection ran. `raw-old 7 -> filtered-new 6` was the
+filters. Two sides of a comparison that are not the same quantity is
+the defect this project keeps finding in other people's
+measurements, and it was in mine.
+
+--------------------------------------------------------------------
+TESTS
+
+tests.test_emit.T1_21_TheTableIsTheLargestRegionNotTheHolliest --
+three tests. A frame with a many-holed figure in one cell: the area
+rule finds the frame (2 rows x 3 cols), the holes rule does NOT, and
+an unknown `select` raises on a page that HAS candidates -- a blank
+mask returns None before the selection is reached and would pass
+whatever the guard did.
+
+The fixture needed two corrections, both recorded in it: every cell
+needs CONTENT or P15's column content test collapses the lattice to
+one column, and the figure must be one CONNECTED mesh or it is 48
+regions with one hole each and the frame still wins.
+
+Suite 1,124 -> 1,127, all pass.
