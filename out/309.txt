@@ -1,0 +1,134 @@
+309 - re-normalised by median glyph width: a separation DOES appear
+========================================================================
+
+ANSWER: yes. The width-normalised gap distribution is BIMODAL, with
+a trough between the modes at about 0.45 glyph widths. The channel is
+not closed and 306 becomes buildable -- but the separating threshold
+is about HALF a glyph width, not "several times the median", so the
+rule 305 and 306 were written around is the wrong shape even though
+the signal is there.
+
+FIRST, A CORRECTION TO out/305.txt. Section 4 of that file explains
+the failure by saying "the row median gap is 1.00 px on half the rows
+measured". THAT IS FALSE, and this run measured it directly:
+
+    rows whose median gap is <= 1 px      0 of 202
+    median GAP per row      p10 3.0   p50 5.0   p90 57.0
+    median WIDTH per row    p10 14.0  p50 18.0  p90 20.0
+
+I mistook the RATIO's p50 of 1.00 for the DENOMINATOR being 1. A
+ratio's median is 1.00 by construction -- half of any row's gaps lie
+below that row's own median -- and I built a mechanism on top of a
+tautology. The measure does fail; the reason I gave for it was wrong.
+
+--------------------------------------------------------------------
+1. THE HISTOGRAM, WHICH IS THE EVIDENCE
+
+7,894 gaps, same population as 305 -- `math` and `text` regions, 20
+pages of 1511.08771 -- normalised by each row's median glyph width:
+
+    0.00-0.10   1096  13.9%  ########
+    0.10-0.20   2333  29.6%  #################
+    0.20-0.30   1203  15.2%  #########
+    0.30-0.40    853  10.8%  ######
+    0.40-0.50    263   3.3%  #                 <- TROUGH
+    0.50-0.75    395   5.0%  ###
+    0.75-1.00    503   6.4%  ###
+    1.00-1.25    633   8.0%  ####              <- SECOND MODE
+    1.25-1.50    125   1.6%                    <- sharp right edge
+    1.50-2.00    156   2.0%  #
+    2.00-2.50     54   0.7%
+    2.50-3.00     67   0.8%
+    3.00-4.00     79   1.0%
+    4.00-5.00     41   0.5%
+    5.00-7.00     17   0.2%
+    7.00-10.00    11   0.1%
+   10.00-20.00    28   0.4%
+   20.00+         37   0.5%
+
+A main mode peaking at 0.10-0.20, a trough at 0.40-0.50 where the
+density falls from 10.8% to 3.3%, and a SECOND MODE at 1.00-1.25 that
+collapses to 1.6% immediately above it. A rise to 633 followed by a
+fall to 125 in the adjacent bin is a peak with a hard right edge --
+what a fixed-width space character produces, not what a continuum
+does.
+
+--------------------------------------------------------------------
+2. AGAINST 305, ON THE SAME ROWS
+
+Only the denominator differs, so the difference is the normaliser.
+
+    threshold   305 gap/median-GAP   309 gap/median-WIDTH
+      >= 1.5x        89.6%                 76.2%
+      >= 2x          87.6%                 54.0%
+      >= 3x          84.2%                 35.6%
+      >= 5x          70.3%                 23.3%
+      >= 8x          49.0%                 19.8%
+      >= 10x         36.1%                 18.3%
+
+    row-count drop between successive cuts
+      305    21  4  7 10 18 13 30 26      still falling at the top
+      309    43 45 37 16  9  1  6  3      front-loaded, then flat
+
+305 declines steadily to the end: no body, no tail, no cut. 309 has
+both, and the plateau from 5x onward loses 10 rows across four
+thresholds against 82 rows between 1.5x and 3x.
+
+BUT THE ROW COUNTS ARE NOT THE FINDING. A plateau in rows can come
+from a few rows holding many large gaps, which would be one row
+population and not two gap populations. The histogram in section 1 is
+what separates those readings, and it is the reason this answer is
+"yes" rather than "suggestive".
+
+--------------------------------------------------------------------
+3. THE THRESHOLD IS NOT WHERE THE TASK EXPECTED IT
+
+305 and 306 were written around "a gap several times the median". On
+this normaliser the cut is at about 0.45 -- LESS THAN HALF a glyph
+width -- and the space population sits at roughly one glyph width.
+
+That is the right magnitude for the thing being detected. An
+interword space is about the width of a character; it is not several
+characters wide. The original framing asked for a multiple, and the
+answer is a fraction, because the denominator changed from something
+tiny (a 5 px inter-glyph gap) to something the size of the object
+itself (an 18 px glyph).
+
+Reading it as "several times the median gap" would have put the cut
+at 5x-10x, which on this distribution is 18-23% of rows and lands
+deep in the tail past the second mode -- catching the very largest
+gaps and missing the space population entirely.
+
+--------------------------------------------------------------------
+4. WHAT IS NOT ESTABLISHED
+
+That the second mode IS typeset spaces. The histogram shows two
+populations of GAPS; calling the upper one "spaces" is an inference
+from its position (one glyph width) and its hard right edge (a fixed
+character), not a measurement.
+
+CONFIRMING IT NEEDS A JOIN: take the gaps above 0.45 in a row, and
+check that their character positions correspond to positions where
+that row's LaTeX has an explicit space. That is exactly what 306
+would emit, so it must be verified BEFORE 306 is built and not by
+building it -- otherwise the emission is its own evidence.
+
+The same caution as 246: three statistics at the 94th percentile
+would have separated one diagram from 75 equations and I refused to
+build on it. Here there are 7,894 gaps and a visible trough, which is
+a stronger footing -- but it is still one book, one typeface, and no
+labelled positive.
+
+--------------------------------------------------------------------
+5. POPULATION
+
+1511.08771, 20 pages sampled at fixed intervals, `math` and `text`
+regions only, 202 rows, 7,894 gaps, 300 dpi. Same rows as 305 so the
+two normalisers are compared on identical input. One book and one
+typeface; a tighter setting would move the mode positions and nothing
+here claims otherwise.
+
+STATUS OF 306: no longer refused on the grounds 306 gave -- the
+signal exists. Still not built, pending section 4's join, and its
+threshold must be restated as a fraction of glyph width rather than a
+multiple of the median gap.

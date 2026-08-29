@@ -95,7 +95,22 @@ the question presumes the threshold exists. It does not, so the
 honest answer is the table above and not a single number from it.
 
 --------------------------------------------------------------------
-4. WHY THE MEASURE FAILS, WHICH IS NOT THE SAME AS THE IDEA FAILING
+4. WHY THE MEASURE FAILS -- SUPERSEDED, SEE out/309.txt
+
+    THE EXPLANATION BELOW IS WRONG. It says the row median gap is
+    1.00 px on half the rows. 309 measured it: ZERO of 202 rows have
+    a median gap at or below 1 px; the median gap is 5.0 px at p50.
+    I mistook the RATIO's p50 of 1.00 -- which is 1.00 by
+    construction, since half of any row's gaps lie below that row's
+    median -- for the denominator being 1, and built a mechanism on a
+    tautology.
+
+    The measure does fail, and section 3's numbers stand. 309
+    re-normalises by median GLYPH WIDTH on the same rows and finds a
+    bimodal distribution with a trough at 0.45 glyph widths, so the
+    signal is real and this normaliser was simply the wrong one.
+
+4. (superseded) WHY THE MEASURE FAILS
 
 A typeset space in maths IS wider than an inter-glyph gap -- the
 premise is sound. What fails is the NORMALISER. The row median is
