@@ -254,43 +254,16 @@ def target_columns(name):
     return None
 
 
+# ONE implementation, shared with tools/reportpages.py (286). This
+# used to be a local copy; a second consumer arrived and two copies
+# of a detection drift, with the newer one always the worse. The
+# body moved to pagedetect.probe unchanged -- verified by re-probing
+# a document and requiring the same page list.
+from pagedetect import probe as _probe
+
+
 def probe(pdf, n, columns=None):
-    """The leading contiguous run of DISPLAY-EQUATION pages, by column
-    count, plus a census of every count seen.
-
-    The count comes from `target_columns` -- the document's own tex --
-    and is verified against the raster here, so a tex that says six
-    and a PDF that renders five is caught rather than averaged.
-
-    The census is returned because a zero must not read as an
-    absence (P16). A document with 5-column pages and no 6-column
-    ones has a display table WITHOUT CROPS -- nothing to measure, and
-    a different fact from a document with no display table at all.
-    """
-    want = columns or COLUMNS
-    hits = []
-    seen = {}
-    for lo in range(1, n + 1, 25):
-        hi = min(lo + 24, n)
-        gs = subprocess.run(
-            ["gs","-q","-dNOPAUSE","-dBATCH","-sDEVICE=pgmraw","-r150",
-             f"-dFirstPage={lo}",f"-dLastPage={hi}",
-             "-sOutputFile=%stdout",str(pdf)],
-            capture_output=True, check=True).stdout
-        for i, img in enumerate(read_pnm_stream(gs, dpi=(150.0,150.0))):
-            mask,_ = auto_mask(img.gray, img.width, img.height, 200)
-            cells = _table_cells(mask, 4.0)
-            nc = max(c for _, c in cells) + 1 if cells else 0
-            seen[nc] = seen.get(nc, 0) + 1
-            if nc == want:
-                hits.append(lo + i)
-    run, last = [], 0
-    for p in hits:
-        if not run and p <= 3: run.append(p); last = p
-        elif run and p - last <= 3:
-            run.extend(range(last + 1, p + 1)); last = p
-        elif run: break
-    return run, seen
+    return _probe(pdf, n, columns or COLUMNS)
 
 jobs = []
 display_count = {}
