@@ -1,0 +1,101 @@
+323 - the advisory, emitted as measurements
+========================================================================
+
+VALIDATION FIRST. 1511.08771 page 108, the row whose LaTeX carries
+the 2 and the 1:
+
+    \(\left(m \in \mathbb{Z} ; n \in \mathbb{Z}_{2 k+1}\right)\)
+    is given by
+
+    row: 25 glyphs, median glyph width 18.0 px,
+         median gap 0.306 glyph widths
+
+    after character  2 (x= 58): 0.94 glyph widths
+    after character  3 (x= 98): 0.94
+    after character  6 (x=154): 0.67
+    after character  7 (x=191): 1.00   second mode
+    after character  8 (x=232): 0.94
+    after character 14 (x=375): 1.11   second mode   <-- THE GAP
+    after character 17 (x=423): 1.00   second mode
+    after character 23 (x=542): 1.00   second mode
+
+THE 2 1 GAP IS 1.11 GLYPH WIDTHS, after character 14, against a row
+median of 0.31. It falls in the second mode (1.00-1.25).
+
+That is the same gap the task described as "1.12 glyph widths after
+character 14", to within rounding, so the two measurements agree on
+the same object.
+
+WHAT 305 SAID ABOUT THE SAME GAP: 20 px against a 5.5 px median gap,
+a ratio of 3.6, in a distribution where 84% of rows had something
+above 3x. Indistinguishable from noise. The gap did not change; the
+unit did.
+
+--------------------------------------------------------------------
+1. THE EMITTER
+
+    python3 tools/rowspaces.py --pdf doc.pdf --lines doc.lines.json \
+        --pages 108 [--floor 0.45] [--types math,text]
+
+JSON. Per row of every named region: the median glyph width in px,
+the median gap in glyph widths, and every gap at or above the floor
+with its 1-indexed character position, its x in px, its size in glyph
+widths, and whether it lies inside the measured second mode.
+
+IT EMITS MEASUREMENTS, NOT VERDICTS. 306 was refused because "a space
+is required at character 14" cannot be audited by its consumer -- an
+LLM placing \quad has no way to tell a real space from an artefact.
+"1.11 glyph widths after character 14, row median 0.31" is the same
+fact with its evidence attached. A reader sees that 1.11 sits in the
+upper mode and 0.31 does not, and can disagree with the floor without
+re-running anything.
+
+`in_second_mode` is a convenience flag, not the answer: the number is
+beside it and the mode bounds are in the header of the JSON, so a
+consumer that distrusts the flag has everything needed to ignore it.
+
+--------------------------------------------------------------------
+2. THE FLOOR IS A REPORTING FLOOR
+
+0.45 by default -- the trough 309 measured between the two modes,
+where density falls from 10.8% to 3.3%. It decides what is PRINTED,
+not what is true. `--floor 0` emits the whole distribution.
+
+That distinction is why this is emittable and 306 was not. A
+threshold that silently drops data is a claim; a threshold that
+decides how much of a measurement to show, with the value attached to
+every row that survives it, is a display choice the reader can undo.
+
+--------------------------------------------------------------------
+3. WHAT IS STILL NOT ESTABLISHED
+
+That the second mode IS typeset spaces. It is in the JSON, under
+`not_established`, so it travels with the data:
+
+    the histogram shows two populations of gaps; naming the upper one
+    is an inference from its position at one glyph width and its
+    sharp right edge, not a measurement. Confirming it needs a join
+    against the row's LaTeX, which this tool does not do.
+
+Note what page 108 shows about this. Eight gaps in that row clear the
+floor and four are inside the second mode -- but the row's LaTeX has
+explicit spaces in `{2 k+1}` and around `\in`, and ORDINARY
+interword spaces in "is given by". Both are typeset spaces; only
+some are spaces a transcription must reproduce as `\quad`. The
+measurement cannot tell those apart, and a consumer acting on it
+without reading the surrounding LaTeX would insert spacing into
+running text.
+
+So the advisory says where the page has space. It does not say where
+the LaTeX needs a command, and the JSON does not claim to.
+
+--------------------------------------------------------------------
+4. POPULATION
+
+The mode bounds come from out/309.txt: one book, 1511.08771, 20 pages
+sampled at fixed intervals, math and text regions, 202 rows, 7,894
+gaps at 300 dpi. One typeface. A tighter setting moves the modes, and
+the reference block in the JSON names the source so a reader can see
+which measurement the floor came from.
+
+RE-RUN: the command above. --floor 0 for the full distribution.
