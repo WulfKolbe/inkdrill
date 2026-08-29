@@ -2915,6 +2915,63 @@ Re-run: `tools/premise/measure.py --corpus <dir> residuals`
 
 ---
 
+### 320 table ordinal — measured 2026-08-29, on pdfdrill's 2208.09292
+
+`reportpages --columns` cannot identify a table when two tables in one
+document share a column count. pdfdrill's report has four longtables in a
+fixed builder order — equations, formulas, tables, image regions — and the
+first and last are both six wide, so `--columns 6` matched both. Worse,
+`probe`'s gap tolerance of 3 then stitched pages 1 and 4 into a single
+contiguous run spanning ALL FOUR tables: 69 rows returned against 6
+identifiers.
+
+**Premise measured before building.** Per-page lattice widths on
+2208.09292 (4 pages): `1:6 2:5 3:4 4:6` — four contiguous runs, one per
+longtable, in builder order. The order is fixed, so an ordinal identifies
+a table and the column count cross-checks it.
+
+`--table N` selects the Nth run in page order. `--columns` stays required
+and is checked against it; a disagreement is REPORTED and returns no rows,
+never reconciled.
+
+Rows returned per ordinal, against the identifier count pdfdrill holds:
+
+| ordinal | table | cols | pages | rows | identifiers | delta |
+|---|---|---|---|---|---|---|
+| 1 | Display equations | 6 | [1] | 7 | 6 | +1 |
+| 2 | Inline formulas | 5 | [2] | 52 | 51 | +1 |
+| 3 | Tables | 4 | [3] | 8 | 8 | 0 |
+| 4 | Image regions | 6 | [4] | 3 | 3 | 0 |
+
+Ordinal and column count agree on all four. The cross-check also fires
+correctly when asked to: `--table 1 --columns 5` on this document returns
+no rows and reports "table 1 has 6 columns, --columns says 5".
+
+**The delta is the finding, and it is a FOOTER, not a header.** Tables 1
+and 2 carry pdfdrill's legend, which `report_tex.legend_foot` emits as
+`\endfoot` AND `\endlastfoot` so it repeats on every page. The lattice
+sees it as a row and nothing drops it — `--header` drops row 0 of a page,
+there is no `--footer`. Tables 3 and 4 carry no legend and match exactly.
+
+The rule is exactly one extra row PER PAGE OF THE RUN, and it predicts:
+
+- 2208.09292 table 1, 1 page  → 6 + 1 = 7 ✓
+- 0008113v1 table 1, 3 pages  → 23 + 3 = 26 ✓
+- 0008113v1 table 2, 2 pages  → 73 + 2 = 75 ✓ (predicted before measuring)
+
+A consumer can reconcile it the way pdfdrill's `regionink` reconciles the
+header row — explicitly, and only when the arithmetic says so. Whether
+this tool should grow a `--footer` argument symmetric to `--header` is not
+decided here.
+
+**A limit, recorded rather than hidden.** Contiguity plus equal width
+cannot separate two ADJACENT tables of the same width. 0049's equations
+and formulas are both 5 columns and adjacent, so they group as one run and
+the ordinal is not the longtable index there: 3 longtables, 2 runs. Only
+the producer's own table boundaries could separate them and this tool does
+not see those.
+
+
 ## 4. Assumptions that remain unverified
 
 1. **Reeb signatures discriminate math symbols.** ~~Argued structurally,

@@ -46,6 +46,70 @@ def npages(pdf) -> int:
     return int(m.group(1))
 
 
+def scan_columns(pdf, n, dpi=150, tol=4.0):
+    """[(page, lattice column count)] for every page, in order.
+
+    The one place a page is rendered and counted. `probe` and `tables`
+    both read this, so the two selections can never disagree about what
+    is on a page -- only about which pages they want.
+
+    G1: every page 1..n appears exactly once, in order.
+    G2: a page with no lattice reports 0 columns, not absence.
+    """
+    out = []
+    for lo in range(1, n + 1, 25):
+        hi = min(lo + 24, n)
+        raw = subprocess.run(
+            ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=pgmraw",
+             f"-r{dpi}", f"-dFirstPage={lo}", f"-dLastPage={hi}",
+             "-sOutputFile=%stdout", str(pdf)],
+            capture_output=True, check=True).stdout
+        for i, img in enumerate(read_pnm_stream(raw, dpi=(float(dpi),
+                                                          float(dpi)))):
+            mask, _ = auto_mask(img.gray, img.width, img.height, 200)
+            cells = _table_cells(mask, tol)
+            out.append((lo + i, max(c for _, c in cells) + 1 if cells else 0))
+    return out
+
+
+def group_tables(per_page):
+    """Maximal contiguous runs of pages sharing a column count (320).
+
+    A column COUNT cannot identify a table when two tables in one
+    document share one. pdfdrill's report has four longtables --
+    equations, formulas, tables, image regions -- and the first and last
+    are both six columns wide, so `--columns 6` matched both and
+    returned 69 rows against 6 identifiers. Their ORDER, however, is
+    fixed by the builder, so an ordinal identifies them and a column
+    count cross-checks it.
+
+    G1: a run is contiguous in page number AND constant in column count.
+    G2: a page with no lattice (0 columns) belongs to no table, and
+        ENDS the run it follows -- two tables separated by prose are two
+        tables, not one stitched across the gap. `probe`'s gap tolerance
+        of 3 is what stitched pages 1 and 4 of 2208.09292 into a single
+        selection spanning all four tables.
+    G3: ordinals are 1-based in page order.
+    """
+    runs = []
+    for page, ncols in per_page:
+        if not ncols:
+            continue
+        if (runs and runs[-1]["columns"] == ncols
+                and runs[-1]["pages"][-1] == page - 1):
+            runs[-1]["pages"].append(page)
+        else:
+            runs.append({"columns": ncols, "pages": [page]})
+    for i, r in enumerate(runs, 1):
+        r["ordinal"] = i
+    return runs
+
+
+def tables(pdf, n, dpi=150, tol=4.0):
+    """Every table in the report, in page order, with its ordinal."""
+    return group_tables(scan_columns(pdf, n, dpi=dpi, tol=tol))
+
+
 def probe(pdf, n, columns, dpi=150, tol=4.0, gap=3):
     """(pages, census). The LEADING CONTIGUOUS RUN of pages whose
     lattice has `columns` columns, and a census of every count seen.
@@ -57,21 +121,10 @@ def probe(pdf, n, columns, dpi=150, tol=4.0, gap=3):
     instead of inferring it from a small number.
     """
     hits, seen = [], {}
-    for lo in range(1, n + 1, 25):
-        hi = min(lo + 24, n)
-        out = subprocess.run(
-            ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=pgmraw",
-             f"-r{dpi}", f"-dFirstPage={lo}", f"-dLastPage={hi}",
-             "-sOutputFile=%stdout", str(pdf)],
-            capture_output=True, check=True).stdout
-        for i, img in enumerate(read_pnm_stream(out, dpi=(float(dpi),
-                                                          float(dpi)))):
-            mask, _ = auto_mask(img.gray, img.width, img.height, 200)
-            cells = _table_cells(mask, tol)
-            nc = max(c for _, c in cells) + 1 if cells else 0
-            seen[nc] = seen.get(nc, 0) + 1
-            if nc == columns:
-                hits.append(lo + i)
+    for page, nc in scan_columns(pdf, n, dpi=dpi, tol=tol):
+        seen[nc] = seen.get(nc, 0) + 1
+        if nc == columns:
+            hits.append(page)
     run, last = [], 0
     for p in hits:
         if not run and p <= 3:

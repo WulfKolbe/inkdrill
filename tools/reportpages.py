@@ -31,7 +31,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from pagedetect import probe, row_bands, npages          # noqa: E402
+from pagedetect import (probe, row_bands, npages,        # noqa: E402
+                        tables as _tables)
 from inkdrill.pngio import read_png, auto_mask           # noqa: E402
 
 ap = argparse.ArgumentParser(prog="tools/reportpages.py",
@@ -40,6 +41,16 @@ ap.add_argument("--pdf", required=True, type=pathlib.Path)
 ap.add_argument("--columns", required=True, type=int,
                 help="the table's column count, from the producer's "
                      "own source -- never guessed here")
+ap.add_argument("--table", type=int, default=None, metavar="N",
+                help="select the Nth table in PAGE ORDER (1-based) "
+                     "instead of the leading run with --columns. A "
+                     "column count cannot identify a table when two "
+                     "tables share one -- pdfdrill's report has four "
+                     "(equations, formulas, tables, image regions) and "
+                     "the first and last are both 6 wide. --columns is "
+                     "still required and is CROSS-CHECKED against the "
+                     "ordinal: a disagreement is reported, never "
+                     "reconciled.")
 ap.add_argument("--header", choices=("first", "every"), default="every",
                 help="`every` when the table uses \\endhead so LaTeX "
                      "reprints the header per page; `first` when it "
@@ -56,8 +67,29 @@ A = ap.parse_args()
 if not A.pdf.is_file():
     raise SystemExit(f"{A.pdf}: no such file")
 
-pages, census = probe(A.pdf, npages(A.pdf), A.columns,
-                      dpi=A.probe_dpi, tol=A.tol)
+found = _tables(A.pdf, npages(A.pdf), dpi=A.probe_dpi, tol=A.tol)
+census = {}
+for t in found:
+    census[t["columns"]] = census.get(t["columns"], 0) + len(t["pages"])
+mismatch = None
+if A.table is None:
+    pages, census = probe(A.pdf, npages(A.pdf), A.columns,
+                          dpi=A.probe_dpi, tol=A.tol)
+elif not 1 <= A.table <= len(found):
+    pages = []
+    mismatch = ("--table %d, but this report holds %d table(s)"
+                % (A.table, len(found)))
+else:
+    chosen = found[A.table - 1]
+    pages = list(chosen["pages"])
+    if chosen["columns"] != A.columns:
+        # THE FINDING, not a tuning problem: the ordinal and the column
+        # count are two independent views of which table this is, and
+        # they disagree. Selecting on either one alone would return rows
+        # with full confidence.
+        mismatch = ("table %d has %d columns, --columns says %d"
+                    % (A.table, chosen["columns"], A.columns))
+        pages = []
 rows, unreadable = {}, []
 import tempfile
 tmp = pathlib.Path(tempfile.mkdtemp())
@@ -82,7 +114,10 @@ for k, p in enumerate(pages):
                     for r_, y0, y1 in bands]
 
 json.dump({"pdf": str(A.pdf), "columns": A.columns, "header": A.header,
-           "dpi": A.dpi,
+           "dpi": A.dpi, "table": A.table,
+           "tables": [{"ordinal": t["ordinal"], "columns": t["columns"],
+                       "pages": t["pages"]} for t in found],
+           "mismatch": mismatch,
            "pages": pages,
            "census": {str(k): v for k, v in sorted(census.items())},
            "rows": rows,
