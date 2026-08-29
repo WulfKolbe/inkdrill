@@ -1,0 +1,44 @@
+306 - advisory space positions: not emitted
+========================================================================
+
+306 IS NOT BUILT, because 305 measured the signal it would emit and
+the signal does not separate.
+
+305's result, on `math` and `text` regions of one book, 202 rows and
+7,894 gaps: the ratio of a gap to its row's median gap runs from
+87.6% of rows above 2x to 36.1% above 10x, smoothly, with no knee.
+There is no threshold at which "this gap is a typeset space" is a
+different statement from "this gap is between two glyphs".
+
+WHAT EMITTING IT ANYWAY WOULD COST, and this is why the answer is a
+refusal rather than a lower-confidence emission. 306's output is
+advisory data for an LLM placing `\quad` and `\;`. The consumer
+cannot check it: a model handed "an explicit space is required at
+character 14" has no way to tell a measured space from an artefact
+of a median that collapsed to 1 px. It would place the command,
+the LaTeX would compile, and the result would look correct.
+
+That is worse than 220, which was refused for building before
+measuring. Here the measurement exists and says the signal is not
+there. Emitting it would be publishing a number the instrument does
+not support, into a consumer that cannot audit it.
+
+WHAT WOULD MAKE 306 BUILDABLE. Not a threshold on this statistic --
+a different NORMALISER. 305 section 4 records why this one fails: the
+row median gap is 1.00 px on half the rows, because adjacent glyphs
+in set mathematics touch, so dividing by it saturates the ratio. A
+denominator that cannot collapse would be the thing to measure:
+
+  * the row's x-height, or its median glyph WIDTH
+  * the MODE of the positive gaps rather than their median
+  * the inter-word gap of the surrounding body text, which is a
+    property of the typeface rather than of the row
+
+Any of those is a measurement, not a build, and the same shape as
+305: take one book, plot the distribution, look for a break, and
+report that there is none if there is none.
+
+I have not measured any of them and I am not asserting that one would
+work.
+
+See out/305.txt for the measurement.

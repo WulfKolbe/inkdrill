@@ -1,0 +1,128 @@
+305 - inter-glyph gaps as a multiple of the row median
+========================================================================
+
+ANSWER: the measure does not separate them. Across three
+populations, on one book, there is NO threshold at which "a gap
+several times the median" picks out typeset spaces rather than
+ordinary inter-glyph gaps. The counts are below at every candidate
+value, and none of them is a cut.
+
+--------------------------------------------------------------------
+1. PAGE 108, AND WHAT I CANNOT ANSWER
+
+The task asks for the gap between the 2 and the 1. INKDRILL READS NO
+TEXT -- that is emit's G6, and it is the reason this project can
+cross-check a text-extraction tool instead of agreeing with it. I can
+report the gap at a POSITION; naming the glyph at that position comes
+from the LaTeX side.
+
+So I measured the row whose LaTeX contains a 2 and a 1. Page 108,
+line 4 of lines.json:
+
+    \(\left(m \in \mathbb{Z} ; n \in \mathbb{Z}_{2 k+1}\right)\)
+    is given by
+
+    row 22, y 992-1037 px at 300 dpi, 25 glyphs
+    MEDIAN inter-glyph gap        5.5 px
+    largest gaps in the row       20 px (3.6x), 18 px (3.3x),
+                                  17 px (3.1x)
+
+The subscript `2 k+1` is set TIGHT. No gap anywhere in that row
+reaches 4x the median. The large ratios on page 108 -- 35x, 40x, 52x
+-- are all inside the two `diagram` regions, which are matrix
+displays, not inside the text line carrying the 2 and the 1.
+
+If the pair meant is elsewhere on the page, give me a region or an
+approximate x and the gap is one measurement away.
+
+--------------------------------------------------------------------
+2. THREE POPULATIONS, AND WHY THE FIRST TWO WERE WRONG
+
+POPULATION A -- page-wide rows, 15 pages, 723 rows, 25,835 gaps:
+
+    p50 1.00   p90 13.33   p95 26.00   p99 35.00   max 389
+    >= 3x median: 95.0% of rows      >= 10x: 82.3%
+
+Wrong, and diagnosably so. `mathstruct.rows` groups by vertical
+overlap across the WHOLE PAGE WIDTH, so one "row" spans an equation
+and its equation number with 400 px of margin between them. That gap
+is page layout, not a typeset space.
+
+POPULATION B -- gaps within a lines.json region, 15 pages, 5,143
+rows, 75,952 gaps:
+
+    p50 1.00   p90 6.33   p95 22.00   p99 33.25
+    >= 3x median: 36.2%              >= 10x: 24.5%
+
+Also wrong. lines.json NESTS table regions, so the same cell's ink is
+counted as `table`, `table_column`, `table_row` and `simple_cell` --
+4,816 of the 5,143 rows are that nesting, against 202 real text and
+math lines.
+
+POPULATION C -- `math` and `text` regions only, 20 pages, 202 rows,
+7,894 gaps. The restriction is decided by 306's PURPOSE -- where a
+`\quad` could go inside a maths string -- not by which population
+gives a break. This is the last cut for that reason; narrowing until
+a knee appears would be choosing the population from the answer.
+
+--------------------------------------------------------------------
+3. THE ANSWER, ON POPULATION C
+
+    percentile   ratio
+      p50         1.00
+      p75         1.80
+      p90         5.33
+      p95         6.67
+      p97         8.00
+      p99        11.50
+      max       316.50
+
+    threshold   rows with a gap above it
+      >=  2x        177 of 202   87.6%
+      >=  3x        170          84.2%
+      >=  4x        160          79.2%
+      >=  5x        142          70.3%
+      >=  6x        129          63.9%
+      >=  8x         99          49.0%
+      >= 10x         73          36.1%
+
+Smooth from 87.6% to 36.1% with no knee anywhere. The percentiles are
+continuous too -- 5.33, 6.67, 8.00, 11.50 -- with no gap in the
+distribution that a threshold could sit in.
+
+HOW MANY ROWS CONTAIN A GAP ABOVE THE THRESHOLD THAT SEPARATES THEM:
+the question presumes the threshold exists. It does not, so the
+honest answer is the table above and not a single number from it.
+
+--------------------------------------------------------------------
+4. WHY THE MEASURE FAILS, WHICH IS NOT THE SAME AS THE IDEA FAILING
+
+A typeset space in maths IS wider than an inter-glyph gap -- the
+premise is sound. What fails is the NORMALISER. The row median is
+1.00 px on half the rows measured, because most adjacent glyph pairs
+in set mathematics touch or nearly touch. Dividing by a median of 1
+turns every ordinary 6 px gap into a 6x ratio, so the statistic
+saturates: 87.6% of rows have "a gap several times the median"
+because the median is not a gap, it is a kerning artefact.
+
+That is a property of the divisor, not of the page. A measure with a
+denominator that does not collapse -- the row's x-height, its median
+GLYPH WIDTH, or the mode of the positive gaps rather than their
+median -- might separate where this one cannot. I have not measured
+any of them and I am not going to assert that one would.
+
+--------------------------------------------------------------------
+5. POPULATION
+
+One book, 1511.08771, 11,232 pages, of which 20 sampled at fixed
+intervals (20, 40, ... 380) plus page 108. Gaps measured between
+consecutive components in a row, clamped at zero for overlapping
+boxes -- a kerned pair is a real zero-width gap and dropping it would
+raise the median. Rows under 4 glyphs excluded.
+
+One book is one book. A different typeface or a tighter setting would
+move these numbers, and nothing here claims otherwise.
+
+RE-RUN: tools-side script, in the 305 scratch; the measurement is
+`nest.ink_only` -> `mathstruct.rows` -> consecutive x-gaps, and the
+only choices are the region filter and the minimum glyph count.
