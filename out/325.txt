@@ -1,0 +1,164 @@
+325 / 329 - five candidate discriminators, none of which separate
+========================================================================
+
+ANSWER: none of the five separates the signal population from
+ordinary low-confidence equations. Two point the wrong way, one is
+degenerate, and the ink-versus-LaTeX ratio -- the one that was meant
+to be immune to the others' defect -- fails for a reason visible in
+the named example's own LaTeX.
+
+--------------------------------------------------------------------
+0. THE POPULATION IS MINE, NOT 324's
+
+324 is pdfdrill's task and out/324.txt was not written when this ran,
+so these populations are MY construction from 324's stated criteria:
+
+    low-confidence (<0.3) math lines           1,807
+      SIGNAL   array + >=2 arrows, or array
+               + \downarrow/\uparrow             157   58 documents
+      ORDINARY                                 1,650
+      control sampled to match                   157
+    measured                                     40 + 40
+
+pdfdrill's own count is 49 against my 157. That is a difference in
+CONSTRUCTION, not in the corpus, and nothing here travels between
+sessions until it has been re-run on ONE list. It will be re-run on
+theirs rather than reconciled -- merging two constructions makes a
+third set neither session measured.
+
+--------------------------------------------------------------------
+1. THE FOUR STRUCTURAL CANDIDATES
+
+    statistic            signal p50   control p50   control >= signal p50
+    components                93.00         88.00          50%
+    components per row        13.00          9.28          38%
+    distinct rows              7.00          8.00          65%
+    x-centre columns          18.00         21.00          68%
+    thin off-baseline          0.00          0.00         100%
+
+COMPONENTS PER ROW is the only one with any direction, and at 38% it
+still puts more than a third of ordinary equations above the signal
+median, with the ranges overlapping at both ends (p10 3.34 against
+3.86, p90 25.8 against 23.6).
+
+DISTINCT ROWS AND COLUMN CLUSTERS POINT THE WRONG WAY. Both are LOWER
+in the signal. An invented `aligned` block produces FEWER rows than a
+real multi-line equation, not more, so a detector keyed on either
+would fire preferentially on the correct transcriptions.
+
+THIN OFF-BASELINE IS DEGENERATE, not weak. Both medians are 0, so
+"100% at or above" is the statement 0 >= 0 and carries nothing.
+`is_rule`-shaped components off a text baseline essentially do not
+occur in either population, which is consistent with 116 and 196:
+the aspect gate finds almost nothing on real pages.
+
+--------------------------------------------------------------------
+2. WHY ALL FOUR FAIL, WHICH IS ONE REASON
+
+Each describes the SHAPE THE READER PRODUCED. A reader that invents
+an array produces array-shaped output whether or not the page held
+one, so measuring the output's shape cannot reveal that the output
+was invented. The four statistics are downstream of the thing they
+are trying to detect.
+
+--------------------------------------------------------------------
+3. THE INK-VERSUS-LATEX RATIO (329)
+
+Components in the scan against symbol tokens in the LaTeX. This does
+not ask what shape the output has; it asks how much of the page the
+output ACCOUNTS FOR, which is the general class and does not care
+whether the content was a commutative diagram, a vertex diagram or a
+matrix.
+
+    ink components per LaTeX symbol token
+       signal   p10 0.87   p50 1.05   p90 1.48
+       control  p10 0.84   p50 1.16   p90 1.53
+       control at or above the signal median: 68%
+
+IT DOES NOT SEPARATE, and the signal median is LOWER than the
+control's.
+
+Tokens are counted as symbols a reader would have had to see:
+control sequences, letters, digits, operators. Structural
+scaffolding -- \begin{aligned}, &, \\, braces, sizing -- is NOT
+counted, because it describes layout rather than ink and counting it
+would let an invented array inflate its own denominator.
+
+--------------------------------------------------------------------
+4. WHY IT FAILS, AND IT IS IN EQ0717's OWN LATEX
+
+Cardona EQ0717, source page 275, is transcribed as:
+
+    \begin{aligned} & \hat{T}=\operatorname{tr}_{a} M_{a}(u) \\
+    &=\left.\right|_{L}^{L} \cdots \\ & \cdots \cdots \\
+    & \cdots 2 \\ & L \end{aligned} a .
+
+The task estimated "perhaps eight meaningful tokens". This counter
+reads about twenty, because `\cdots` counts as a symbol -- and there
+are five of them.
+
+A READER THAT INVENTS AN ARRAY ALSO INVENTS FILLER. The denominator
+inflates alongside the numerator and the ratio stays near 1. The
+invention pays for itself, which is the same defect as the four
+structural candidates arriving by a different route: the token count
+is also downstream of the invention.
+
+--------------------------------------------------------------------
+5. THE POST-HOC VARIANT, AND IT DOES NOT RESCUE IT
+
+An ellipsis denotes CONTENT OMITTED, so a token meaning "something is
+missing here" arguably cannot account for ink that is present.
+Excluding `\cdots`, `\ldots`, `\vdots`, `\ddots` and `\dots`:
+
+       signal   p10 0.87   p50 1.05   p90 1.48
+       control  p10 0.84   p50 1.16   p90 1.54
+       control at or above the signal median: 68%
+
+Unchanged to two decimal places on every figure that matters. On
+EQ0717's document the exclusion moves one example from 1.88 to 1.94
+and nothing else.
+
+Two things follow. The variant fails, so no argument is needed about
+whether it was legitimate -- and it WAS decided after seeing the
+primary result, which is the move that turns a measurement into a
+fit, so it is reported here as post-hoc and would need a population
+chosen before the exclusion was known.
+
+The ellipsis hypothesis is also refuted as a mechanism: filler
+inflates the count, but not by enough to matter across the
+population. EQ0717 is not typical of the 157.
+
+--------------------------------------------------------------------
+6. WHAT THIS SUGGESTS, WITHOUT BUILDING ANYTHING
+
+Every candidate measured so far is computed from the reader's OWN
+OUTPUT, or from ink normalised by it. An invention supplies both
+sides, so none of them can see it. A discriminator would have to come
+from something the reader does not control:
+
+  * the region's ink against the ink of its NEIGHBOURS on the page --
+    a diagram transcribed as an equation is still diagram-shaped
+    relative to the body text around it
+  * the rendered LaTeX against the scan, which is what the compare
+    channel already measures and what out/102 and out/117 are about
+  * pdfdrill's own confidence, which is already the selector and
+    cannot also be the test
+
+The second is the one that already exists. A row in this population
+should show a large component delta in `compare`, and that is
+checkable against the existing per-document TSVs without building
+anything new. It is the obvious next measurement and it is not this
+task.
+
+--------------------------------------------------------------------
+7. POPULATION
+
+40 signal and 40 control regions, cropped from each document's OWN
+source pdf at 300 dpi via the lines.json region, from my construction
+of 324's criteria over 1,216 documents. Regions under 6 components or
+20 px in either axis excluded. Confidence read from lines.json's
+`confidence` field.
+
+NOT a corpus rate: 80 regions, one construction, and the selector
+(confidence < 0.3) is itself a MathPix judgement rather than ground
+truth.
