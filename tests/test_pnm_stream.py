@@ -73,3 +73,42 @@ def test_dpi_is_still_required():
 def test_end_of_stream_is_not_an_error():
     assert list(stream_masks(io.BytesIO(b""), dpi=300)) == []
     assert list(stream_masks(io.BytesIO(b"\n"), dpi=300)) == []
+
+
+def test_mask_from_pgm_matches_the_png_route_and_needs_no_dpi():
+    """388 — `compare` reads counts, not geometry, so a PGM there needs no dpi.
+
+    Every other pnmio entry point refuses without one and should: a mask whose
+    coordinates are silently in the wrong space cannot be caught downstream.
+    That rule protects callers that convert to POINTS, and `compare` is not
+    one — `__main__.py` says so for the sibling subcommand in those words,
+    "No dpi is required -- the five numbers are counts".
+
+    Inventing a dpi to satisfy a contract about lengths would put a fabricated
+    number in the one place the contract exists to keep honest.
+    """
+    import tempfile, pathlib
+    from inkdrill.pnmio import mask_from_pgm
+    raw = _mixed(41, 23)
+    d = pathlib.Path(tempfile.mkdtemp())
+    (d / "x.pgm").write_bytes(raw)
+    got = mask_from_pgm(d / "x.pgm", threshold=128)
+    want = binarize(next(iter(read_pnm_stream(raw, dpi=300))).gray, 41, 23,
+                    threshold=128, ink_is_dark=True)
+    assert got.data == want.data
+    assert (got.width, got.height) == (41, 23)
+
+
+def test_compare_emits_the_row_height_last():
+    """386 — the sliver height must come from the lattice that produced the
+    row. reportcompare used to re-derive a lattice from a 300 dpi render and
+    index it with a row number from compare's own lattice; the two agree only
+    when both resolutions find the same row count. On DTZ p022 they did not,
+    and a real 1,597 px data row looked up a 6 px rule and was dropped.
+
+    Asserted on the HEADER so the column cannot quietly move or vanish.
+    """
+    import inspect
+    from inkdrill import __main__ as m
+    src = inspect.getsource(m.cmd_compare)
+    assert '"empty", "row h"' in src

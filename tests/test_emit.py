@@ -1945,9 +1945,17 @@ class T1_17_BothCellsEmptyIsNotClean(unittest.TestCase):
                 if l.startswith("| 1 |")]
         return rows, err.getvalue()
 
+    #: 388 — the `empty` column is indexed by POSITION, not as the last one.
+    #: `compare` gained a trailing `row h` column (386: the sliver height has
+    #: to come from the lattice that produced the row, not from one a consumer
+    #: re-derives), and these two assertions read `r[-1]`. They failed at once,
+    #: which is the good case — a test that says "the last column" when it
+    #: means "the empty column" is asserting the schema by accident.
+    EMPTY_COL = 16
+
     def test_an_empty_last_row_is_marked_and_keeps_its_slot(self):
         rows, err = self._rows(self._page(last_row_empty=True))
-        self.assertEqual(rows[-1][-1], "BOTH-EMPTY")
+        self.assertEqual(rows[-1][self.EMPTY_COL], "BOTH-EMPTY")
         # its five-tuples really are the all-zero pair that reads clean
         self.assertEqual(rows[-1][3:13], ["0"] * 10)
         # and it was NOT removed: the row count is unchanged
@@ -1956,7 +1964,7 @@ class T1_17_BothCellsEmptyIsNotClean(unittest.TestCase):
 
     def test_a_row_with_ink_is_not_marked(self):
         rows, err = self._rows(self._page(last_row_empty=False))
-        self.assertEqual([r[-1] for r in rows], ["", "", ""])
+        self.assertEqual([r[self.EMPTY_COL] for r in rows], ["", "", ""])
         self.assertNotIn("NO INK", err)
 
 

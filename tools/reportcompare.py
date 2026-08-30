@@ -332,11 +332,21 @@ for name in DIRS:
 
 def one(job):
     name, pdf, p, d = job
-    a = d / f"p{p:03d}_r300.png"; b = d / f"p{p:03d}_r600.png"
+    # 388 — pgmraw, not png16m. The decode is 93% of a page's cost and a
+    # pure-Python PNG reader spends ~0.7 s per megapixel on it; PGM is a
+    # header parse and a translate, 0.002 s/Mpx. Measured on one A3 page at
+    # 600 dpi: 60.65 s -> 4.6 s for the whole compare, masks byte-identical.
+    #
+    # THE TRADE IS DISK. A PGM is uncompressed: the same page is 0.4 MB as
+    # PNG and 66 MB as PGM, 166x. So these are NOT cached across runs the way
+    # the PNGs were — they are deleted as soon as the compare that needs them
+    # has run. Re-rendering costs 0.3 s, which is cheaper than the PNG decode
+    # it replaces, so the cache it removes was never paying for itself here.
+    a = d / f"p{p:03d}_r300.pgm"; b = d / f"p{p:03d}_r600.pgm"
     for dpi, out in ((300, a), (600, b)):
         if not out.exists():
             subprocess.run(["gs","-q","-dNOPAUSE","-dBATCH",
-                            "-sDEVICE=png16m",f"-r{dpi}",
+                            "-sDEVICE=pgmraw",f"-r{dpi}",
                             f"-dFirstPage={p}",f"-dLastPage={p}",
                             f"-sOutputFile={out}",str(pdf)], check=True)
     md = d / f"p{p:03d}.md"
@@ -344,6 +354,11 @@ def one(job):
         subprocess.run([sys.executable,"-m","inkdrill","compare",
                         str(a),str(b),"-o",str(md)],
                        capture_output=True, cwd=str(pathlib.Path(__file__).resolve().parent.parent))
+    # The rasters go as soon as the md exists. 34 pages of a report at
+    # 132 MB a page would be 4.5 GB of intermediates for a measurement whose
+    # output is a few kilobytes of text.
+    for f in (a, b):
+        f.unlink(missing_ok=True)
     return name, p
 
 with cf.ThreadPoolExecutor(max_workers=4) as ex:
@@ -387,17 +402,28 @@ for name in DIRS:
     recs = []
     for md in sorted(d.glob("p*.md")):
         p = int(md.stem[1:])
-        png = d / f"p{p:03d}_r300.png"
-        img = read_png(png)
-        m = auto_mask(img.gray, img.width, img.height, 200)[0]
-        cells = _table_cells(m, 4.0)
-        if not cells: continue
-        nr = max(r for r, _ in cells) + 1
-        hts = {r: cells[(r, 0)][3] - cells[(r, 0)][1] for r in range(nr)}
+        # 386 — THE HEIGHT NOW COMES FROM THE md, not from a lattice
+        # re-derived here.
+        #
+        # This used to render p<NNN>_r300.png again, run `_table_cells` on it,
+        # and index the result with the row number from the md. The md's row
+        # numbers come from `compare`'s OWN lattice, and the two agree only
+        # when both resolutions detect the same number of rows. On DTZ p022
+        # they did not — 8 at 300 dpi against 5 at 600, because at 300 the
+        # lattice also picks up three 6 px rules INSIDE figures — so md row 2,
+        # a real 1,597 px data row, looked up a 6 px rule and was dropped as a
+        # sliver. That page lost a row silently, and the same disagreement
+        # refused 12 of 196 documents outright in the 322 pass.
+        #
+        # `compare` now emits the height in the last column, measured from the
+        # lattice that produced the row. It cannot disagree with itself.
         for line in md.read_text().splitlines()[2:]:
             c = [x.strip() for x in line.split("|")[1:-1]]
             ln = int(c[1])
-            if ln == 0 or hts.get(ln, 999) < 40: continue
+            # Older md files have no height column. Treated as "keep", not as
+            # "drop": an absent measurement must not silently remove rows.
+            h = int(c[17]) if len(c) > 17 and c[17].isdigit() else 999
+            if ln == 0 or h < 40: continue
             L = [int(x) for x in c[3:8]]; R = [int(x) for x in c[8:13]]
             dis = sum(abs(x - y) for x, y in zip(L, R))
             rows.append("\t".join(map(str, [p, ln, dis, c[13]]

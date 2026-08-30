@@ -600,6 +600,14 @@ def cmd_compare(argv) -> int:
     from .warp import resample
 
     def load(path):
+        # 388 — dispatch on the suffix. png16m costs ~0.7 s per megapixel in a
+        # pure-Python decoder and pgmraw costs 0.002; on an A3 page at 600 dpi
+        # that is 44 s against 0.4. The masks are byte-identical, asserted in
+        # tests/test_pnm_stream.py and re-checked on this report before the
+        # callers were switched.
+        if str(path).lower().endswith((".pgm", ".pnm")):
+            from .pnmio import mask_from_pgm
+            return mask_from_pgm(path, threshold=args.threshold)
         img = read_png(path)
         return auto_mask(img.gray, img.width, img.height,
                          args.threshold)[0]
@@ -723,7 +731,7 @@ def cmd_compare(argv) -> int:
 
     header = (["page", "line", "label"]
               + [f"L {k}" for k in keys] + [f"R {k}" for k in keys]
-              + ["A=B", "B stable", "overrun", "empty"])
+              + ["A=B", "B stable", "overrun", "empty", "row h"])
     rows_out = []
     mismatch = unstable = overruns = empties = 0
     for r in range(min(nrows.values())):
@@ -797,6 +805,22 @@ def cmd_compare(argv) -> int:
         # overrun harness. The row keeps its slot and says what it is.
         both_empty = (ncomp[0] == 0 and ncomp[1] == 0)
         row.append("BOTH-EMPTY" if both_empty else "")
+        # 386/388 — THE ROW'S HEIGHT, from the lattice that produced this row.
+        #
+        # `reportcompare` filters slivers by height, and it was re-deriving a
+        # SECOND lattice from the 300 dpi render to get them, then indexing it
+        # with the row number from this file. The two agree only when both
+        # resolutions find the same row count. On DTZ p022 they did not — 8
+        # rows against 5, because at 300 dpi the lattice also finds three 6 px
+        # rules inside figures — so a real 1,597 px data row looked up a 6 px
+        # rule and was dropped as a sliver. One row lost, and 12 documents
+        # refused outright in the 322 pass for the same reason.
+        #
+        # A height measured here cannot disagree with the row it belongs to.
+        # APPENDED, so every existing column index in a consumer still points
+        # at what it did before.
+        _b = cells["A"].get((r, 0))
+        row.append(str(_b[3] - _b[1]) if _b else "")
         empties += both_empty
         mismatch += not agree
         unstable += not stable

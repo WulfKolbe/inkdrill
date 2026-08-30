@@ -1,0 +1,91 @@
+388b — reportcompare switched to pgmraw
+=======================================
+
+WHAT CHANGED
+
+  tools/reportcompare.py   renders pgmraw, not png16m
+  inkdrill/__main__.py     `compare` dispatches on suffix; .pgm/.pnm read
+                           through pnmio, .png unchanged
+  inkdrill/pnmio.py        `mask_from_pgm(path, threshold)` — a P5 file to an
+                           InkMask with NO dpi
+  inkdrill/__main__.py     `compare` emits the row's height as a new LAST
+                           column, `row h`
+  tools/reportcompare.py   the sliver filter reads that column instead of
+                           re-deriving a lattice
+
+MEASURED, one A3 page at 600 dpi, the real subprocess:
+
+  before   60.65 s      after   4.6 s      13x
+
+The decode was 93% of the page and is now 0.002 s/Mpx instead of ~0.7.
+Lattice and five-tuple are unchanged and are now the whole cost.
+
+NO DPI, AND WHY THAT IS NOT A HOLE IN THE CONTRACT
+
+Every other pnmio entry point refuses without a dpi, for the reason its
+header gives: PNM cannot record resolution and a mask silently in the wrong
+coordinate space cannot be caught downstream. That rule protects callers
+that convert to POINTS. `compare` is not one — it emits five counts per cell
+and no geometry, and `__main__.py:559` already says so for the sibling
+subcommand: "No dpi is required -- the five numbers are counts".
+
+Inventing a dpi to satisfy a contract about lengths would put a fabricated
+number in the one place that contract exists to keep honest. So the rule is
+unchanged where it bites and the exception is named.
+
+THE TRADE IS DISK, and it is handled
+
+  same page   PNG 0.4 MB      PGM 66 MB      166x
+
+So the rasters are no longer cached across runs: they are deleted as soon as
+the compare that needs them has run. 34 pages at 132 MB a page would be
+4.5 GB of intermediates for an output of a few kilobytes. Re-rendering costs
+0.3 s, less than the PNG decode it replaces, so that cache never paid for
+itself. Measured after a full 34-page run: 24 MB left on disk, the md files.
+
+386's FIRST MECHANISM IS FIXED
+
+The height now comes from the lattice that produced the row. reportcompare
+was re-deriving a second lattice from a 300 dpi render and indexing it with
+compare's row numbers; they agree only when both resolutions find the same
+row count.
+
+386's SECOND MECHANISM IS NOT, AND p022 STILL LOSES A ROW
+
+Re-measured the DTZ report end to end. Still 98 body rows, and p022 still
+has 2 where it should have 3.
+
+The height fix cannot reach it. `compare` pairs the two lattices BY INDEX
+when their counts differ (`comparing the first min`), and on p022 they do:
+
+  p22 @300   8 rows   heights 49, 848, 3, 798, 3, 798, 3, 99
+  p22 @600   5 rows   heights 99, 1697, 1597, 1597, 198
+
+The 300 dpi lattice finds three 3 px rules inside figures that the 600 dpi
+one does not. md row 2 is therefore A's 3 px rule against B's second data
+row, and its height — correctly reported, from A's own lattice — is 3.
+
+THE FIX, MEASURED BUT NOT APPLIED
+
+Slivers must be dropped from EACH lattice before the two are paired. The
+floor cannot be relative to the median row height: the median is contaminated
+by the slivers themselves (74 px on a page whose real rows are 798), and on
+p022 at 600 dpi there are no slivers at all so the median is 1597 and the
+header would be dropped. That is 305's collapsing denominator again.
+
+A floor proportional to PAGE HEIGHT works and needs no dpi — 40 px at 300 dpi
+on A3 is 1.14% of the page:
+
+  p21  300: 8 -> 5    600: 8 -> 5     agree
+  p22  300: 8 -> 5    600: 5 -> 5     AGREE — the row comes back
+  p25  300: 8 -> 5    600: 8 -> 5     agree
+
+NOT APPLIED, deliberately. It renumbers every row `compare` emits, which
+invalidates every md and every report.compare.tsv in the corpus — 535 of
+them. That is a corpus-wide re-measurement, and it is the user's call, not a
+side effect of a decoder switch.
+
+1,109 tests pass, 2 new. Two existing tests failed first and were right to:
+they asserted the `empty` column as `r[-1]`, which the new trailing column
+displaced. A test that says "the last column" when it means "the empty
+column" asserts the schema by accident, so both now index it by position.

@@ -313,6 +313,44 @@ def stream_masks(fh, *, dpi=None, threshold: int = 128,
         yield InkMask(bytes(out), width, height)
 
 
+def mask_from_pgm(path, *, threshold: int = 128, ink_is_dark=True):
+    """A P5 file straight to an `InkMask`, WITHOUT a dpi.
+
+    Every other entry point here refuses without one, for the reason the
+    header gives: PNM cannot record resolution, and a mask whose coordinates
+    are silently in the wrong space cannot be detected downstream. That rule
+    protects callers that convert to POINTS.
+
+    This one is for callers that do not. `compare` emits five counts per cell
+    and no geometry — `__main__.py:559` states it for the sibling subcommand
+    in those words, "No dpi is required -- the five numbers are counts". A
+    caller that derives no length cannot get a length wrong, and inventing a
+    dpi to satisfy a contract about lengths would put a fabricated number in
+    the one place the contract exists to keep honest.
+
+    So the resolution rule is unchanged where it bites, and this function is
+    named and documented so that using it for geometry is a visible mistake
+    rather than a silent one.
+    """
+    from .raster import _lut
+    with open(path, "rb") as fh:
+        hdr = _read_header(fh)
+        if hdr is None:
+            raise CorruptPNM(f"{path}: no PNM image")
+        width, height = hdr
+        lut = _lut(threshold, ink_is_dark)
+        out = bytearray()
+        remaining = width * height
+        while remaining > 0:
+            chunk = fh.read(min(width, remaining))
+            if not chunk:
+                raise CorruptPNM(
+                    f"{path}: raster ended {remaining} byte(s) short")
+            out += chunk.translate(lut)
+            remaining -= len(chunk)
+    return InkMask(bytes(out), width, height)
+
+
 def _read_header(fh):
     """(width, height) for the next P5 image, or None at end of stream.
 
