@@ -141,3 +141,53 @@ move these numbers, and nothing here claims otherwise.
 RE-RUN: tools-side script, in the 305 scratch; the measurement is
 `nest.ink_only` -> `mathstruct.rows` -> consecutive x-gaps, and the
 only choices are the region filter and the minimum glyph count.
+
+====================================================================
+RE-RUN, 2026-08-30
+====================================================================
+
+REPRODUCES EXACTLY. Same runner (tools/rowgaps.py), same population —
+1511.08771, pages 20,40,...,380 plus 108, math and text regions,
+rows of 4+ glyphs:
+
+    regions with rows   202
+    gaps              7,894
+    by type           text 122, math 80
+    p50 1.00   p75 1.80   p90 5.33   p95 6.67   p99 11.50   p100 316.50
+    >= 2x median  177 (87.6%)      >= 6x median  129 (63.9%)
+    >= 3x median  170 (84.2%)      >= 8x median   99 (49.0%)
+    >= 4x median  160 (79.2%)      >=10x median   73 (36.1%)
+
+Every number above matches this file's original run. The conclusion
+stands: there is no threshold at which "a gap several times the
+median" picks out typeset spaces.
+
+AND IT SHOWS WHERE SECTION 4 WENT WRONG.
+
+309 recorded that section 4's explanation is false, measuring 0 of
+202 rows with a median gap <= 1 px. That correction is right, and the
+re-run says WHY the claim was made.
+
+Measured directly, raw pixels, no normalisation:
+
+    rows measured                    983   (page-wide grouping)
+    median of the row median gaps    5.0 px
+    range                            2.0 to 382.0 px
+    rows whose median gap <= 1 px      0 of 983
+
+So the median gap is 5 px, not 1 px, and no row is near 1 px.
+
+The "1.00" in section 4 is THIS FILE'S OWN p50, one screen above it —
+and that p50 is a RATIO, gap divided by the row's own median gap. It
+is 1.00 because dividing a distribution by its own median puts the
+median at 1.00. It is not a length, it cannot be a length, and it is
+1.00 on every population that will ever be measured this way.
+
+Section 4 read its own normalised statistic as a pixel value and then
+offered it as the physical explanation for the saturation it had just
+found. The saturation is real and the explanation was circular: the
+number cited as the cause is an artefact of the normalisation that
+produced the effect.
+
+The original text above is left as written. This section corrects it;
+309 found it first.
