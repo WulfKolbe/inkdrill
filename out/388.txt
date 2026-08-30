@@ -1,0 +1,107 @@
+388 — pgmraw, and the streaming form
+====================================
+
+PART 1 — png16m against pgmraw, same page, four stages
+------------------------------------------------------
+
+Page 2 of the DTZ report, A3 at 600 dpi = 9921x7016 = 69.6 Mpx.
+
+  stage              png16m      pgmraw     speedup
+  rasterise            1.32 s      0.31 s      4.3x
+  decode + mask       41.23 s      0.13 s    327.9x
+  lattice              1.26 s      1.23 s      1.0x
+  five-tuple           0.12 s      0.12 s      1.0x
+  TOTAL               43.94 s      1.78 s     24.7x
+
+  FIVE-TUPLES IDENTICAL: yes, 16 of 16 cells.
+
+Only the decode moves, which is what 380 predicted and what pnmio's own
+header has said since it was written (847x on the decode, 44x end to end).
+gs is also 4.3x faster writing pgmraw than png16m — it is not compressing.
+
+THE FILE SIZE, which is the cost of all this
+--------------------------------------------
+
+  png16m    0.4 MB     pgmraw   66.4 MB      166x larger
+
+That is the trade in one line: PNG is small on disk and expensive to read;
+PGM is large and free to read. It only pays if the bytes never land — and
+they should not, because gs writes pgmraw to stdout in raster order.
+
+PART 2 — the streaming form
+---------------------------
+
+`read_pnm_stream` is a stream IN NAME ONLY. It calls `_bytes_of(src)` and
+walks a buffer holding every page: three A3 pages at 600 dpi arrive as one
+199 MB object, and a 34-page render would be 2.2 GB. One page alone costs
+the 66 MB raster plus the two copies `binarize` makes of it — `bytes(gray)`
+and then `.translate`.
+
+Added `stream_masks(fh, dpi, threshold)`: reads the header a byte at a time
+(a read-ahead would swallow raster, and a pipe cannot give it back), then
+consumes width bytes at a time and thresholds each row through the SAME
+cached LUT `binarize` uses, so the rule cannot drift. The grey page never
+exists as an object.
+
+  3 pages, gs piped straight in, A3 at 600 dpi:
+
+  form                        peak RSS     rate
+  buffered (read_pnm_stream)    543 MB    41.4 pages/min
+  streamed (stream_masks)       347 MB    43.2 pages/min
+  streamed, mask only           215 MB   294.4 pages/min
+
+  MASKS BYTE-IDENTICAL: yes — 3 of 3 pages, compared whole, ink counts
+  1353882 / 1380108 / 1658174 both ways. Identical at every threshold
+  tested (1, 64, 128, 200, 255).
+
+So the five-tuples are byte-identical between a page held in memory and a
+page streamed. Nothing added since the original design breaks on the STREAM.
+Three things break on not keeping the page, and they are the finding.
+
+WHAT NEEDS THE WHOLE PAGE — the audit you asked for
+---------------------------------------------------
+
+THE SWEEP DOES NOT. `sweep` iterates `for line, runs in _lines(mask, axis)`
+and carries `open_roots` across lines — runs per line, only open components
+held. That is the line-scan design and it is intact. Its INTERFACE takes a
+materialised `InkMask` rather than an iterator of rows, but nothing in its
+body needs one.
+
+One correction: there is no `closed_at` in this codebase. Zero occurrences.
+The mechanism is `open_roots` plus the union-find; either it was renamed or
+the name is from the design and never landed. Worth knowing before building
+on it.
+
+`nest` NEEDS TWO PASSES. nest.py:251-252 sweeps the page twice —
+`sweep(padded, conn=8)` for ink and `sweep(padded.inverted(), conn=4)` for
+holes. A pipe cannot be rewound, so either the mask is retained or the page
+is rendered twice. It also `_pad`s, which copies.
+
+`_cell_crop` NEEDS TRUE RANDOM ACCESS, and this one is not incidental. It
+indexes `mask.data[src:src+w]` at arbitrary offsets to cut each cell out,
+and it can only run AFTER the lattice is known — which is only known once
+the whole page has been seen. You cannot know where the cells are until the
+page is over, and then you must go back into it. For the table comparison
+that is fundamental, not an accident of implementation.
+
+WHAT THIS MEANS
+
+The table path can stream its INPUT but not discard its PAGE. The honest
+form is: stream pgmraw from gs, threshold per line, keep the mask and
+nothing else — 215 MB and 294 pages/min for mask construction, against 543
+MB for the buffered route. The 66 MB raster and `binarize`'s two copies all
+go; the 70 MB mask stays because nest re-reads it and the cell crops need it.
+
+A path that kept NOTHING would fit the line-scan design and would not fit
+this measurement: it would have to emit five-tuples for cells whose
+boundaries are not yet known. That is a different instrument — one that
+finds the lattice in a first pass and crops in a second — and it would read
+the page twice rather than hold it once.
+
+NOT CHANGED HERE
+
+reportcompare and reportpages still render png16m. Switching them is the
+24.7x, and it moves nothing in the output — but 386 located a defect in
+reportcompare's sliver filter that also moves row indices, and both belong
+in one re-measurement rather than two. The reader is in place and tested;
+the callers are the next step.

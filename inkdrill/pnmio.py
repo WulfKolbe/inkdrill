@@ -256,6 +256,110 @@ def read_pnm_stream(src, *, dpi=None):
         yield img
 
 
+def stream_masks(fh, *, dpi=None, threshold: int = 128,
+                 ink_is_dark: bool = True):
+    """388 — one `InkMask` per page, read A ROW AT A TIME, storing no image.
+
+    `read_pnm_stream` is a stream in name only: it calls `_bytes_of(src)` and
+    walks a buffer holding EVERY page. A 34-page A3 render at 600 dpi is
+    2.2 GB that way, and one page alone costs the 66 MB raster plus the two
+    copies `binarize` makes of it (`bytes(gray)`, then `.translate`).
+
+    `pgmraw` is raster order: a small ASCII header, then width*height bytes,
+    row by row, top to bottom. That is a line-scan feed, which is what this
+    measurement was originally built to read, and nothing downstream of the
+    threshold needs the grey values. So each row is thresholded as it
+    arrives, through the same cached LUT `binarize` uses, and only the mask
+    is kept: peak is one mask plus one row, and the grey page never exists
+    as an object at all.
+
+    IDENTICAL, NOT MERELY EQUIVALENT. The LUT is `raster._lut`, so the
+    threshold rule cannot drift from `binarize`'s -- the defect this file's
+    header already warns about for the two routes. Asserted on real pages by
+    tests/test_pnm_stream.py, mask bytes compared whole.
+
+    POLARITY. `auto_mask` needs a second, light-on-dark mask, and only when
+    the dark one `looks_inverted` -- which needs `ink_count` alone. The two
+    LUTs are exact complements (`v < t` against `v >= t`), so the light mask
+    is the dark one's byte-wise complement and no second pass over the input
+    is required. A stream cannot be rewound; this is why that matters.
+    """
+    from .raster import _lut
+    if dpi is None:
+        raise NoResolution(
+            "PNM carries no resolution, so `dpi` must be supplied; the "
+            "caller invoked ghostscript and knows it")
+    res = (float(dpi), float(dpi)) if isinstance(dpi, (int, float)) \
+        else (float(dpi[0]), float(dpi[1]))
+    if res[0] <= 0 or res[1] <= 0:
+        raise NoResolution(f"dpi must be positive, got {res}")
+    lut = _lut(threshold, ink_is_dark)
+    while True:
+        hdr = _read_header(fh)
+        if hdr is None:
+            return
+        width, height = hdr
+        out = bytearray()
+        remaining = width * height
+        row = width
+        while remaining > 0:
+            chunk = fh.read(min(row, remaining))
+            if not chunk:
+                raise CorruptPNM(
+                    f"raster ended {remaining} byte(s) short of "
+                    f"{width}x{height}")
+            out += chunk.translate(lut)
+            remaining -= len(chunk)
+        yield InkMask(bytes(out), width, height)
+
+
+def _read_header(fh):
+    """(width, height) for the next P5 image, or None at end of stream.
+
+    Read BYTE AT A TIME. The header is ~20 bytes and is followed immediately
+    by raster data, so any read-ahead would swallow pixels -- and a stream
+    from a pipe cannot be rewound to give them back.
+    """
+    toks, cur, seen_magic = [], b"", False
+    while len(toks) < 4:
+        c = fh.read(1)
+        if not c:
+            if not toks and not cur:
+                return None
+            raise CorruptPNM("stream ended inside the header")
+        if c == b"#":                       # ghostscript writes a comment
+            while c and c != b"\n":
+                c = fh.read(1)
+            continue
+        if c in _WS:
+            if cur:
+                toks.append(cur)
+                cur = b""
+                if len(toks) == 1:
+                    seen_magic = True
+            # Exactly ONE whitespace byte closes the header (G4); a second
+            # would be raster data.
+            if len(toks) == 4:
+                break
+            continue
+        cur += c
+    if toks[0] != b"P5":
+        raise UnsupportedPNM(
+            f"{toks[0]!r}: only P5 (pgmraw) can be streamed; P2 is ASCII "
+            f"and has no fixed row length")
+    try:
+        width, height, maxval = int(toks[1]), int(toks[2]), int(toks[3])
+    except ValueError as exc:
+        raise CorruptPNM(f"malformed header: {exc}") from None
+    if width <= 0 or height <= 0:
+        raise CorruptPNM(f"non-positive extent {width}x{height}")
+    if maxval != 255:
+        raise UnsupportedPNM(
+            f"maxval {maxval}; only 8-bit (255) is read, because a 16-bit "
+            f"PGM is two bytes per sample and would silently halve the width")
+    return width, height
+
+
 def load_masks(src, *, dpi=None, threshold: int = 128,
                ink_is_dark: bool = True):
     """`read_pnm_stream` straight to masks, one per page."""
