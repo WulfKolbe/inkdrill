@@ -1,0 +1,67 @@
+386 — a defect located in reportcompare, not fixed here
+=======================================================
+
+Found while converting the DTZ report's measurement into residuals. One page
+of 34 lost a row, and the cause is an index used against the wrong population
+— the class this codebase already names in several places.
+
+  tools/reportcompare.py:390   png  = d / f"p{p:03d}_r300.png"
+                               hts  = {r: height of 300-dpi lattice row r}
+                        :400   if ln == 0 or hts.get(ln, 999) < 40: continue
+
+`ln` is the row index from the md file, which `inkdrill compare` produced from
+ITS lattice. `hts` is indexed by a lattice re-derived here from the 300 dpi
+render. The two agree only when both resolutions detect the same number of
+rows. Measured:
+
+  p021 @300  8 rows x 6 cols      p021 @600  8 rows x 6 cols    agree
+  p022 @300  8 rows x 6 cols      p022 @600  5 rows x 6 cols    DISAGREE
+
+Not a tolerance effect. p022 gives 5 rows at 600 dpi at tol 2, 4, 6 and 8, and
+8 rows at 300 dpi at tol 2, 4, 6 and 12.
+
+Matching the row bands by POSITION (300 dpi doubled into 600 dpi coordinates)
+shows what the extra rows are:
+
+  row 0   300x2=(430,528)     600=(429,528)      match      header
+  row 1   300x2=(532,2228)    600=(532,2229)     match      data
+  row 2   300x2=(1922,1928)   600=(2233,3830)    differ     <- 6 px rule
+  row 3   300x2=(2234,3830)   600=(3835,5432)    differ
+  row 4   300x2=(3624,3630)   600=(5436,5634)    differ     <- 6 px rule
+  row 5   300x2=(3836,5432)   600=None
+  row 6   300x2=(5226,5232)   600=None                      <- 6 px rule
+  row 7   300x2=(5436,5634)   600=None
+
+The 600 dpi lattice finds the 5 REAL rows — header, three data rows, footer.
+The 300 dpi lattice finds those five plus three spurious thin rules INSIDE
+figures, 6 px tall. The sliver filter exists to remove exactly those, and on
+33 of 34 pages it does. On p022 it removed a real 1597 px data row instead,
+because md row 2 looked up 300-dpi row 2, one of the 6 px rules.
+
+SECOND, AND WHY THE PAGE CANNOT BE REPAIRED FROM THE md:
+
+  inkdrill/__main__.py:707
+    if nrows["A"] != nrows["B"]:
+        print("row counts differ ... comparing the first {min}")
+
+compare pairs the two lattices BY INDEX when the counts differ. On p022 that
+compares A's 6 px rule against B's second data row. The L column of that page
+is taken from the wrong rows, so the page has to be re-measured; no
+re-aggregation of the existing md can recover it.
+
+THE FIX, and why it is not applied here
+
+Slivers must be dropped from each lattice INDEPENDENTLY, before the two are
+paired, so a row index means the same thing on both sides. reportcompare must
+then take heights from the lattice that produced the md rather than
+re-deriving one.
+
+That changes row indices in every md file the corpus holds, so it belongs with
+a re-measurement rather than as a patch under a running job. It was located
+while a measurement was in flight and is recorded rather than applied.
+
+CONSEQUENCE, already contained on the pdfdrill side
+
+inkconvert now pairs per page, so this costs 3 rows (DTZ00062, DTZ00063,
+DTZ00064) instead of refusing all 100. The DTZ report carries residuals on 97
+of 100 rows; those three read inkUnmeasured until p022 is re-measured.
