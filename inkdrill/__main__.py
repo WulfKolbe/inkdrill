@@ -25,6 +25,56 @@ import sys
 import time
 
 
+#: 398 — the inter-row sliver floor, as a FRACTION OF PAGE HEIGHT.
+#:
+#: A lattice row shorter than this is the strip between two table rows, or a
+#: rule inside a figure, not a row. `reportcompare` has filtered on this for a
+#: long time at 40 px, calibrated at 300 dpi — but it filtered AFTER the two
+#: resolutions had already been paired, which is too late.
+#:
+#: WHY IT HAS TO HAPPEN BEFORE PAIRING. `compare` pairs A and B by index, and
+#: on DTZ page 22 the 300 dpi lattice finds three 3 px rules inside figures
+#: that the 600 dpi lattice does not: 8 rows against 5. Paired by index, md
+#: row 2 is A's 3 px rule against B's second DATA row, and every row after it
+#: is displaced. The page lost a row silently, and the same disagreement
+#: refused 12 of 196 documents outright in the 322 pass — the single largest
+#: cause of a refusal there.
+#:
+#: WHY NOT RELATIVE TO THE MEDIAN ROW HEIGHT. Because the median is
+#: contaminated by the very rows being removed: on p22 at 300 dpi the heights
+#: are 49, 848, 3, 798, 3, 798, 3, 99 and the median is 74 — smaller than every
+#: real row. And at 600 dpi that page has NO slivers, so its median is 1597 and
+#: a median-relative floor would delete the 99 px header. That is 305's
+#: collapsing denominator: a divisor that moves with the thing it is meant to
+#: measure.
+#:
+#: PAGE HEIGHT does not move. 40 px at 300 dpi on a 297 mm page is 1.14% of it,
+#: and every report in this corpus is 297 mm tall (A3 landscape and A4 portrait
+#: share that dimension), so this reproduces the calibrated constant at 300 dpi
+#: and scales itself at every other resolution without being told the dpi.
+SLIVER_FRAC = 40.0 / 3508.0
+
+
+def _drop_slivers(cells, page_height):
+    """Remove sub-floor lattice rows and RENUMBER, so row i means the same
+    row in both resolutions.
+
+    Renumbering is the point. Leaving the rows in place with a marker would
+    keep the two lattices disagreeing about what index 2 is, which is the
+    defect. Columns are untouched.
+    """
+    if not cells:
+        return cells
+    floor = SLIVER_FRAC * page_height
+    nr = max(r for r, _ in cells) + 1
+    keep = [r for r in range(nr)
+            if (r, 0) in cells and (cells[(r, 0)][3] - cells[(r, 0)][1]) >= floor]
+    if len(keep) == nr:
+        return cells
+    remap = {old: new for new, old in enumerate(keep)}
+    return {(remap[r], c): b for (r, c), b in cells.items() if r in remap}
+
+
 def _cell_crop(mask, x0, y0, x1, y1):
     from .raster import InkMask
     w = x1 - x0 + 1
@@ -621,6 +671,7 @@ def cmd_compare(argv) -> int:
         if dbg[k] is None:
             dbg[k] = {}
         cells[k] = _table_cells(m, args.tol, debug=dbg[k])
+        cells[k] = _drop_slivers(cells[k], m.height)
         _table_span[k] = dbg[k].get("span", 0)
     for k, c in cells.items():
         # `_table_cells` has TWO empty answers and they mean different

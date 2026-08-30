@@ -1,0 +1,92 @@
+398 — slivers dropped from each lattice BEFORE the two are paired
+=================================================================
+
+THE DEFECT
+
+`compare` pairs A and B by index. When the two resolutions detect different
+numbers of lattice rows, index i is a different row on each side, and every
+row from that point on is displaced. The filtering that removed the extra
+rows happened downstream, in `reportcompare` and in pdfdrill's `inkmeasure`,
+which is too late: by then the pairing has already been made.
+
+DTZ page 22, row heights in pixels:
+
+  300 dpi   8 rows   49, 848, 3, 798, 3, 798, 3, 99
+  600 dpi   5 rows   99, 1697, 1597, 1597, 198
+
+The 300 dpi lattice finds three 3 px rules INSIDE figures that the 600 dpi
+lattice does not. md row 2 was therefore A's 3 px rule against B's second
+data row.
+
+THE FLOOR, AND WHY IT IS NOT RELATIVE TO THE ROWS
+
+A floor relative to the median row height does not work, and the reason is
+the one 305 ran into: the divisor moves with the thing being measured.
+
+  p22 @300   median row height 74 px   — smaller than every real row on the
+                                         page, because the median is taken
+                                         over a set half of which is slivers
+  p22 @600   median row height 1597 px — no slivers at all on this side, so
+                                         a median-relative floor would delete
+                                         the 99 px header
+
+PAGE HEIGHT does not move. 40 px at 300 dpi on a 297 mm page is 1.14% of it:
+
+  SLIVER_FRAC = 40 / 3508
+
+Every report in this corpus is 297 mm tall — A3 landscape and A4 portrait
+share that dimension — so this reproduces the calibrated 40 px at 300 dpi and
+scales itself at every other resolution without being told the dpi. Rows
+below the floor are removed and the survivors RENUMBERED, which is the point:
+leaving them in place with a marker would keep the two lattices disagreeing
+about what index 2 is.
+
+THE THREE PAGES
+
+  p21   300 dpi 5 rows   600 dpi 5 rows   agree
+  p22   300 dpi 5 rows   600 dpi 5 rows   agree
+  p25   300 dpi 5 rows   600 dpi 5 rows   agree
+
+p022 KEEPS ITS ROW. Re-measured the DTZ report end to end:
+
+  before   132 TSV rows,  98 body,  p22 = 2 body rows
+  after    134 TSV rows,  99 body,  p22 = 3 body rows
+
+The three pages that remain off the 3-body pattern are correct: p1 and p34
+are the short first and last pages, and p25 holds the genuinely empty data
+row that 386 classed `absent`.
+
+THE 12 REFUSED DOCUMENTS
+
+Re-ran the 12 documents that the 322 pass refused with "compare returned N
+rows, reportpages expects M" — the single largest cause of a refusal there.
+
+  measured   10 of 12      520 rows recovered
+  refused     2 of 12
+
+And the two that still refuse do NOT refuse for this reason any more. Both
+now reach the next check and fail it by exactly one row:
+
+  preprints201901.0053.v1   run holds 19 data rows, manifest expects 20
+  j.jcp.2018.03.019         run holds 37 data rows, manifest expects 38
+
+Both were previously "page 3: compare returned 0 rows, reportpages expects
+1". So the lattice disagreement is resolved on 12 of 12; two documents have
+a different, downstream off-by-one that this task did not touch and should
+not be folded into it.
+
+THE COST, PAID
+
+535 report.compare.tsv files are invalidated: every row index `compare`
+emits has changed. At 4.6 s a page after 388 that is a re-measurement of
+hours, not weeks.
+
+ALSO IN THIS COMMIT
+
+pdfdrill's own render path (`regionink._render`) was still png16m, so the
+322 harness was paying the 93% decode that 388 removed from inkdrill's side.
+Switched to pgmraw, with the rasters deleted as each page's compare
+finishes — a PGM is uncompressed and a 400-page book would otherwise leave
+tens of gigabytes of intermediates for a TSV of a few kilobytes.
+
+1,109 tests pass.
