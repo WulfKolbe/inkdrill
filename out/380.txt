@@ -1,0 +1,114 @@
+380 — where the ~60 s per page goes
+===================================
+
+Instrument: tools/pagecost.py, page 2 of the DaTikZ fixture report
+(A3, 6 columns, 5 data rows). Validated against the real path before
+any number below was believed: the pipeline's own subprocess,
+`python3 -m inkdrill compare p_r300.png p_r600.png`, takes 60.65 s on
+this page; the instrument's inline reproduction takes 60.7 s. The
+stages below are that 60.7 s, not a model of it.
+
+THE SPLIT
+---------
+
+  stage                          time      share
+  gs -r300 (rasterise)            0.5 s      0.8%
+  gs -r600 (rasterise)            1.4 s      2.3%
+  PNG decode + auto_mask         56.8 s     93.4%
+  lattice (_table_cells)          1.9 s      3.1%
+  five-tuple x 26 cells           0.2 s      0.3%
+  TOTAL                          60.7 s
+
+The premise of the task does not survive the measurement, in three
+separate places, and each correction matters more than the split does.
+
+1. THERE IS NO 40 s SWEEP. Nothing in the per-page path sweeps. The
+   ~44 s that looked like one is the 600 dpi PNG decode.
+
+2. DETECTION IS NOT 14.3 s. It is 1.9 s — 3.1%, the third-smallest
+   stage. The 14.3 s/page figure came from `reportpages` at 300 dpi
+   and is 12.2 s of PNG decode plus ~2 s of lattice. It was a decode
+   measurement wearing a detection label, and I am the one who
+   labelled it. Optimising "detection" on that number would have
+   attacked 3% of the cost.
+
+3. THE FIVE-TUPLE IS FREE. 0.2 s for 26 cells — 0.3%. It is the stage
+   the task named as a suspect and it is the cheapest thing on the
+   page.
+
+WHY: PIXELS x A PURE-PYTHON PNG DECODER
+---------------------------------------
+
+inkdrill is stdlib-only, so PNG decoding is zlib plus per-scanline
+unfiltering in Python. It costs a flat ~0.7 s per megapixel:
+
+    150 dpi   2480x1754   4.3 Mpx    3.2 s   0.74 s/Mpx
+    300 dpi   4961x3508  17.4 Mpx   12.3 s   0.70 s/Mpx
+    600 dpi   9921x7016  69.6 Mpx   44.4 s   0.64 s/Mpx
+
+A3 at 600 dpi is 69.6 Mpx. The cost is the page size, and it is
+linear, so it is entirely predictable — which is why it hid: nothing
+about it looks like a bug.
+
+This is also the whole of the pair comparator's advantage. 382
+measured 521 pairs/min on the same images because a pair is 448x448 =
+0.20 Mpx, decoding in 0.18 s. It is 350x fewer pixels, not a better
+algorithm. The comparator does not save "a quarter" by removing
+detection; it saves 99% by never rasterising an A3 page.
+
+THE FIX ALREADY EXISTS IN THIS REPO
+-----------------------------------
+
+`pagedetect.scan_columns` renders `pgmraw` and reads it with
+`read_pnm_stream`. PNM is raw bytes with no compression and no
+filtering, so the decode is a slice:
+
+    decoder    300 dpi          600 dpi
+    PNG        12.3 s           44.4 s      0.64-0.74 s/Mpx
+    PNM         0.3 s            0.4 s      0.002    s/Mpx
+
+330x. The 56.8 s of decode becomes ~0.1 s, and gs emits pgmraw as
+fast as png16m or faster (0.2-0.3 s vs 0.5-1.3 s).
+
+Verified behaviour-preserving before proposing it: `_table_cells` on
+the PNG mask and on the PNM mask of the same page, 3 pages x 2 dpi,
+gives byte-identical cell dictionaries in 6 of 6 — 30/30, 48/48,
+30/30, 48/48, 36/36, 48/48. Same dimensions, same lattice. The
+five-tuple reads the same mask, so it follows.
+
+WHAT THE PAGE WOULD COST
+------------------------
+
+  gs -r300 + -r600 (pgmraw)       0.5 s
+  PNM decode + auto_mask          0.1 s
+  lattice                         1.9 s
+  five-tuple                      0.2 s
+  TOTAL                          ~2.7 s      from 60.7 s, ~22x
+
+Detection then becomes 70% of the page and is the correct next
+target — but only after the decoder is swapped. It is 3% today.
+
+THE REAL TARGET, ORDERED
+------------------------
+
+1. Swap `read_png` for `pgmraw` + `read_pnm_stream` in
+   `reportcompare.one` and in `reportpages`' row pass. Same-repo
+   code, verified identical output, ~22x.
+2. Then reconsider the 600 dpi pass. Under PNM it costs 0.4 s, so it
+   stops being worth removing — the reason to keep two resolutions
+   (A_eq_B agreement) survives at negligible cost.
+3. Only then optimise `_table_cells`.
+
+The pair comparator remains the right tool for pair work, but for a
+different reason than the one assumed: it wins on pixel count, and
+the page path can have most of that win without it.
+
+METHOD NOTE
+-----------
+
+My first instrument reported 60.7 s and I nearly published it as a
+reproduction of the ~60 s. It was not — I had assumed a 300+600 dpi
+path. The match was luck until I read `reportcompare.one:336` and
+found the pipeline really does render both, then timed the real
+subprocess at 60.65 s. Two numbers agreeing before the instrument is
+checked is not agreement; it is a coincidence waiting to be believed.
