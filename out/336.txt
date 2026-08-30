@@ -1,0 +1,142 @@
+336 - what each crop contains that its base image does not
+========================================================================
+
+Eight confirmed pairs from pdfdrill's out/339.txt, the first pairs
+this project has had where the base file and the crop of that same
+figure are both known and no other base claims the crop.
+
+SEVEN OF EIGHT DIFF CLEANLY. ONE DID NOT REGISTER, and that row is
+the finding the task said would matter.
+
+--------------------------------------------------------------------
+0. METHOD, AND THE ONE THING THAT CAN INVALIDATE IT
+
+The crop is the printed figure PLUS whatever was drawn over it, so
+the base's ink should be almost entirely covered by the crop's. The
+base is placed inside the crop by a coarse scale/offset search
+maximising that coverage; crop components the placed base does not
+explain are the ADDITION.
+
+COVERAGE IS REPORTED FOR EVERY PAIR. A bad registration produces a
+large, confident, meaningless diff -- every component of a misplaced
+figure looks added -- and in the output that is indistinguishable
+from a heavily annotated figure. So a pair below 0.50 is declared
+failed and its diff is NOT reported, rather than printed with a
+caveat nobody reads.
+
+--------------------------------------------------------------------
+1. THE EIGHT
+
+  base                      crop        cov   clusters  shape
+  ch4/mpsapprox2.jpg       094_...     0.91      12     above / below, centred
+  ch4/psi_N2.jpg           105_...     0.81       6     left, far offset
+  ch3/rho_xi.jpg           088_...     0.83       1     left, offset 0.80
+  ch1/passage.jpg          026_...     0.61      16     overlapping, spread
+  ch1/bothways.jpg         038_...     0.18       -     REGISTRATION FAILED
+  ch2/pt2.jpg              045_...     0.82      11     below, offset ~0.35
+  ch2/vec_map.jpg          049_...     0.85       3     overlapping, offset
+  ch2/entanglement.jpg     057_...     0.86      14     overlapping + left
+
+--------------------------------------------------------------------
+2. THE DESCRIPTIONS
+
+mpsapprox2 (cov 0.91) -- THE CLEANEST ANNOTATION SHAPE. Three
+clusters ABOVE the figure, all centred (7%, 10%, 11% of crop width,
+5-7% tall); six clusters BELOW, centred or slightly offset; three
+small overlapping. Labels above and below a centred figure, which is
+what a `\node` placed at north/south produces.
+
+psi_N2 (cov 0.81) -- LEFT SIDE ONLY. Five of six clusters sit left of
+the registered rectangle at offsets 0.45-0.58. One 10x8 cluster (7% x
+6%) and the rest single components. An axis label or a row of marks
+down one side.
+
+rho_xi (cov 0.83) -- ONE CLUSTER, and the largest single addition
+relative to its crop: 28x11 px, 19% of crop width, left at offset
+0.80. A caption or label hard against the left edge.
+
+passage (cov 0.61) -- SIXTEEN CLUSTERS, ALL OVERLAPPING OR RIGHT,
+none centred. The largest are 34x7 (24% of width, 14 components) and
+17x7 at offset 0.72. This is the lowest coverage of the seven that
+registered, and the pattern -- many small overlapping clusters spread
+across the figure -- is what an imperfect registration also produces.
+Read it as the least reliable of the seven.
+
+pt2 (cov 0.82) -- BELOW, CONSISTENTLY. Seven of eleven clusters below
+the rectangle at offsets 0.31-0.39, all tiny (1x1 to 8x4). Two 20x17
+overlapping clusters appear TWICE at identical extent and offset,
+which is one object counted twice by the clusterer, not two objects.
+
+vec_map (cov 0.85) -- THREE CLUSTERS, ALL OVERLAPPING, each 12% of
+crop height, at offsets 0.16-0.30. Marks drawn onto the figure rather
+than beside it.
+
+entanglement (cov 0.86) -- FOURTEEN, mostly overlapping and small,
+with three on the LEFT at offsets 0.58-0.66. The most annotated of
+the eight by cluster count and the least by extent: nothing exceeds
+9% of crop width.
+
+--------------------------------------------------------------------
+3. THE PAIR THAT FOUND NOTHING, AND WHY IT IS A FINDING
+
+    ch1/bothways.jpg   base 725x538   crop 740x197
+                       best placement scale 0.40, coverage 0.18
+
+The base is 1.35:1 and the crop is 3.76:1. No scaling of the base
+fits the crop's shape, so no placement covers more than a fifth of
+its ink and the diff would have called almost the whole crop an
+addition.
+
+THE ASPECT RATIOS ARE THE EVIDENCE. A crop of an annotated figure is
+the figure plus a margin -- its aspect can differ, but not by 2.8x.
+Two readings fit:
+
+  the crop shows only PART of this figure, so the base is not
+  contained in it and no registration exists; or
+  the pairing is wrong -- 339 matched this row by page and pixel
+  size with one candidate crop and no competing claim, which is
+  sound but is not a guarantee.
+
+Either way this pair cannot be diffed by this method, and one of
+eight is 12.5% of the evidence. It is reported rather than dropped
+because a silent seven-of-eight would read as a method that works.
+
+--------------------------------------------------------------------
+4. WHAT THE SEVEN SHOW
+
+Every one has additions, so the annotation IS separable when the
+figure registers. The positions are not uniform:
+
+    above and below, centred        1  (mpsapprox2)
+    one side only                   2  (psi_N2, rho_xi)
+    below only                      1  (pt2)
+    overlapping the figure          3  (passage, vec_map, entanglement)
+
+That is three of seven where the annotation is drawn ON the figure
+rather than around it. A method that assumed annotations sit outside
+the base rectangle would miss those three entirely, and 335's census
+counted 224 inclusions with sibling nodes without distinguishing the
+two placements.
+
+--------------------------------------------------------------------
+5. WHAT IS NOT CLAIMED
+
+- That a cluster IS an annotation. It is crop ink the placed base
+  does not explain. Registration error, JPEG artefacts at the figure
+  edge and rescaling all leave residue, and passage's sixteen small
+  overlapping clusters at coverage 0.61 are exactly what that residue
+  looks like.
+- That the counts are stable. Everything is measured at ~140 px wide
+  after downsampling, so a cluster of one component is at the limit
+  of what survives. The pt2 duplicate shows the clusterer emitting
+  one object twice.
+- Any rate. Eight pairs, one document, one author's figure style.
+
+--------------------------------------------------------------------
+6. POPULATION
+
+The 8 matched pairs of pdfdrill out/339.json, document 2004.05631v1.
+Bases from texsrc/figures, crops from texsrc/<uuid>/images. Both
+sides binarised at threshold 200, downsampled to about 140 px wide
+for the search. A component counts as added when under 35% of its ink
+falls on the placed base dilated by one pixel.
