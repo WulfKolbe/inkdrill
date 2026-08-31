@@ -34,6 +34,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from pagedetect import (probe, row_bands, npages,        # noqa: E402
                         tables as _tables)
 from inkdrill.pngio import read_png, auto_mask           # noqa: E402
+from inkdrill.pnmio import mask_from_pgm                 # noqa: E402
 
 ap = argparse.ArgumentParser(prog="tools/reportpages.py",
                              description=__doc__.strip().splitlines()[0])
@@ -94,16 +95,24 @@ rows, unreadable = {}, []
 import tempfile
 tmp = pathlib.Path(tempfile.mkdtemp())
 for k, p in enumerate(pages):
-    out = tmp / f"p{p}.png"
+    # 395/388 — pgmraw. This row pass was the last png16m renderer in the
+    # measurement path, and on a 1,146-page book it is what timed the whole
+    # measurement out: 102 selected pages, A3 at 300 dpi, ~12 s of pure-Python
+    # PNG decode each is 20 minutes against a 900 s budget, before the probe's
+    # own 280 s is counted. PGM decodes the same page in 0.03 s.
+    #
+    # `scan_columns` above has streamed pgmraw since it was written, so this
+    # file already held both routes and the slow one was the one that ran per
+    # page.
+    out = tmp / f"p{p}.pgm"
     r = subprocess.run(
-        ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=png16m",
+        ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=pgmraw",
          f"-r{A.dpi}", f"-dFirstPage={p}", f"-dLastPage={p}",
          f"-sOutputFile={out}", str(A.pdf)], capture_output=True)
     if r.returncode or not out.is_file():
         unreadable.append({"page": p, "reason": "ghostscript failed"})
         continue
-    img = read_png(out)
-    mask, _ = auto_mask(img.gray, img.width, img.height, 200)
+    mask = mask_from_pgm(out, threshold=200)
     bands, ncols, why = row_bands(mask, tol=A.tol, header=A.header,
                                   first_page=(k == 0))
     out.unlink(missing_ok=True)

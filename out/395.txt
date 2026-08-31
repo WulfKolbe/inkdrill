@@ -1,0 +1,79 @@
+395 — chung2019combinatorics measured
+=====================================
+
+First document measured under both 388 (pgmraw) and 398 (slivers dropped
+before pairing). 1,146 A3 pages, 9.1 MB.
+
+THE 320 CHECK, BEFORE MEASURING
+
+The ordinal and the column count have to agree, and on this document that is
+not a formality — TWO of its four tables are six columns wide.
+
+  declared in report.tex          detected by the lattice
+  1  Display equations       6    ordinal 1  6 cols  pages    1-102
+  2  Inline formulas         5    ordinal 2  5 cols  pages  103-1131
+  3  Tables                  4    ordinal 3  4 cols  page       1132
+  4  Image regions           6    ordinal 4  6 cols  pages 1133-1146
+
+`equations_table` reads report.tex and reports 6 columns, 411 rows,
+endhead, legend. The lattice independently finds ordinal 1 at 6 columns.
+They agree, and ordinal 4 sharing the width is harmless because the
+selection is by ordinal, not by width — which is the whole point of 320's
+requirement. Selecting on width alone here would have had two candidates.
+
+There is NO report.tables.json for this document; the table facts come from
+report.tex.
+
+THE RESULT
+
+  rows measured        411      exactly the 411 report.tex declares
+  pages                102      1-102, median 4 rows per page
+  refusals               0
+  all-zero rows          0      the legend rows reconcile and are dropped
+
+  class          rows       %
+  noise           247    60.1
+  clean            58    14.1
+  weak             57    13.9
+  component        27     6.6
+  stable           22     5.4
+
+  distinct classes   5
+  distance           median 3, mean 9.9, max 357
+
+FIVE CLASSES, WHICH IS THE CHECK THAT MATTERS. A single-class distribution
+would be a pairing failure wearing a result's clothes: if the rows were
+attached to the wrong equations, or all to the same one, the flags would
+collapse. Five classes spread over 411 rows, with a median distance of 3 and
+a tail to 357, is a measurement.
+
+The 27 `component` rows are the candidates for a new MathPix finding; 396
+lists them.
+
+TIMING, AND ONE MORE png16m FOUND
+
+  1,114 s total for a 1,146-page book.
+
+The first attempt REFUSED, and the refusal was worth having:
+
+  TimeoutExpired: tools/reportpages.py ... timed out after 900 seconds
+
+`reportpages.py`'s row pass was the last png16m renderer in the measurement
+path. 102 selected A3 pages at 300 dpi, ~12 s of pure-Python PNG decode
+each, is 20 minutes against a 900 s budget — before the 150 dpi probe's own
+280 s is counted. Switched to pgmraw: the same page decodes in 0.03 s.
+
+`scan_columns` in that same file has streamed pgmraw since it was written,
+so the file already held both routes and the slow one was the one that ran
+per page. 388 measured the decoder; it did not find every caller, and this
+is the third and last one.
+
+  the three callers, now all pgmraw
+    tools/reportcompare.py      (388b)
+    src/pdfdrill/regionink.py   (398)
+    tools/reportpages.py        (here)
+
+Intermediates left on disk after the run: 0 bytes. A PGM is uncompressed, so
+each raster is deleted as soon as the compare that needs it has finished.
+
+1,109 tests pass.
