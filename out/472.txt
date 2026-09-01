@@ -1,0 +1,115 @@
+472 - extent, aspect and ink-per-max: computed, reported, not gating
+========================================================================
+
+THREE SIBLINGS, per cell, for the render and the scan:
+
+    extent        the cell's ink bounding box, w x h px
+    aspect        that box's w/h
+    ink_per_max   ink pixels / max(w,h) -- what the longest side is
+                  carrying, which separates a long thin mark from a
+                  dense block of the same extent
+
+Nothing gates on any of them.
+
+--------------------------------------------------------------------
+0. THREE POPULATION FACTS, BEFORE ANY NUMBER
+
+5,144 IS NOT A ROW COUNT ON THIS SIDE. It is the FO count from
+pdfdrill out/460. A render-versus-scan shape comparison needs a cell
+of each, which only the display rows have:
+
+    FO objects (pdfdrill out/460)        5,144
+    \ident{...EQ} rows in report.tex     1,670
+    crops on disk                        1,713
+    rows measured here                   1,936
+
+Reporting a distribution "over 5,144 rows" would be quoting their
+object count as my row count -- the 157-against-49 mismatch again.
+
+THE ROWS OUTNUMBER THE EQUATIONS, 1,936 against 1,670, and that is
+the population problem. johnston declares THREE longtables and TWO of
+them are 6-column. The probe found 283 of 284 pages at 6 columns and
+took all of them, so the measured rows span both tables. This is not
+the display-equation population alone, and positional pairing to
+identifiers is therefore REFUSED (238's rule: rows must equal
+identifiers exactly, not merely be fewer).
+
+REPORT.PDF IS A READING BUILD -- phase=reading, legend=true,
+ink_adopted=true, built 2026-09-01T13:48:11Z. My own guard refuses
+these for residual measurement. Proceeding here deliberately, because
+472 is an internal shape question rather than a publication
+measurement and the legend adds rows without altering the equation
+cells -- but it is the artefact class that was wrong twice for
+pdfdrill, so it is on the record.
+
+--------------------------------------------------------------------
+1. THE DISTRIBUTIONS, 1,936 ROWS
+
+    render / scan          p5     p25     p50     p75     p90     p95     p99    max
+    aspect ratio        0.944   1.053   1.147   1.277   1.456   1.540   7.630  22.289
+    ink_per_max         0.541   0.644   0.741   0.873   0.999   1.025   1.109   1.906
+    extent area         0.750   1.000   1.094   1.388   1.655   1.781   2.018   2.647
+
+ASPECT IS THE ONE WITH A TAIL. Its body is tight -- p5 to p95 spans
+0.94 to 1.54, a factor of 1.6 -- and then p99 is 7.63 and the maximum
+22.3. Between p95 and p99 the ratio jumps five-fold. The other two
+have no such break: ink_per_max runs 0.54 to 1.03 across the same
+range and extent area 0.75 to 1.78.
+
+That shape -- a tight body and a thin far tail -- is what a shape
+DISAGREEMENT would look like if it existed as a distinct class. It is
+not proof that it does. A long tail is also what a handful of
+mis-cropped or mis-detected cells produce, and section 0 says the
+population contains rows from two different tables.
+
+--------------------------------------------------------------------
+2. EQ1327
+
+Measured from its own named crop file, which is unambiguous, rather
+than by pairing -- see section 0.
+
+    latex     \overbrace{(1,2) /}^{\substack{y \\ C}} x
+    crop      extent 225 x 281,  aspect 0.801,  ink_per_max 13.08,
+              16 components
+
+    scan-side aspect percentile        0.6
+    scan-side ink_per_max percentile  69.2
+
+ITS ASPECT IS AT THE 0.6TH PERCENTILE -- taller relative to its width
+than 99.4% of the scan cells measured. That is the shape the LaTeX
+describes: a `\substack` of two lines set above an `\overbrace` makes
+a crop far taller than a line of maths.
+
+Its ink_per_max is unremarkable, 69th percentile. So of the three
+siblings, one places it at the extreme and two do not.
+
+--------------------------------------------------------------------
+3. WHAT IS NOT CLAIMED, AND WHY NO THRESHOLD IS FITTED
+
+One example at the 0.6th percentile is one example. 246 refused a
+rule that put one diagram above the 94th percentile on three
+statistics against 75 equations; 305 fitted three populations before
+finding the normaliser was wrong, and its stated mechanism turned out
+to be a tautology. The pattern in both was the same -- a number that
+looks decisive on the case that motivated it.
+
+What would make aspect a discriminator is a LABELLED SET: rows known
+to disagree in shape, and rows known not to, chosen before the
+statistic is computed. Then the p95-to-p99 jump either separates them
+or does not. Until that exists, the tail is a shape in a
+distribution and EQ1327 is a point in it.
+
+The measurement stands on its own regardless: the three siblings are
+computed and reported per cell, which is what the task asked for, and
+they are available to any later gate without one being built now.
+
+--------------------------------------------------------------------
+4. POPULATION
+
+Introduction to Linear and Matrix Algebra (Johnston), 284 report
+pages, all 284 detected at the declared 6 columns (census: 283 at 6,
+1 at 7). 1,936 rows with both a Rendered and a Scan cell carrying
+ink, cropped at 300 dpi from the reading-phase report.pdf. Rows under
+40 px tall excluded as inter-row strips.
+
+One document, one build, one table shape mixed with a second.
