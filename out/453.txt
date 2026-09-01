@@ -1,0 +1,76 @@
+453 — do the near-pairs hold up in ink?
+=======================================
+
+449 matched on geometry and said plainly that this was a reason to look and
+not a finding. This measures the ink on both crops. It splits the twelve
+almost in half, which is what a real discriminator does.
+
+  crops fetched   23 of 24 returned HTTP 200
+  dead            0
+  no crop url     1  (the graphic side of the Wolfram p30 pair)
+
+NONE OF THE CROPS IS DEAD, including the unpublished documents. 401 measured
+expiry as per-pdf_id and left it unknown for these; it is now known for these
+eight, and they are all alive.
+
+CLOSE IN INK — the pairs that are evidence
+
+  d     document                              math page  conf    components
+   9    Seven Sketches in Composability        p279      0.038    17 vs  12
+  11    2103.01507                             p205      0.002   123 vs 131
+  12    Seven Sketches in Composability        p279      0.050    15 vs  11
+  27    Homotopical quantum field theory       p237      0.084    58 vs  54
+  27    Mathematics, Physics Chemistry (Wolfram) p86     0.004    83 vs  81
+
+FAR APART — the rectangle matched and the content did not
+
+  46    2002.06055                                      106 vs  78
+  61    2002.06055                                       88 vs  80
+  73    2002.06055                                      168 vs 137
+ 116    30253-1526-24697-2-10-20241121                  193 vs 155
+ 267    Higher Operads, Higher Categories                288 vs  71
+1002    A Visual Introduction to Differential Forms      670 vs 483
+
+Six of the twelve prove nothing, and that is worth as much as the other six:
+had 449 stopped at geometry and been reported as twelve findings, half of them
+would not have survived a look.
+
+THE STRONGEST PAIR IS 2103.01507 p205, NOT WOLFRAM p86
+
+  2103.01507   d = 11   components 123 vs 131, holes 44 vs 43,
+                        stacked 27 vs 28, centred 15 vs 15, offset 12 vs 13
+               the maths side reads at confidence 0.002
+
+Every one of the five terms is within one or two. Two regions of essentially
+identical ink structure and substantial content — 123 components is a real
+figure, not a fragment — one handled as a graphic and the other read as
+mathematics with a confidence of two parts in a thousand.
+
+Wolfram p86 is the tighter pair GEOMETRICALLY (777x125 against 779x125, aspect
++0%, area +0%) and it is NOT the closer pair in ink:
+
+  Wolfram p86  d = 27   components 83 vs 81  — nearly identical
+                        HOLES      35 vs 10  — the whole distance
+
+Components agree to within 2 and holes differ by 25. Same shape, same size,
+same component count, and one carries three and a half times the enclosed
+regions of the other. Identical geometry hid a real structural difference,
+which is precisely the thing 449 refused to conclude.
+
+The two Seven Sketches pairs are the closest in absolute distance (9 and 12)
+but the smallest in content — 17 and 15 components. A small region agrees
+easily; the agreement carries less.
+
+FOR 451
+
+2103.01507 p205 is the pair to use, on three grounds and not one:
+
+  * closest of the substantial pairs in ink (d=11 over 123 components)
+  * confidence 0.002 — as doubted as the corpus gets
+  * it is a PUBLISHED document, and MathPix's admin has already read crops
+    from it: 2103.01507_EQ0383 is one of the eight defects sent
+
+He can compare the controlled pair against a document he has already opened.
+
+  maths    https://cdn.mathpix.com/cropped/81ff6df2-2368-4983-80a6-d9be0b85a83d-205.jpg
+  graphic  https://cdn.mathpix.com/cropped/81ff6df2-2368-4983-80a6-d9be0b85a83d-204.jpg

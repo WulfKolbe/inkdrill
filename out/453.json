@@ -1,0 +1,294 @@
+[
+ {
+  "n": 1,
+  "doc": "2002.06055",
+  "math_page": 64,
+  "gfx_page": 66,
+  "conf": 0.019681851529111085,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   106,
+   13,
+   45,
+   20,
+   25
+  ],
+  "gfx_five": [
+   78,
+   15,
+   39,
+   22,
+   17
+  ],
+  "distance": 46,
+  "comp_delta": 28
+ },
+ {
+  "n": 2,
+  "doc": "2002.06055",
+  "math_page": 283,
+  "gfx_page": 281,
+  "conf": 0.07158182821239022,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   88,
+   34,
+   50,
+   27,
+   23
+  ],
+  "gfx_five": [
+   80,
+   9,
+   36,
+   26,
+   10
+  ],
+  "distance": 61,
+  "comp_delta": 8
+ },
+ {
+  "n": 3,
+  "doc": "2002.06055",
+  "math_page": 376,
+  "gfx_page": 375,
+  "conf": 0.08475829378468322,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   168,
+   46,
+   46,
+   14,
+   32
+  ],
+  "gfx_five": [
+   137,
+   26,
+   35,
+   11,
+   24
+  ],
+  "distance": 73,
+  "comp_delta": 31
+ },
+ {
+  "n": 4,
+  "doc": "2103.01507",
+  "math_page": 205,
+  "gfx_page": 204,
+  "conf": 0.002126273199075773,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   123,
+   44,
+   27,
+   15,
+   12
+  ],
+  "gfx_five": [
+   131,
+   43,
+   28,
+   15,
+   13
+  ],
+  "distance": 11,
+  "comp_delta": 8
+ },
+ {
+  "n": 5,
+  "doc": "30253-1526-24697-2-10-20241121",
+  "math_page": 8,
+  "gfx_page": 7,
+  "conf": 0.08169320147973864,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   193,
+   66,
+   84,
+   37,
+   47
+  ],
+  "gfx_five": [
+   155,
+   30,
+   70,
+   44,
+   26
+  ],
+  "distance": 116,
+  "comp_delta": 38
+ },
+ {
+  "n": 6,
+  "doc": "A Visual Introduction to Differential Forms and Calculus on Manifolds (Jon Pierre Fortney) (Z-Library)",
+  "math_page": 135,
+  "gfx_page": 134,
+  "conf": 0.06905310126195645,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   670,
+   305,
+   458,
+   91,
+   316
+  ],
+  "gfx_five": [
+   483,
+   183,
+   86,
+   42,
+   44
+  ],
+  "distance": 1002,
+  "comp_delta": 187
+ },
+ {
+  "n": 7,
+  "doc": "Higher Operads, Higher Categories (Tom Leinster) (Z-Library)",
+  "math_page": 109,
+  "gfx_page": 111,
+  "conf": 0.0650839180189833,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   288,
+   93,
+   19,
+   7,
+   12
+  ],
+  "gfx_five": [
+   71,
+   65,
+   30,
+   13,
+   17
+  ],
+  "distance": 267,
+  "comp_delta": 217
+ },
+ {
+  "n": 8,
+  "doc": "Homotopical quantum field theory (Yau, Donald Ying) (Z-Library)",
+  "math_page": 237,
+  "gfx_page": 237,
+  "conf": 0.08375659590320274,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   58,
+   19,
+   24,
+   15,
+   9
+  ],
+  "gfx_five": [
+   54,
+   26,
+   25,
+   8,
+   17
+  ],
+  "distance": 27,
+  "comp_delta": 4
+ },
+ {
+  "n": 9,
+  "doc": "Mathematics, Physics Chemistry With The Wolfram Language (S. M. Blinder) (Z-Library)",
+  "math_page": 30,
+  "gfx_page": 32,
+  "conf": 0.00889701841633915,
+  "math_http": 200,
+  "gfx_http": "no url",
+  "math_five": [
+   157,
+   39,
+   19,
+   18,
+   1
+  ],
+  "gfx_five": null
+ },
+ {
+  "n": 10,
+  "doc": "Mathematics, Physics Chemistry With The Wolfram Language (S. M. Blinder) (Z-Library)",
+  "math_page": 86,
+  "gfx_page": 84,
+  "conf": 0.0042302141406842,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   83,
+   35,
+   6,
+   4,
+   2
+  ],
+  "gfx_five": [
+   81,
+   10,
+   6,
+   4,
+   2
+  ],
+  "distance": 27,
+  "comp_delta": 2
+ },
+ {
+  "n": 11,
+  "doc": "Seven Sketches in Composability An invitation to applied category theory (Brendan Fong, David I. Spivak) (Z-Library)",
+  "math_page": 279,
+  "gfx_page": 279,
+  "conf": 0.0495070123546818,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   15,
+   3,
+   5,
+   4,
+   1
+  ],
+  "gfx_five": [
+   11,
+   1,
+   6,
+   2,
+   4
+  ],
+  "distance": 12,
+  "comp_delta": 4
+ },
+ {
+  "n": 12,
+  "doc": "Seven Sketches in Composability An invitation to applied category theory (Brendan Fong, David I. Spivak) (Z-Library)",
+  "math_page": 279,
+  "gfx_page": 278,
+  "conf": 0.03774168429353913,
+  "math_http": 200,
+  "gfx_http": 200,
+  "math_five": [
+   17,
+   3,
+   7,
+   3,
+   4
+  ],
+  "gfx_five": [
+   12,
+   1,
+   6,
+   2,
+   4
+  ],
+  "distance": 9,
+  "comp_delta": 5
+ }
+]
