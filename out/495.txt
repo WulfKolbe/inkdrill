@@ -274,3 +274,24 @@ gave and not a new one.
 Re-run: `INKDRILL_TYPE1=/usr/share/texmf-dist/fonts/type1 python3
 tools/famjunctions2.py out.json`, with the four XITS files under
 ~/XITS. STIX remains unmeasured.
+
+--------------------------------------------------------------------
+8. SECTION 7 IS SUPERSEDED BY 497
+
+Section 7 concluded that the channel separates a plain script from a
+chancery one AS DRAWINGS rather than separating two TeX commands,
+reasoning that Unicode has a single script block so \mathcal and
+\mathscr are two fonts for the same codepoints.
+
+The premise holds and the inference does not. XITSMath-Regular, which
+section 7 did not have, carries the `.cal` OpenType alternates that
+\mathcal selects, kept by the conversion as suffixed charstrings.
+They read 1 junction on L, G and J at every size -- exactly cmsy. So
+the drawing distinction and the command distinction COINCIDE, and the
+flat 1 is a property of \mathcal rather than of Computer Modern.
+
+Section 7 reasoned from an absence: the Bold face carries one script
+block, therefore the distinction cannot be a command distinction. The
+absence was a property of the face that had been converted, not of the
+family. See out/497.txt for the measurement.
+

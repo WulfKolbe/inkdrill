@@ -46,12 +46,46 @@ FONTS = [
     # Unicode has ONE script block. \mathcal and \mathscr are two
     # FONTS for the same codepoints, so this entry is named for the
     # block it reads, not for a TeX command.
+    # XITSMath-Regular is the one that removes the weight confound: the
+    # Bold face carries only bold variants, so every reading from it was
+    # a bold drawing compared against 10 pt regular TeX faces. These
+    # four are the REGULAR blocks, and the Bold ones are kept beside
+    # them so the confound can be seen rather than argued about.
+    # THE DECISIVE PAIR (497). XITS ships BOTH forms: the default script
+    # at U+1D49C, which unicode-math's \mathscr selects, and a `.cal`
+    # alternate selected by the ss01 feature, which is what \mathcal
+    # gives in a XITS document. An OpenType feature cannot survive a
+    # .pfb conversion, but FontForge kept the alternates as separate
+    # charstrings under their suffixed names, so both are readable here.
+    # One font, one designer, two drawings -- which is the comparison
+    # CM could not supply, because cmsy has no chancery script and rsfs
+    # has no plain one.
+    ("mathcal",  "XITSMathR", "~/XITS/XITSMath-Regular.pfb", 0x1D49C, ".cal"),
+    ("mathscr",  "XITSMathR", "~/XITS/XITSMath-Regular.pfb", 0x1D49C),
+    ("mathfrak", "XITSMathR", "~/XITS/XITSMath-Regular.pfb", 0x1D504),
+    ("mathbb",   "XITSMathR", "~/XITS/XITSMath-Regular.pfb", 0x1D538),
+    ("italic",   "XITSMathR", "~/XITS/XITSMath-Regular.pfb", 0x1D434),
+    ("upright",  "XITSMathR", "~/XITS/XITSMath-Regular.pfb", 0x1D400),
     ("mathscr",  "XITSMath",  "~/XITS/XITSMath-Bold.pfb", 0x1D4D0),
     ("mathfrak", "XITSMath",  "~/XITS/XITSMath-Bold.pfb", 0x1D56C),
     ("mathbb",   "XITSMath",  "~/XITS/XITSMath-Bold.pfb", 0x1D538),
     ("italic",   "XITSMath",  "~/XITS/XITSMath-Bold.pfb", 0x1D468),
+    ("italic",   "XITStext",  "~/XITS/XITS-Italic.pfb"),
 ]
 GLYPHS = ["L", "G", "J", "g"]
+
+# THE SCRIPT BLOCK HAS HOLES. Unicode allocated eleven script letters to
+# Letterlike Symbols before the plane-1 Mathematical Alphanumeric block
+# existed, and left their slots in that block unassigned. Script L is
+# U+2112 and script g is U+210A -- so a font can carry a COMPLETE script
+# alphabet and still have nothing at U+1D4A7, and reading that as "the
+# glyph is absent" drops two of this measurement's four glyphs from
+# every script face. The same applies to fraktur (H is U+210C) and to
+# double-struck (R is U+211D); only the letters this harness tests are
+# listed.
+LETTERLIKE = {0x1D49C: {"L": 0x2112, "g": 0x210A},   # script
+              0x1D504: {},                            # fraktur: not L/G/J/g
+              0x1D538: {}}                            # double-struck: ditto
 SIZES = [40, 80, 160]
 
 rows = []
@@ -63,6 +97,8 @@ for entry in FONTS:
     # "L"/"G"/"J", and lowercase g sits 26 further on.
     fam, tag, fn = entry[:3]
     base = entry[3] if len(entry) > 3 else None
+    #: an OpenType alternate, kept by the conversion as a suffixed name
+    suffix = entry[4] if len(entry) > 4 else ""
     # an entry may name a file outside the TeX tree (a hand-converted
     # font); a leading ~ or / is taken as a path, anything else as a
     # name to find in the tree.
@@ -79,7 +115,14 @@ for entry in FONTS:
             g = g0
         else:
             off = (ord(g0) - 97 + 26) if g0.islower() else (ord(g0) - 65)
-            g = f"u{base + off:04X}"
+            g = f"u{base + off:04X}{suffix}"
+            if g not in f.charstrings:
+                alt = LETTERLIKE.get(base, {}).get(g0)
+                for cand in ((f"uni{alt:04X}{suffix}",
+                              f"u{alt:04X}{suffix}") if alt else ()):
+                    if cand in f.charstrings:
+                        g = cand
+                        break
         if g not in f.charstrings:
             rows.append((fam, tag, g0, None)); continue
         cells = []

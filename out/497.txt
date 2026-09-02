@@ -1,0 +1,132 @@
+497 - 495 re-run on the generated XITS Type 1 faces
+====================================================================
+
+THE QUESTION. 495 found \mathcal reading 1 skeleton junction on L, G
+and J in Computer Modern and Latin Modern, and \mathscr reading 3 or
+more in rsfs. But CM and LM are one drawing -- LM's cmsy is a
+redrawing of CM's -- so the only independent test was txfonts, and
+txfonts FAILED on G. A flat 1 measured on one family and its own
+redrawing might be a property of \mathcal or a property of cmsy, and
+495 could not tell which. STIX/XITS is the strongest available test
+because it shares no lineage with CM: different designers, Times
+proportions, delivered as OpenType and converted here by an entirely
+different toolchain.
+
+ANSWER: IT IS A PROPERTY OF \mathcal.
+
+XITS ships BOTH forms in one font, which is the comparison CM cannot
+supply -- cmsy has no chancery script and rsfs has no plain one. The
+default script at U+1D49C is what unicode-math's \mathscr selects; a
+`.cal` alternate, reached by the ss01 feature, is what \mathcal gives.
+An OpenType feature cannot survive a .pfb conversion, but FontForge
+kept the alternates as separate charstrings under suffixed names, so
+both are readable.
+
+  XITSMath-Regular, junctions / holes at 40, 80, 160 px
+
+    glyph   \mathscr  (uni2112 etc)      \mathcal  (.cal)
+      L      6/3   4/2   4/2              1/0   1/0   1/1
+      G      3/1   3/1   5/2              1/0   1/1   1/0
+      J      8/4   8/4   7/3              1/0   1/0   1/0
+
+ONE FONT, ONE DESIGNER, TWO DRAWINGS, AND THE CHANNEL SEPARATES THEM
+6-to-1, 3-to-1 and 8-to-1. The plain form reads 1 on every glyph at
+every size, exactly as cmsy does. So the flat 1 is not an artefact of
+Computer Modern; it is what a plain calligraphic capital IS under this
+measurement, reproduced by a design with no connection to CM.
+
+\mathcal ACROSS FOUR DESIGNS (junctions at 40, 80, 160)
+
+    font        L            G            J
+    CM        1, 1, 1      1, 1, 1      1, 1, 1
+    LM        1, 1, 1      1, 1, 1      1, 1, 1
+    txfonts   1, 1, 1      3, 2, 2      1, 1, 1     <-- the exception
+    XITSMathR 1, 1, 1      1, 1, 1      1, 1, 1     <-- independent
+
+\mathscr ACROSS FOUR
+
+    rsfs10    4, 4, 4      3, 3, 3      5, 5, 8
+    rsfs7     4, 4, 4      7, 3, 5      5, 5, 7
+    XITSMathR 6, 4, 4      3, 3, 5      8, 8, 7
+    XITSMath  4, 4, 4      3, 3, 3      5, 5, 5      (bold)
+
+Every \mathscr reading is 3 or more; every \mathcal reading is 1
+except txfonts G. The cut of 4 that 495 derived from that exception
+still stands, and it is now derived against an independent family
+rather than against a redrawing.
+
+--------------------------------------------------------------------
+A CORRECTION TO 495 SECTION 7
+
+495's second addendum measured XITSMath-Bold, which carries only the
+default script, and concluded that "the channel separates a PLAIN
+script from a CHANCERY one as drawings" rather than two TeX commands
+-- reasoning that Unicode has one script block, so \mathcal and
+\mathscr are two fonts for the same codepoints.
+
+The premise was right and the inference was wrong, because that
+addendum had not seen the `.cal` alternates. XITS carries BOTH, and
+maps them to the two commands the same way TeX does. So the drawing
+distinction and the command distinction COINCIDE: \mathcal is drawn
+plain in CM, LM and XITS, and \mathscr is drawn chancery in rsfs and
+XITS. txfonts is the one family that draws \mathcal ornately, and it
+is the one family the channel misreads.
+
+That is a stronger result than the one it replaces, and it was
+available only because the second conversion carried the alternates.
+The error was reasoning from an absence -- "the Bold face has one
+script block, therefore the distinction cannot be a command
+distinction" -- when the absence was a property of the face converted,
+not of the family.
+
+--------------------------------------------------------------------
+HOLE INSTABILITY, RE-MEASURED ON THE WIDER SET
+
+    glyphs measured                       104   (was 57 in 495)
+    HOLE count changes between 40/80/160   16   (15%, was 12%)
+    junction count changes                 26   (25%, was 28%)
+
+The rate did not fall as the font set trebled, and the XITS faces
+contribute six of the sixteen. Two of them are \mathcal glyphs -- L
+[0,1] and G [0,1] -- so even the flat form is not hole-stable: XITS's
+calligraphic L closes a hole between 80 and 160 px while its junction
+count stays at 1. The junction channel is the more stable of the two
+HERE, which is the reverse of 495's overall finding and worth stating
+as such rather than smoothing over: over all 104 glyphs junctions move
+more often, but on the four \mathcal designs holes move and junctions
+do not.
+
+XITSMath-Regular's script is the least stable class measured: all four
+of its glyphs change hole count. It is a regular weight, where the
+Bold face moves three of four -- thinner strokes give more
+near-tangent contacts, which is the same mechanism as everywhere else.
+
+--------------------------------------------------------------------
+POPULATION AND RE-RUN
+
+Six XITS .pfb files under ~/XITS, hand-converted from OpenType with
+FontForge, plus the 16 TeX-tree fonts of 495. 22 font-block entries,
+104 renderable combinations of 112, 4 glyph names, 3 sizes.
+
+    INKDRILL_TYPE1=/usr/share/texmf-dist/fonts/type1 \
+      python3 tools/famjunctions2.py out.json
+
+TWO CONVERSION CAVEATS, both of which the harness now handles and
+neither of which it can remove:
+
+  The script block HAS HOLES. Unicode allocated eleven script letters
+  to Letterlike Symbols before the plane-1 block existed and left
+  their slots unassigned, so script L is U+2112 and script g is
+  U+210A. A font can carry a complete script alphabet with nothing at
+  U+1D4A7, and reading that as "absent" drops two of four glyphs from
+  every script face. The harness now falls back to the Letterlike
+  codepoint.
+
+  XITSMath-Bold carries only BOLD variants and no `.cal` alternates,
+  so every reading taken from it is a bold drawing compared against
+  10 pt regular TeX faces. XITSMath-Regular removes that confound and
+  is what the tables above use; the Bold rows are kept beside them so
+  the confound can be seen rather than argued about.
+
+STIX itself is still unmeasured. XITS is a fork of it and this is the
+nearest available substitute, not the same font.
