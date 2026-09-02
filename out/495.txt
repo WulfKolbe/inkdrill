@@ -145,3 +145,44 @@ carry no lowercase g. Rendered by inkdrill's own type1 -> charstring
 
 STIX and XITS are unmeasured for the reason in section 0, and their
 absence is a gap in the answer rather than a null result.
+
+--------------------------------------------------------------------
+6. ADDENDUM -- XITS, after the gap in section 5 was closed by hand
+
+Section 0 recorded STIX and XITS as unmeasurable: they ship as
+OpenType, type1.py reads Type 1 programs, and this package has no CFF
+reader. A hand FontForge conversion of XITS-Regular to .pfb was then
+supplied, and inkdrill reads it: 2,517 charstrings, 1,000 units/em,
+all four test glyphs present.
+
+WHAT IT CAN AND CANNOT TEST. The conversion carries the TEXT face.
+There are 2,068 uniXXXX names and ZERO plane-1 math alphanumerics
+(U+1D4xx), so there is no script alphabet in it -- it cannot test the
+\mathcal-vs-\mathscr separation of sections 1 and 2, which is what the
+OTF gap was blocking. It tests the hole-stability half, as a
+seventeenth font and an independent design that is not a redrawing of
+Computer Modern.
+
+    upright  XITS  L   J [1, 2, 2]   H [0, 0, 0]
+    upright  XITS  G   J [1, 2, 2]   H [0, 0, 0]
+    upright  XITS  J   J [1, 1, 1]   H [0, 0, 0]
+    upright  XITS  g   J [3, 3, 3]   H [2, 2, 2]
+
+REVISED TOTALS, 17 fonts, 61 renderable of 68:
+
+    glyphs measured                        61   (was 57)
+    HOLE count changes between 40/80/160    7   (11%, was 12%)
+    junction count changes                 18   (30%, was 28%)
+
+XITS adds four glyphs, moves the hole count on NONE of them, and moves
+the junction count on two. It therefore strengthens both halves of
+section 3 in the same direction: holes are the more stable channel,
+junctions the less, and neither is stable. The L and G movement is the
+serif -- at 40 px it merges into the stem and reads as one site, at 80
+it resolves as a branch. The same mechanism as the hole instability,
+which is a near-tangent stroke closing or not closing at a given
+sampling density.
+
+The section 5 caveat is now narrower, not gone: STIX is still
+unmeasured, and XITS's SCRIPT alphabet -- the part that would test
+sections 1 and 2 -- is still outside what this chain can read.

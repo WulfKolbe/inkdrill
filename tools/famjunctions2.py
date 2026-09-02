@@ -27,6 +27,14 @@ FONTS = [
     ("mathbb",   "msbm10",   "msbm10.pfb"),
     ("mathbb",   "msbm7",    "msbm7.pfb"),
     ("mathbb",   "bbold10",  "bbold10.pfb"),
+    # XITS is an OTF family; 495 could not read it because type1.py
+    # reads Type 1 programs and this package has no CFF reader. This
+    # entry is a FontForge conversion of XITS-Regular to .pfb, supplied
+    # by hand, so the gap 495 recorded is now partly closed: the
+    # conversion carries the text face (2,517 charstrings, no plane-1
+    # math alphanumerics), so it tests the HOLE-STABILITY half and not
+    # the mathcal/mathscr separation, which needs a script alphabet.
+    ("upright",  "XITS",     "~/XITS/XITS-Regular.pfb"),
 ]
 GLYPHS = ["L", "G", "J", "g"]
 SIZES = [40, 80, 160]
@@ -35,7 +43,14 @@ rows = []
 print(f"{'family':<9} {'font':<9} {'glyph':<5} " +
       "  ".join(f"{s}px J/H" for s in SIZES) + "   holes stable?")
 for fam, tag, fn in FONTS:
-    src = next(TREE.rglob(fn), None)
+    # an entry may name a file outside the TeX tree (a hand-converted
+    # font); a leading ~ or / is taken as a path, anything else as a
+    # name to find in the tree.
+    if fn.startswith(("~", "/")):
+        p = pathlib.Path(fn).expanduser()
+        src = p if p.is_file() else None
+    else:
+        src = next(TREE.rglob(fn), None)
     if src is None:
         print(f"{fam:<9} {tag:<9} FONT NOT FOUND {fn}"); continue
     f = t1_load(src)
