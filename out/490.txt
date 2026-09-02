@@ -1,0 +1,114 @@
+490 - what the sweep records at a crossing
+========================================================================
+
+FIRST: THERE IS NO blobtrack.py. Not in `inkdrill/`, not anywhere in
+the working tree, and not in any commit -- `git log --all -- "*blobtrack*"`
+returns nothing. The task's instruction to read it before proposing
+anything cannot be followed, and I am not going to describe a file
+that does not exist.
+
+What DOES exist is `inkdrill/sweep.py`, which emits the merge events.
+The rest of this answers 490's three questions against that.
+
+--------------------------------------------------------------------
+1. IS A MERGE EVENT EMITTED AT A CROSSING?
+
+YES, conditionally, and the condition matters more than the answer:
+
+    if adj and len(roots_before) >= 2 and keep_events:
+        events.append(Event(EventKind.MERGE, line, nid, tuple(adj),
+                            roots_before, uf.find(nid)))
+
+`roots_before` is computed BEFORE any union this run causes -- the
+code comments why: "a merge is defined by what was distinct on
+arrival, not after the fact". So a merge fires exactly when a run
+joins two or more PREVIOUSLY DISTINCT components.
+
+THE CROSSING CASE IS NOT THAT, AND THIS IS THE PART THAT MATTERS FOR
+491. When a slash crosses a ring, or a bar crosses an L, the two
+strokes are ALREADY ONE COMPONENT by the time they meet -- so
+`roots_before` has one element and NO merge is emitted. What fires
+instead is:
+
+    if rn == rp:          # both endpoints already in one component
+        cycles_of[rn] += 1
+        events.append(Event(EventKind.CYCLE, line, nid, (p,), (rp,), rn))
+
+A CYCLE event -- a loop closing, a hole being born. That is the
+existing record of a crossing that ENCLOSES something. A crossing
+that encloses nothing -- the bar of an Ł, which touches the stem and
+stops -- emits neither: it is an ordinary adjacency inside one
+component and the sweep records it only as an edge in the RAG.
+
+So the answer to "does the sweep already record a crossing" is: it
+records the kind that closes a loop (as CYCLE, which is the hole
+count), and it does not distinguish the kind that does not. That is
+the gap 491's junction count would fill.
+
+--------------------------------------------------------------------
+2. DOES THE EVENT CARRY THE RUN POSITIONS?
+
+NO, not in the event. `Event` carries:
+
+    kind, line, node, partners, roots_before, root_after
+
+-- run IDENTIFIERS, plus the scan line. No `lo`, no `hi`, no x.
+
+THE POSITIONS ARE RECOVERABLE, and unconditionally so:
+`nodes.append(node)` at line 306 is outside every `keep_*` guard, so
+`SweepResult.nodes` is fully populated at EVERY capture level
+including `Capture.NONE`. `RunNode` carries `id, line, lo, hi`, so
+`result.nodes[e.node].lo` and `.hi` give the crossing's extent and
+`result.nodes[p]` gives each partner's.
+
+So: one indirection, always available, never lossy. A consumer
+wanting positions does not need the events changed -- it needs to
+know that `nodes` is the place to look, which the Event's repr does
+not suggest.
+
+--------------------------------------------------------------------
+3. THE 2nd/3rd/4th DIRECTION
+
+TWO are implemented. THREE and FOUR are neither implemented nor
+designed -- there is no parameter, no stub, and no mention anywhere
+in the package or the docs.
+
+    def sweep(mask, *, axis="row", conn=8, capture=...)
+        if axis not in ("row", "col"):
+            raise InvalidAxis(axis)
+
+`axis` takes exactly two values and refuses anything else by raising.
+Grepping the package and `docs/` for "diagonal" returns only
+unrelated uses -- covariance in `aggregate.py`, a box-gap comment in
+`mathstruct.py`, hole leakage in `nest.py`, the confusion matrix in
+`classify.py`. None is a sweep direction.
+
+G6 states the guarantee the two existing directions carry: "the
+component partition is identical for axis='row' and axis='col'". That
+is an equivalence between the two, asserted throughout the suite. A
+third or fourth direction would need its own such guarantee, and
+there is nothing to inherit -- a 45-degree sweep does not have runs
+in the sense `iter_runs` produces them.
+
+--------------------------------------------------------------------
+SUMMARY
+
+    merge event emitted at a crossing        NO -- a crossing inside
+                                             one component emits CYCLE
+                                             (or nothing, if it
+                                             encloses nothing)
+    merge event emitted at a junction of
+      two distinct components                YES, with roots_before
+    event carries run positions              NO -- ids only; positions
+                                             via SweepResult.nodes,
+                                             always populated
+    2nd direction                            implemented (axis="col")
+    3rd / 4th direction                      neither implemented nor
+                                             designed; no parameter
+                                             accepts them
+    blobtrack.py                             does not exist
+
+The "already there and unread" answer, which has been right five
+times this week, is RIGHT AGAIN for positions -- `nodes` has them at
+every capture level -- and WRONG for the crossing itself: a
+non-enclosing crossing leaves no event, only an edge.
