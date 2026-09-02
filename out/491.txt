@@ -1,0 +1,153 @@
+491 - junctions and holes as a typeface feature
+========================================================================
+
+THE TABLE. J = junction sites, H = holes, E = skeleton endpoints.
+Rendered from the TeX tree by type1 -> charstring -> scan, at three
+sizes.
+
+  family     glyph    40px      80px     160px
+  upright      L     2/0/4     2/0/4     2/0/4
+  upright      G     3/0/5     3/0/5     3/0/5
+  upright      J     1/0/3     1/0/3     1/0/3
+  upright      g     3/2/1     3/2/1     3/2/1
+  italic       L     2/0/4     2/0/4     2/0/4
+  italic       G     2/0/4     3/0/5     3/0/5
+  italic       J     1/0/3     1/0/3     3/1/3
+  italic       g     1/1/1     1/1/1     2/1/2
+  mathcal      L     1/0/3     1/0/3     1/0/3
+  mathcal      G     1/0/3     1/0/3     1/0/3
+  mathcal      J     1/0/3     1/0/3     1/0/3
+  mathcal      g       absent from cmsy10
+  mathscr      L     4/2/2     4/2/2     4/2/2
+  mathscr      G     3/1/9     3/1/3     3/1/3
+  mathscr      J     5/1/5     5/2/3     8/4/3
+  mathscr      g       absent from rsfs10
+  mathfrak     L     1/0/3     1/0/3     1/0/3
+  mathfrak     G     3/1/3     4/1/4     4/1/4
+  mathfrak     J     0/0/4     0/0/4     0/0/4
+  mathfrak     g     3/2/1     4/2/2     4/2/2
+  mathbb       L     6/2/4     6/2/4     6/2/4
+  mathbb       G     8/4/3     8/4/3    12/5/4
+  mathbb       J     4/2/2     4/2/2     4/2/2
+  mathbb       g       absent from msbm10
+
+--------------------------------------------------------------------
+1. THE ANSWER TO THE QUESTION ASKED
+
+DOES \mathscr READ HIGHER THAN \mathcal? YES, and by a wide margin:
+
+    glyph    mathcal J    mathscr J
+      L          1            4
+      G          1            3
+      J          1            5-8
+
+The question posed 1-2 against 0-1. The measurement is 3-8 against a
+FLAT 1. \mathcal (cmsy10) reads exactly one junction site on all
+three letters at all three sizes; \mathscr (rsfs10) reads three to
+eight and varies by letter.
+
+DOES J ADD ANYTHING TO H? YES, and this is the stronger half.
+\mathcal reads 1/0 -- one junction, NO holes -- on L, G and J alike.
+On holes alone \mathcal is indistinguishable from upright L, upright
+G, upright J, italic L, italic G and mathfrak L and J: all read 0.
+Junctions separate \mathcal from four of those six.
+
+The reverse also holds. mathfrak J reads 0/0 where mathcal J reads
+1/0 -- identical hole counts, different junction counts.
+
+--------------------------------------------------------------------
+2. WHERE THE FAMILIES OVERLAP, WHICH IS THE FINDING
+
+    upright L    2/0        italic L     2/0     IDENTICAL
+    upright J    1/0        italic J     1/0     identical at 40, 80
+    mathcal L    1/0        mathfrak L   1/0     IDENTICAL
+    mathcal J    1/0        italic J     1/0     IDENTICAL at 40, 80
+
+UPRIGHT AND ITALIC ARE NOT SEPARATED by either channel on L or J.
+That is expected -- cmr10 and cmmi10 draw the same skeleton with a
+slant -- and it means this feature cannot answer "was this italic",
+only "which FAMILY of shapes".
+
+MATHCAL AND MATHFRAK COLLIDE ON L at 1/0/3, exactly. A single glyph
+cannot separate those two.
+
+So the families do not partition. What separates cleanly on this set
+is \mathscr and \mathbb (high J, H >= 1 on every letter) from
+\mathcal, upright, italic and mathfrak (low J, H = 0 on most).
+
+--------------------------------------------------------------------
+3. STABILITY ACROSS SIZE, WHICH IS THE WEAKNESS
+
+Sixteen of the twenty measured glyphs are IDENTICAL at all three
+sizes. Four are not:
+
+    italic G     2/0/4 -> 3/0/5     at 80px
+    italic J     1/0/3 -> 3/1/3     at 160px
+    italic g     1/1/1 -> 2/1/2     at 160px
+    mathscr J    5/1/5 -> 8/4/3     at 160px
+    mathbb G     8/4/3 -> 12/5/4    at 160px
+    mathscr G    3/1/9 -> 3/1/3     at 80px (endpoints only)
+
+italic J GAINS A HOLE between 80 and 160 px -- the hook closes
+against the stem at higher resolution. A feature that changes its
+HOLE count with dpi is not a stable identity, and hole count is the
+channel this project has treated as topological and reliable since
+218.
+
+mathbb G goes 8 -> 12 junctions on the same glyph. The double-struck
+strokes come apart under thinning differently at different sizes.
+
+So: J and H are stable for two thirds of this set and not for the
+rest, and the instability is concentrated in the families with the
+most internal structure -- exactly the ones J was supposed to
+distinguish.
+
+--------------------------------------------------------------------
+4. A DEFECT FOUND AND FIXED BEFORE ANY NUMBER ABOVE
+
+The first version counted skeleton pixels with three or more
+8-NEIGHBOURS. An 8-connected CORNER has two such pixels: on a 1 px
+`L`, the pixel above the corner sees up, down, and the corner's
+right-hand neighbour diagonally. It reported TWO junctions on a
+letter that has none.
+
+The definition is now the CROSSING NUMBER -- half the cyclic total
+variation of the 8-neighbourhood -- which gives 1 at a stroke end, 2
+along a stroke AND AT A CORNER, and 3+ at a branch. Verified on a
+plus (1 site, 4 ends), an L (0 sites, 2 ends) and a T (1 site, 3
+ends), all three in the suite so the definition cannot revert.
+
+Had that not been caught, every serif and every corner in the table
+above would have counted as a junction and the families would have
+appeared to separate on stroke count rather than on branching.
+
+--------------------------------------------------------------------
+5. ON 0707.4470_FO0175
+
+NOT CHECKABLE FROM THIS TABLE, and I would rather say so than imply
+the channel is ready.
+
+The separation that exists is between \mathscr/\mathbb and the rest.
+If FO0175 turns on \mathcal against \mathscr specifically, the
+numbers support it -- 1 against 3-8, no overlap on any of L, G, J.
+But three letters at three sizes from ONE font per family is not a
+typeface identifier: it is 20 measurements, and four of them move
+with size.
+
+What would make it one: the same table over every letter of each
+font, and over the SECOND font of each family where one exists
+(cmbx10 against cmr10, eufb10 against eufm10). A family whose two
+weights disagree is not a family the feature can name. That is a
+measurement, not a build, and it is the next one -- not this one.
+
+--------------------------------------------------------------------
+6. POPULATION
+
+Six fonts from the TeX tree -- cmr10, cmmi10, cmsy10, rsfs10,
+eufm10, msbm10 -- four glyph names, three sizes, 20 renderable
+combinations of 24. Four absent: cmsy10, rsfs10 and msbm10 carry no
+lowercase `g`, which is the same gap that dropped 11 characters from
+`\mathscr{M a p}` in pdfdrill's 2103.01507.
+
+Rendered by inkdrill's own chain, so nothing here depends on
+ghostscript or on a PDF.

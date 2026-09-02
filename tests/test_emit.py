@@ -2453,3 +2453,63 @@ class T1_21_TheTableIsTheLargestRegionNotTheHolliest(unittest.TestCase):
         self.assertTrue(_table_cells(m, 6.0, select="area"))
         with self.assertRaises(ValueError):
             _table_cells(m, 6.0, select="biggest")
+
+
+class T1_22_SkeletonJunctions(unittest.TestCase):
+    """491: the crossing number, and why it is not a degree count.
+
+    An 8-connected CORNER has two pixels of 8-degree 3 -- on a 1 px
+    `L`, the pixel above the corner sees up, down AND the corner's
+    right-hand neighbour diagonally. The first version of
+    `skeleton.py` counted degrees and reported TWO junctions on a
+    letter that has none. The crossing number -- half the cyclic
+    total variation of the neighbourhood -- gives 2 there and 4 at
+    the centre of a `+`.
+
+    Both are asserted, so the definition cannot quietly revert.
+    """
+
+    W = H = 21
+
+    def _mk(self, px):
+        from inkdrill.raster import InkMask
+        b = bytearray(self.W * self.H)
+        for x, y in px:
+            b[y * self.W + x] = 0xFF
+        return InkMask(bytes(b), self.W, self.H)
+
+    def test_a_plus_has_one_site_and_four_ends(self):
+        from inkdrill.skeleton import junction_sites, endpoints
+        m = self._mk([(10, y) for y in range(3, 18)]
+                     + [(x, 10) for x in range(3, 18)])
+        self.assertEqual(junction_sites(m), 1)
+        self.assertEqual(endpoints(m), 4)
+
+    def test_a_corner_is_not_a_junction(self):
+        """The defect this definition exists for."""
+        from inkdrill.skeleton import junction_sites, endpoints
+        m = self._mk([(5, y) for y in range(3, 18)]
+                     + [(x, 17) for x in range(5, 16)])
+        self.assertEqual(junction_sites(m), 0)
+        self.assertEqual(endpoints(m), 2)
+
+    def test_a_T_has_one_site_and_three_ends(self):
+        from inkdrill.skeleton import junction_sites, endpoints
+        m = self._mk([(x, 4) for x in range(3, 18)]
+                     + [(10, y) for y in range(4, 18)])
+        self.assertEqual(junction_sites(m), 1)
+        self.assertEqual(endpoints(m), 3)
+
+    def test_thinning_reaches_a_fixed_point(self):
+        """G2: a second pass on a skeleton changes nothing."""
+        from inkdrill.skeleton import skeleton
+        from inkdrill.raster import InkMask
+        b = bytearray(self.W * self.H)
+        for y in range(5, 16):
+            for x in range(5, 16):
+                b[y * self.W + x] = 0xFF
+        m = InkMask(bytes(b), self.W, self.H)
+        s1 = skeleton(m)
+        s2 = skeleton(s1)
+        self.assertEqual(s1.data, s2.data)
+        self.assertLess(s1.ink_count, m.ink_count)

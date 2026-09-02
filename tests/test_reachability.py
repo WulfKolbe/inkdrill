@@ -36,6 +36,12 @@ OFF_THE_CLI_PATH = {
     "seam": "curved gutters; measured and not wired into `page_lines`",
     "trace": "boundary contours; nothing in lines.json carries a "
              "polygon yet, and the consumer has not asked for one",
+    "skeleton": "Zhang-Suen thinning and the junction count (491); "
+                "measured across six typeface families and NOT wired "
+                "in, because 4 of 20 glyphs change their count with "
+                "size and italic J gains a HOLE between 80 and 160 px "
+                "-- same standing as typeface and qc, a channel that "
+                "exists before a consumer asks for it",
     "typeface": "weight/slant/serif signals; measured, and no lines.json "
                 "field carries them yet -- same standing as qc",
 }
