@@ -36,6 +36,49 @@ from inkdrill.__main__ import _table_cells                     # noqa: E402
 SLIVER_PX = 40          # at 300 dpi; see `row_bands`
 
 
+def target_columns(tex):
+    """How many columns THIS document's display-equation table has,
+    read from its own report.tex.
+
+    Not a constant, and the reason is that a constant was wrong twice
+    in one day. The count was 5; pdfdrill's task 099 added a
+    Confidence column and made it 6. The corpus now holds BOTH eras
+    -- 1101.4542 was built 08-21 with no `confcell` and reads 5,
+    bh2 and 0902.0431 were rebuilt 08-22 and read 6 -- so any single
+    number skips one era entirely and reports it as "no display
+    pages", which is the BH1org_OCR failure spread across a thousand
+    documents.
+
+    The header row carrying BOTH `Rendered` and `Scan image` is the
+    display-equation table with crops, and only that table has both.
+    Counting its cells is exact, independent of the era, and
+    self-correcting if the format changes again:
+
+        6   ...\textbf{Conf.} & \textbf{LaTeX source}
+                & \textbf{Rendered} & \textbf{Scan image}
+        5   the same without Conf. (pre-099)
+
+    Takes the path to the document's report.tex. Lives here, not in
+    the harness that first needed it, because two harnesses now read
+    the column count and a second copy is how the constant got wrong
+    twice in the first place.
+
+    Returns None when no such header exists -- the document's
+    equations table has no scan column, so there is nothing in it to
+    compare, and that is a REASON rather than a zero. Reading the
+    .tex is not a violation of emit's G6: G6 forbids inkdrill reading
+    text off a RASTER, which is what would make it agree with the
+    tool it cross-checks. A column count taken from a source file
+    never touches the ink measurement.
+    """
+    tex = pathlib.Path(tex)
+    if not tex.is_file():
+        return None
+    for line in tex.read_text().splitlines():
+        if "textbf{Rendered}" in line and "textbf{Scan image}" in line:
+            return line.count("&") + 1
+    return None
+
 def npages(pdf) -> int:
     out = subprocess.run(["pdfinfo", str(pdf)], capture_output=True,
                          text=True).stdout

@@ -215,43 +215,6 @@ def idents_for(name):
                         tex.read_text())]
 
 
-def target_columns(name):
-    """How many columns THIS document's display-equation table has,
-    read from its own report.tex.
-
-    Not a constant, and the reason is that a constant was wrong twice
-    in one day. The count was 5; pdfdrill's task 099 added a
-    Confidence column and made it 6. The corpus now holds BOTH eras
-    -- 1101.4542 was built 08-21 with no `confcell` and reads 5,
-    bh2 and 0902.0431 were rebuilt 08-22 and read 6 -- so any single
-    number skips one era entirely and reports it as "no display
-    pages", which is the BH1org_OCR failure spread across a thousand
-    documents.
-
-    The header row carrying BOTH `Rendered` and `Scan image` is the
-    display-equation table with crops, and only that table has both.
-    Counting its cells is exact, independent of the era, and
-    self-correcting if the format changes again:
-
-        6   ...\textbf{Conf.} & \textbf{LaTeX source}
-                & \textbf{Rendered} & \textbf{Scan image}
-        5   the same without Conf. (pre-099)
-
-    Returns None when no such header exists -- the document's
-    equations table has no scan column, so there is nothing in it to
-    compare, and that is a REASON rather than a zero. Reading the
-    .tex is not a violation of emit's G6: G6 forbids inkdrill reading
-    text off a RASTER, which is what would make it agree with the
-    tool it cross-checks. A column count taken from a source file
-    never touches the ink measurement.
-    """
-    tex = LIB / name / "report.tex"
-    if not tex.is_file():
-        return None
-    for line in tex.read_text().splitlines():
-        if "textbf{Rendered}" in line and "textbf{Scan image}" in line:
-            return line.count("&") + 1
-    return None
 
 
 # ONE implementation, shared with tools/reportpages.py (286). This
@@ -259,7 +222,7 @@ def target_columns(name):
 # of a detection drift, with the newer one always the worse. The
 # body moved to pagedetect.probe unchanged -- verified by re-probing
 # a document and requiring the same page list.
-from pagedetect import probe as _probe
+from pagedetect import probe as _probe, target_columns as _target_columns
 
 
 def probe(pdf, n, columns=None):
@@ -285,7 +248,7 @@ for name in DIRS:
         print(f"{name}: cleared {len(stale)} stale files", flush=True)
     check_fresh(name, pdf)
     check_phase(name, pdf)
-    want = ARGS.columns or target_columns(name)
+    want = ARGS.columns or _target_columns(LIB / name / "report.tex")
     if want is None:
         zero_rows.append(
             (name, "report.tex has no header carrying both Rendered "

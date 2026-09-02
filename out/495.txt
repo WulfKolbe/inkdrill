@@ -186,3 +186,91 @@ sampling density.
 The section 5 caveat is now narrower, not gone: STIX is still
 unmeasured, and XITS's SCRIPT alphabet -- the part that would test
 sections 1 and 2 -- is still outside what this chain can read.
+
+--------------------------------------------------------------------
+7. SECOND ADDENDUM -- XITSMath-Bold closes the gap section 6 left open
+
+Section 6 could not test sections 1 and 2 because the converted
+XITS-Regular is the TEXT face and carries no script alphabet. Three
+further conversions were then supplied, and one is the math face:
+
+    XITS-Regular.pfb       2,517 glyphs    11 plane-1
+    XITS-Bold.pfb          1,468 glyphs     3 plane-1
+    XITS-BoldItalic.pfb      885 glyphs     0 plane-1
+    XITSMath-Bold.pfb      2,154 glyphs   638 plane-1   <-- the math face
+
+638 mathematical alphanumerics, U+1D400 on, all read by type1.py. It
+carries the BOLD variant of every alphabet and no regular one, which is
+the caveat on all of the below: stroke weight is a confound against the
+10 pt regular faces of sections 1 to 4 and cannot be removed without
+the regular math face.
+
+    block                 L        G        J        g
+    bold-italic          2/0      2/0      1/0      3/2
+    BOLD-SCRIPT          4/2      3/1    5/3,2,3  4-7/2,3,3
+    bold-fraktur         1/0      2/0      0/0      1/1
+    bold-doublestruck    1/1      4/2      1/1      5/3
+
+THE SEPARATION SURVIVES AN INDEPENDENT, NON-TeX DESIGN.
+
+    glyph   rsfs10 J     XITSMath J     CM \mathcal J
+      L         4             4               1
+      G         3             3               1
+      J         5           5,5,5           1
+                          (rsfs 5,5,8)
+
+Junctions IDENTICAL to rsfs10 on L and G, and equal at two of three
+sizes on J. Nothing like CM's \mathcal, which is 1 on all three. XITS
+is a Times/STIX-derived design with no lineage to rsfs, so this is the
+independent confirmation section 1 could not give -- there CM and LM
+were one drawing and txfonts was the only independent test, and
+txfonts failed.
+
+AND IT REFRAMES WHAT IS BEING SEPARATED. Unicode has ONE script block;
+\mathcal and \mathscr are two FONTS for the same codepoints, not two
+codepoint ranges. So the channel does not separate two TeX commands --
+it separates a PLAIN script from a CHANCERY one as drawings. CM's cmsy
+calligraphic is a single-stroke form and reads 1; rsfs and XITS are
+looped chancery forms and read 3 or more. txfonts's \mathcal G at
+3/2/2 is then not an anomaly but the prediction: it is drawn more
+ornately than CM's, so it reads as the ornate class. The cut at 4 from
+section 2 stands, and it is a cut on ORNAMENT rather than on a command
+name. That is a better statement of it, because a document does not
+tell the reader which command produced a glyph.
+
+A CORRECTION TO SECTION 4. That section read bbold10's disagreement
+with msbm10 as "\mathbb does not survive an independent design", which
+casts bbold10 as the exception. A third design says the direction was
+wrong:
+
+    glyph   msbm10    bbold10    XITSMath bold-doublestruck
+      L      6/2        1/1                 1/1
+      G      8/4        2/1                 4/2
+      J      4/2        1/1                 1/1
+
+bbold10 and XITS agree EXACTLY on L and J. msbm10 is the outlier, and
+the drawing says why: AMS blackboard bold doubles every stroke, where
+bbold10 and XITS use an open double-struck form. Section 4's
+conclusion stands -- three designs do not agree, so a rule keyed on
+\mathbb junctions reads which package was loaded -- but the odd one
+out is msbm10, not bbold10.
+
+Bold fraktur gains a third design agreeing on 2 of 3: XITS reads 1/0
+and 0/0 on L and J as eufm10 and eufb10 both do, and differs on G
+(2/0 against 3-4/1).
+
+REVISED TOTALS, 20 font-block entries, 77 renderable of 84:
+
+    glyphs measured                        77   (was 61, was 57)
+    HOLE count changes between 40/80/160   10   (13%, was 11%, 12%)
+    junction count changes                 20   (26%, was 30%, 28%)
+
+Three of the four XITSMath SCRIPT glyphs move their hole count -- L
+[2,3], J [2,3], g [2,3] -- and none of its italic, fraktur or
+double-struck glyphs do. The ornate script is the least stable class
+in every font that has one, which is the same finding rsfs already
+gave and not a new one.
+
+Re-run: `INKDRILL_TYPE1=/usr/share/texmf-dist/fonts/type1 python3
+tools/famjunctions2.py out.json`, with the four XITS files under
+~/XITS. STIX remains unmeasured.

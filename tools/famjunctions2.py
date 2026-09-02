@@ -35,6 +35,21 @@ FONTS = [
     # math alphanumerics), so it tests the HOLE-STABILITY half and not
     # the mathcal/mathscr separation, which needs a script alphabet.
     ("upright",  "XITS",     "~/XITS/XITS-Regular.pfb"),
+    # XITSMath-Bold carries 638 mathematical alphanumerics from
+    # U+1D400 on, which is the SCRIPT alphabet XITS-Regular has none
+    # of -- so this face, and only this face, tests the mathcal/mathscr
+    # separation on a design with no TeX lineage. It carries the BOLD
+    # variant of every alphabet and no regular one; stroke weight is
+    # therefore a confound against the 10 pt faces above and cannot be
+    # removed without the regular math face.
+    #
+    # Unicode has ONE script block. \mathcal and \mathscr are two
+    # FONTS for the same codepoints, so this entry is named for the
+    # block it reads, not for a TeX command.
+    ("mathscr",  "XITSMath",  "~/XITS/XITSMath-Bold.pfb", 0x1D4D0),
+    ("mathfrak", "XITSMath",  "~/XITS/XITSMath-Bold.pfb", 0x1D56C),
+    ("mathbb",   "XITSMath",  "~/XITS/XITSMath-Bold.pfb", 0x1D538),
+    ("italic",   "XITSMath",  "~/XITS/XITSMath-Bold.pfb", 0x1D468),
 ]
 GLYPHS = ["L", "G", "J", "g"]
 SIZES = [40, 80, 160]
@@ -42,7 +57,12 @@ SIZES = [40, 80, 160]
 rows = []
 print(f"{'family':<9} {'font':<9} {'glyph':<5} " +
       "  ".join(f"{s}px J/H" for s in SIZES) + "   holes stable?")
-for fam, tag, fn in FONTS:
+for entry in FONTS:
+    # a 4th element is the base codepoint of a mathematical
+    # alphanumeric block; the glyphs are then named u1DXXX rather than
+    # "L"/"G"/"J", and lowercase g sits 26 further on.
+    fam, tag, fn = entry[:3]
+    base = entry[3] if len(entry) > 3 else None
     # an entry may name a file outside the TeX tree (a hand-converted
     # font); a leading ~ or / is taken as a path, anything else as a
     # name to find in the tree.
@@ -54,9 +74,14 @@ for fam, tag, fn in FONTS:
     if src is None:
         print(f"{fam:<9} {tag:<9} FONT NOT FOUND {fn}"); continue
     f = t1_load(src)
-    for g in GLYPHS:
+    for g0 in GLYPHS:
+        if base is None:
+            g = g0
+        else:
+            off = (ord(g0) - 97 + 26) if g0.islower() else (ord(g0) - 65)
+            g = f"u{base + off:04X}"
         if g not in f.charstrings:
-            rows.append((fam, tag, g, None)); continue
+            rows.append((fam, tag, g0, None)); continue
         cells = []
         for px in SIZES:
             try:
@@ -67,12 +92,12 @@ for fam, tag, fn in FONTS:
                 cells.append((junction_sites(m), sum(ip.cycles)))
             except Exception:
                 cells.append(None)
-        if any(c is None for c in cells): 
-            rows.append((fam, tag, g, None)); continue
+        if any(c is None for c in cells):
+            rows.append((fam, tag, g0, None)); continue
         hs = {c[1] for c in cells}
         js = {c[0] for c in cells}
-        rows.append((fam, tag, g, cells))
-        print(f"{fam:<9} {tag:<9} {g:<5} " +
+        rows.append((fam, tag, g0, cells))
+        print(f"{fam:<9} {tag:<9} {g0:<5} " +
               "  ".join(f"{c[0]}/{c[1]}   " for c in cells) +
               ("  yes" if len(hs) == 1 else f"  NO {sorted(hs)}") +
               ("" if len(js) == 1 else f"   J moves {sorted(js)}"))
