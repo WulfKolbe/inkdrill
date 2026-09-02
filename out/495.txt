@@ -1,0 +1,147 @@
+495 - does the separation survive more fonts, and how stable are holes
+========================================================================
+
+TWO ANSWERS, and the second is the one that reaches beyond this task.
+
+  \mathcal = 1 SURVIVES 8 of 9 font-glyph pairs and fails on the
+  ninth: txfonts G reads 3/2/2 junctions, not 1. The check the task
+  wanted therefore EXISTS but is not universal, and the exception is
+  a different design rather than an optical variant.
+
+  HOLE COUNT CHANGES WITH SIZE ON 12% OF GLYPHS -- 7 of 57 across 16
+  fonts. That is a caveat on holes as a channel, and holes carry 218,
+  91 and 336.
+
+--------------------------------------------------------------------
+0. TWO OF THE FIVE FAMILIES CANNOT BE MEASURED BY THIS CHAIN
+
+`type1.py` reads Type 1 font programs. STIX and XITS ship ONLY as
+OpenType, and TeX Gyre's MATH faces are OTF too -- only its text
+faces exist as .pfb. There is no CFF reader in this package, so those
+are outside what it can render rather than absent from the run.
+
+    Computer Modern   cmr10 cmmi10 cmsy10           Type 1  measured
+    Latin Modern      lmr10 lmmi10 lmsy10           Type 1  measured
+    TeX Gyre          qplr qplri (TEXT only)        Type 1  measured
+    STIX                                            OTF     NOT READABLE
+    XITS              fonts/opentype/public/xits    OTF     NOT READABLE
+
+Substituted, to widen the set where a second face exists at all:
+txsy (txfonts) as a third \mathcal, rsfs7 as a second \mathscr,
+eufb10 as bold fraktur, msbm7 and bbold10 as second and third \mathbb.
+txsy and bbold10 matter most -- they are independent designs, not
+optical sizes of the same drawing.
+
+16 fonts, 4 glyphs, 3 sizes, 57 renderable of 64.
+
+--------------------------------------------------------------------
+1. \mathcal ACROSS THREE INDEPENDENT SOURCES
+
+    font       L            G            J
+    CM         1/0 1/0 1/0  1/0 1/0 1/0  1/0 1/0 1/0
+    LM         1/0 1/0 1/0  1/0 1/0 1/0  1/0 1/0 1/0
+    txfonts    1/0 1/0 1/0  3/1 2/0 2/0  1/0 1/0 1/0
+
+EIGHT OF NINE HOLD AT EXACTLY 1/0. CM and LM agree on every letter at
+every size -- but LM's cmsy is a redrawing of CM's, so those two are
+not independent evidence. txfonts IS independent, and it agrees on L
+and J and DISAGREES ON G, reading 2-3 junctions and, at 40 px, a
+hole.
+
+So the flat-1 result is a property of the Computer Modern lineage
+plus two of three letters elsewhere, not of \mathcal as a notion.
+
+--------------------------------------------------------------------
+2. \mathscr, AND WHY THE CHECK STILL WORKS
+
+    font       L            G            J
+    rsfs10     4/2 4/2 4/2  3/1 3/1 3/1  5/1 5/2 8/4
+    rsfs7      4/2 4/2 4/2  7/3 3/1 5/2  5/4 5/2 7/3
+
+Every \mathscr reading is 3 or more junctions. Every \mathcal
+reading except txfonts G is exactly 1. The gap between the
+populations is 1 against 3-8 with ONE exception at 2-3.
+
+THE CHECK THE TASK DESCRIBED -- MathPix emits \mathcal, the crop
+reads 3+ junctions, therefore a \mathscr/\mathcal confusion -- SURVIVES
+on this evidence, with one qualification: a crop reading 2 or 3
+junctions could be txfonts \mathcal G rather than \mathscr. At 4 or
+more there is no \mathcal reading in this set that reaches it.
+
+That is a cut at 4, not at 3, and it is derived from the exception
+rather than from the gap.
+
+--------------------------------------------------------------------
+3. THE HOLE INSTABILITY, WHICH IS THE WIDER FINDING
+
+    glyphs measured                        57
+    HOLE count changes between 40/80/160    7   (12%)
+    junction count changes                 16   (28%)
+
+    holes [0, 1]        italic/CM J
+    holes [0, 1]        mathcal/txfonts G
+    holes [1, 2, 4]     mathscr/rsfs10 J
+    holes [1, 2, 3]     mathscr/rsfs7 G
+    holes [2, 3, 4]     mathscr/rsfs7 J
+    holes [4, 5]        mathbb/msbm10 G
+    holes [4, 5]        mathbb/msbm7 G
+
+ONE IN EIGHT GLYPHS CHANGES ITS HOLE COUNT WITH RESOLUTION. Not a
+rounding difference -- rsfs10 J goes 1 -> 2 -> 4 across a 4x size
+range, and italic CM J goes 0 -> 1 as its hook closes against the
+stem.
+
+WHY THIS MATTERS BEYOND 495. Holes are treated in this project as
+topological and therefore reliable:
+
+  218 separated a slashed zero from an O by hole count and called the
+      difference "an identity, not a tuned cut", because the classes
+      differ by an INTEGER.
+  91  selects the table region by hole count.
+  336 and every ink comparison read holes per component.
+
+218's claim survives -- a ring and a slashed ring differ by
+construction, and neither is near a closure threshold. But the
+general form, "hole count is stable because it is topological", does
+not. The topology is stable; the RASTERISATION of a near-touching
+stroke is not, and at 40 px a hook that closes at 160 px has not
+closed yet.
+
+The affected glyphs are the ones with near-tangent strokes -- script
+capitals, an italic J's hook, a double-struck G's inner counters. A
+figure quoted from a 40 px crop and compared against a 160 px render
+can differ in holes for that reason alone, and out/309's normaliser
+lesson applies: the instrument was fine and the unit was wrong.
+
+I am NOT proposing a fix. This is a caveat to attach to hole counts,
+and the measurement to take next is the one that would size it on
+real pages rather than on rendered glyphs.
+
+--------------------------------------------------------------------
+4. WHAT ELSE THE WIDER SET CHANGED
+
+TeX Gyre upright G reads 0, 1, 2 junctions at 40, 80, 160 -- a glyph
+whose junction count moves by TWO across the range. 491 measured 4 of
+20 glyphs moving; over 57 it is 16, or 28%. The instability is worse
+than the first sample suggested, and it is worse for junctions than
+for holes.
+
+eufb10 against eufm10 AGREES on every letter, so bold fraktur is the
+same family by this feature -- one of the two second-weight checks
+491 said was needed, and it passes.
+
+bbold10 does NOT agree with msbm10: 1/1 against 6/2 on L. Both are
+\mathbb. That family does not survive the addition of an independent
+design, and a rule keyed on \mathbb junction counts would be reading
+which package the author loaded.
+
+--------------------------------------------------------------------
+5. POPULATION
+
+16 Type 1 fonts from the TeX tree, 4 glyph names, 3 sizes, 57
+renderable combinations of 64. Seven absent: cmsy/lmsy/txsy/rsfs/msbm
+carry no lowercase g. Rendered by inkdrill's own type1 -> charstring
+-> scan chain, so no ghostscript and no PDF.
+
+STIX and XITS are unmeasured for the reason in section 0, and their
+absence is a gap in the answer rather than a null result.
