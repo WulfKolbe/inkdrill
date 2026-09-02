@@ -30,19 +30,40 @@ G4  the count is of PIXELS, not of junction sites. A Y meeting at one
     depending on the rasterisation, so `junction_sites` clusters them
     by 8-connectivity and is the figure to compare across sizes.
 G5  neither function needs a threshold. Thinning is defined by the
-    Zhang-Suen conditions and a junction by a neighbour count; there
-    is nothing to tune and nothing that moves with dpi.
+    Zhang-Suen conditions and a junction by a neighbour count, so
+    there is no constant here that a dpi change silently retunes.
+
+    THAT IS NOT THE SAME AS THE COUNT BEING INVARIANT, and the first
+    wording of this guarantee said "nothing that moves with dpi",
+    which reads as the second. It is false: 497 measured the junction
+    count moving with glyph size on 25% of 104 rendered glyphs, and
+    496 measured it on real pages. A 2-px stroke thins to a staircase
+    and the staircase has branches. The guarantee is about the
+    DEFINITION carrying no tunable; the VALUE is a measurement with a
+    known instability, and a caller comparing two counts must know
+    which of the two it is relying on.
 G6  a stroke END has one neighbour and a stroke INTERIOR has two, so
     `>= 3` is the whole definition of a branch point. Ends are
     reported separately by `endpoints` because the pair together
     characterises a shape better than either alone -- an L has two
     ends and no junction, an L-slash has three ends and one junction.
+G7  `parts(mask)` splits a mask into its 8-connected components and
+    reports each one's box and counts. A CROP OF A PAGE IS NOT A
+    GLYPH -- it holds a whole line -- so every caller that wants a
+    per-glyph reading out of real ink has to split first, and doing
+    it here keeps that one step beside the count it feeds rather
+    than in each caller. It reports; it names nothing and classifies
+    nothing, because naming a component needs symbol identity, which
+    this project does not have.
 """
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from .raster import InkMask
 
-__all__ = ["skeleton", "junctions", "junction_sites", "endpoints"]
+__all__ = ["skeleton", "junctions", "junction_sites", "endpoints",
+           "Part", "parts"]
 
 _N8 = ((-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1))
 
@@ -151,3 +172,69 @@ def endpoints(mask: InkMask, *, thin: bool = True) -> int:
     skel = skeleton(mask) if thin else mask
     return sum(1 for cn, deg in _degrees(skel).values()
                if cn == 1 or deg == 1)
+
+
+class Part(NamedTuple):
+    """One 8-connected component of a mask, with its shape counts.
+
+    `x0, y0, x1, y1` are IMAGE-space and inclusive, in the coordinates
+    of the mask handed to `parts`.
+    """
+    x0: int
+    y0: int
+    x1: int
+    y1: int
+    ink: int
+    holes: int
+    junctions: int
+    ends: int
+
+    @property
+    def width(self) -> int:
+        return self.x1 - self.x0 + 1
+
+    @property
+    def height(self) -> int:
+        return self.y1 - self.y0 + 1
+
+
+def parts(mask: InkMask, *, min_ink: int = 1) -> list[Part]:
+    """G7. The mask's 8-connected components, left to right.
+
+    `min_ink` drops specks below a pixel count; the default keeps
+    everything, because what counts as a speck depends on the dpi the
+    caller rendered at and this module is not told it.
+
+    Foreground connectivity is 8 and background 4, package-wide, so
+    the holes here are the same holes `nest` and `sweep` report.
+    """
+    from .nest import ink_only
+    from .sweep import sweep as _sweep
+
+    res = _sweep(mask, conn=8)
+    node = {n.id: n for n in res.nodes}
+    out = []
+    for comp in res.components:
+        ns = [node[i] for i in comp.nodes]
+        # `image_span` is the sanctioned converter; for the row axis
+        # this sweep uses, lo..hi is x and line is y, but going
+        # through it is what keeps that true if the axis ever moves.
+        spans = [n.as_run().image_span("row") for n in ns]
+        x0 = min(s[0] for s in spans)
+        y0 = min(s[1] for s in spans)
+        x1 = max(s[2] for s in spans)
+        y1 = max(s[3] for s in spans)
+        w = x1 - x0 + 1
+        buf = bytearray(w * (y1 - y0 + 1))
+        for (a, b, c, _d) in spans:
+            off = (b - y0) * w
+            for x in range(a, c + 1):
+                buf[off + x - x0] = 0xFF
+        sub = InkMask(bytes(buf), w, y1 - y0 + 1)
+        ink = sub.data.count(0xFF)
+        if ink < min_ink:
+            continue
+        out.append(Part(x0, y0, x1, y1, ink, sum(ink_only(sub).cycles),
+                        junction_sites(sub), endpoints(sub)))
+    out.sort(key=lambda p: (p.x0, p.y0))
+    return out

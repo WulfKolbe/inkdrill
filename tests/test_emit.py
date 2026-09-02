@@ -2493,6 +2493,60 @@ class T1_22_SkeletonJunctions(unittest.TestCase):
         self.assertEqual(junction_sites(m), 0)
         self.assertEqual(endpoints(m), 2)
 
+    def test_g7_parts_splits_a_crop_into_glyph_sized_pieces(self):
+        """498: a crop of a page is a LINE, not a glyph, so the
+        junction count has to be taken per component. An L beside a
+        plus is the same pair the class above uses one at a time."""
+        from inkdrill.skeleton import parts
+        m = self._mk([(3, y) for y in range(3, 12)]
+                     + [(x, 11) for x in range(3, 9)]
+                     + [(15, y) for y in range(3, 12)]
+                     + [(x, 7) for x in range(12, 19)])
+        got = parts(m)
+        self.assertEqual(len(got), 2)
+        self.assertEqual([g.junctions for g in got], [0, 1])
+        self.assertEqual([g.ends for g in got], [2, 4])
+
+    def test_g7_parts_are_ordered_left_to_right(self):
+        """A reading order, so `parts(...)[0]` is the leftmost glyph.
+        498's --leading mode identifies a script letter BY POSITION,
+        having no symbol identity to do it by name, so the order is
+        load-bearing rather than cosmetic."""
+        from inkdrill.skeleton import parts
+        m = self._mk([(16, 4)] + [(2, 9)] + [(9, 14)])
+        self.assertEqual([g.x0 for g in parts(m)], [2, 9, 16])
+
+    def test_g7_a_parts_box_is_inclusive_and_in_the_masks_own_space(self):
+        from inkdrill.skeleton import parts
+        m = self._mk([(x, y) for x in range(4, 9) for y in range(6, 10)])
+        (g,) = parts(m)
+        self.assertEqual((g.x0, g.y0, g.x1, g.y1), (4, 6, 8, 9))
+        self.assertEqual((g.width, g.height), (5, 4))
+        self.assertEqual(g.ink, 20)
+
+    def test_g7_min_ink_drops_specks_and_the_default_keeps_them(self):
+        """BOTH SIDES of the filter. A speck floor tested only by what
+        it removes can be made unconditional without the suite
+        noticing -- and the default of 1 is what makes the caller,
+        which knows its dpi, own the choice."""
+        from inkdrill.skeleton import parts
+        m = self._mk([(x, y) for x in range(4, 9) for y in range(6, 10)]
+                     + [(17, 17)])
+        self.assertEqual(len(parts(m)), 2)
+        self.assertEqual(len(parts(m, min_ink=2)), 1)
+
+    def test_g7_holes_agree_with_nest_on_the_same_component(self):
+        """The oracle: `parts` reports the hole count `nest` computes,
+        not a second definition of one. A ring has one."""
+        from inkdrill.nest import ink_only
+        from inkdrill.skeleton import parts
+        ring = [(x, 5) for x in range(4, 13)] + [(x, 13) for x in range(4, 13)]
+        ring += [(4, y) for y in range(5, 14)] + [(12, y) for y in range(5, 14)]
+        m = self._mk(ring)
+        (g,) = parts(m)
+        self.assertEqual(g.holes, 1)
+        self.assertEqual(g.holes, sum(ink_only(m).cycles))
+
     def test_a_T_has_one_site_and_three_ends(self):
         from inkdrill.skeleton import junction_sites, endpoints
         m = self._mk([(x, 4) for x in range(3, 18)]

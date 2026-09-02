@@ -1,0 +1,237 @@
+498 - the script check, on ink cropped from a local page render
+====================================================================
+
+TWO ANSWERS, AND THE SECOND IS NOT THE ONE THE TASK EXPECTED.
+
+  THE ROUTE WORKS. Region -> local page raster -> crop -> junction
+  count is built, tested, and reaches inline formulas. That was the
+  point: 1808.07302's \mathscr occurrences are 22 of 22 in `text`
+  lines, so a check fed by CDN crops sees NONE of them, exactly as
+  488 said.
+
+  THE CHECK DOES NOT TRANSFER. On real page ink a Computer Modern
+  \mathcal reads 4 to 8 junctions where a clean charstring render of
+  the same font reads 1. 497's cut of 4 sits AT the noise floor of
+  real ink. Raising the dpi raises both sides; anti-aliasing does not
+  matter. So the per-glyph ink test 231's class B would need cannot
+  be built on this channel as it stands.
+
+  BUT THE QUESTION IT WAS ASKED FOR IS ANSWERED ANYWAY, by measuring
+  the FONT instead of the page -- and the answer is that 231's class
+  A is a FONT EFFECT, not a transcription defect.
+
+--------------------------------------------------------------------
+1. WHAT WAS BUILT
+
+`inkdrill/skeleton.py` gains `parts()` and `Part` (G7). A crop of a
+page is a LINE, not a glyph, so a per-glyph reading has to split
+first; doing it beside the junction count keeps that step with the
+count it feeds. It reports box, ink, holes, junctions and ends per
+8-connected component, left to right, and names nothing -- naming a
+component needs symbol identity, which this project does not have.
+
+`tools/scriptink.py` is the route. lines.json region -> gs render of
+that page -> crop -> `parts`. It carries 461's three traps:
+
+  * regions are in MathPix's page pixels, scaled by (raster width /
+    THAT page's page_width), read per page
+  * a page with no recorded width is SKIPPED, not defaulted
+  * the page is parsed out of the render's FILENAME
+
+and two more this side found, both of which had produced wrong
+answers before they were fixed:
+
+  * `next(d.glob("*.pdf"))` returned `report.pdf` for some documents.
+    The report's page numbering has nothing to do with lines.json, so
+    a region for page 12 was cut from page 12 OF THE REPORT. Here it
+    failed loudly because the report was shorter; on a longer report
+    it would have returned a plausible rectangle of the wrong page.
+    `source_pdf` now takes `<name>.pdf` and refuses when it cannot
+    tell which pdf is the document's.
+  * ghostscript EXITS 0 for a page past the end and writes nothing,
+    so `check=True` does not catch it. Now a named refusal.
+
+Tests: five for `parts` in T1_22, including both sides of the min_ink
+filter and a hole count checked against `nest` on the same component.
+Full suite 1,149, 37 skipped.
+
+--------------------------------------------------------------------
+2. THE ROUTE REACHES WHAT THE CDN ROUTE CANNOT
+
+  document      \mathscr lines by type      region present
+  0707.4470     17 math, 24 text            41 of 41
+  1808.07302     0 math, 22 text            22 of 22
+
+1808.07302's finding lives ENTIRELY in inline formulas. A `--math-only`
+filter, added to make the two populations comparable, silently removed
+that whole document -- the filter excluding the class it exists to
+compare against, for the fourth time in this project's record. It is
+kept as an option and is not what the measurement below uses.
+
+--------------------------------------------------------------------
+3. THE CHECK DOES NOT TRANSFER TO PAGE INK
+
+Selection rule, stated because it is a choice: lines whose LaTeX
+BEGINS with the token, reporting the LEFTMOST component -- which is
+then that glyph by POSITION, there being no symbol identity to name it
+by. Verified by eye on both populations: 0707.4470 p7 line 11 is
+`\[\mathscr{J}=J \wedge d t-\rho\]` and its leftmost component is the
+script J; 2106.07890 p9 line 18 opens with a plain calligraphic C.
+
+Junctions of that glyph, at 400 dpi:
+
+  \mathscr, rebound fonts        \mathcal, Computer Modern
+  0707.4470    n= 3   median 10  1205.3463v2   n=30   median 7
+  1808.07302   n= 2   median  5  1705.0019v1   n= 7   median 5
+                                 1905.08691    n= 9   median 7
+                                 2106.07890    n=17   median 4
+
+THE POPULATIONS OVERLAP COMPLETELY. A clean render of cmsy10 gives 1
+on all three test letters; the same alphabet on a real page gives 4 to
+7. The check's whole margin is consumed before it starts.
+
+Raising the resolution does not recover it -- it makes both worse:
+
+  dpi     0707.4470   1808.07302   1905.08691   2106.07890
+  400        10           8            7            4
+  900        13          11            9            8
+  1600       14          13           10            8
+
+And it is not an aliasing artefact, which 496 makes the first thing to
+check: the same glyph rendered with and without anti-aliasing gives 6
+against 4 at 400 dpi and 8 against 8 at 900. No direction.
+
+WHY. Zhang-Suen thinning puts a spur on every bump in a boundary. A
+charstring rendered by `scan` has an algebraically smooth outline; a
+ghostscript page render of a real font, thresholded at 200, does not,
+and neither will a scan. The junction count is a clean-outline
+statistic, and 497 measured it on clean outlines.
+
+--------------------------------------------------------------------
+4. MEASURE THE FONT, NOT THE PAGE -- AND THE ANSWER ARRIVES
+
+The two class-A documents both load a package that REPLACES the math
+alphabets. Their authors wrote \mathcal and the page drew something
+else. That is checkable on the font file, where the outlines are
+clean and the channel does work:
+
+  junction sites at 40, 60, 80, 100, 120, 160, 200, 240 px   median
+
+  CM cmsy10 \mathcal          L  1 1 1 1 1 1 1 1                1
+                              G  1 1 1 1 3 1 1 1                1
+                              J  1 1 1 1 1 1 1 1                1
+  mathdesign-utopia \mathcal  L  4 4 4 4 4 5 4 7                4
+                              G  2 3 7 3 5 5 5 5                5
+                              J  7 5 7 8 7 7 5 9                7
+  rsfs10 \mathscr             L  4 4 4 4 4 4 6 4                4
+                              G  3 5 3 3 3 3 7 5                3
+                              J  5 5 5 6 5 8 5 9                5
+
+MATHDESIGN'S \mathcal MEASURES AS \mathscr. 4 against rsfs's 4 on L,
+5 against 3 on G, 7 against 5 on J -- and 1, 1, 1 for the alphabet
+that \mathcal is assumed to mean.
+
+mathptmx, 1808.07302's package, could not be measured this way: its
+\mathcal comes through a virtual font assembled from Adobe Symbol and
+the letters are not in a .pfb under those names. It was checked on the
+page instead, which is weaker evidence about the font and stronger
+evidence about the document: its `\mathscr{L}` is an unmistakable
+chancery script with the rsfs loop, not a plain calligraphic.
+
+--------------------------------------------------------------------
+5. SO 231's CLASS A IS A FONT EFFECT
+
+`tools/calfonts.py` reads every author e-print's .tex, .sty and .cls
+and classifies the preamble by a NAMED list of packages that install a
+math alphabet set, plus explicit `\DeclareMathAlphabet{\mathcal}` and
+`eucal`/`euscript` rebindings.
+
+  documents with >= 25 script mentions AND an e-print   156
+    cm (nothing found that rebinds \mathcal)            127   81.4%
+    REBOUND                                              16   10.3%
+    unreadable e-print                                   13    8.3%
+
+One document in ten draws \mathcal in a face that is not Computer
+Modern's. And the two documents 231 called whole-document swaps are
+the ONLY two in the census with mathcal 0 and mathscr > 0:
+
+  0707.4470     fourier / mathdesign[utopia]    cal 0    scr 110
+  1808.07302    mathptmx                        cal 0    scr  56
+
+MathPix wrote \mathscr because the ink IS a chancery script. It read
+the page correctly. 231 compared the author's SOURCE TOKEN against
+MathPix's, which is the right comparison for a transcription question
+and the wrong one for an ink question, because \mathcal is not a
+glyph -- it is a name bound to whatever the preamble installed.
+
+One of 231's four class-B documents is rebound too: 2010.14265 loads
+txfonts, and 497 measured txfonts's \mathcal G at 3 junctions where CM
+gives 1 -- the one TeX-tree family that draws \mathcal ornately. So of
+231's six flagged documents, three are font effects and three
+(1510.06699, 2005.04015, 2012.15581) are not explained by this.
+
+--------------------------------------------------------------------
+6. WHAT THIS IMPLIES FOR out/229's REFINEMENT, WHICH IS NOT MINE
+
+0707.4470_FO0175 carries `latex \mathscr{g}` and
+`latex_refined \mathcal{J}`. Two errors were folded into one fix:
+
+  THE LETTER IS A REAL MISREAD. g for J, and out/231 is right that
+  lowercase is where rsfs10 has no glyph, so the row dropped. That
+  correction stands and nothing here touches it.
+
+  THE ALPHABET WAS NOT. If the report renders `\mathcal{J}` in
+  Computer Modern while the scan shows mathdesign's chancery J, the
+  refinement has moved the render AWAY from the ink -- the opposite of
+  what 231 says the 42 rows cost. NOT MEASURED HERE: I have not
+  rendered that report and compared, and the report's own preamble
+  decides it. Flagged for whoever owns that decision, as a consequence
+  to check rather than a finding.
+
+--------------------------------------------------------------------
+7. A CORRECTION TO 497, WHICH I WROTE EARLIER TODAY
+
+497 reported CM \mathcal at "1, 1, 1" on L, G and J and built a cut of
+4 on it. That was measured at three sizes -- 40, 80 and 160 px. A
+denser sweep says the flat 1 is not flat:
+
+  cmsy10, junction sites at 30..320 px
+    L   1 1 1 1 1 1 1 2 1 1 1 3      departs at 140 and 320
+    G   1 1 3 1 1 1 3 1 1 1 1 1      departs at 50 and 120
+    J   1 1 1 1 1 1 1 1 1 1 1 1
+
+Four of 36 readings depart from 1, and the three sizes 497 sampled
+missed all four. Same shape as `confluent()` taking the first 24
+lexicographic permutations and never relabelling symbols 0 and 1: a
+checker sampled where the answer was not.
+
+The DIRECTION of 497 survives -- plain calligraphic reads 1 to 3,
+chancery reads 3 to 9, and section 4 above reproduces that on a fourth
+family. The flatness does not, and a cut derived from a flat 1 is
+weaker than 497 presented it.
+
+--------------------------------------------------------------------
+8. POPULATION, SPLIT RULE, RE-RUN
+
+FONT CENSUS: every library directory with a lines.json and an author
+e-print (.tgz, never .tex.zip, which is MathPix's own output -- 231's
+method note) carrying at least 25 script mentions. 156 of 2,813. The
+package list is named in `tools/calfonts.py` and is not a heuristic;
+13 e-prints would not open and are reported as unreadable rather than
+as cm.
+
+INK: populations chosen from that census BEFORE any ink was measured
+-- two rebound-and-swapped, four cm controls, four rebound-not-swapped.
+`--max-lines` caps per document and every drop is printed.
+
+    python3 tools/calfonts.py -o calfonts.tsv
+    python3 tools/scriptink.py 0707.4470 1808.07302 \
+        --token '\\mathscr' --dpi 400 --leading -o A.tsv
+    python3 tools/scriptink.py 2106.07890 1905.08691 \
+        --token '\\mathcal' --dpi 400 --leading -o B.tsv
+
+WHAT IS NOT ESTABLISHED. The three class-B documents that are not
+rebound. Whether a spur-pruned junction count would transfer to page
+ink -- that is a tunable and it is not built here. And whether the
+report render disagrees with the scan on the refined rows, which is
+section 6.

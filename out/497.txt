@@ -130,3 +130,29 @@ neither of which it can remove:
 
 STIX itself is still unmeasured. XITS is a fork of it and this is the
 nearest available substitute, not the same font.
+
+--------------------------------------------------------------------
+CORRECTED BY 498: THE FLAT 1 IS NOT FLAT
+
+The tables above sample three sizes -- 40, 80 and 160 px. 498 swept
+twelve and CM \mathcal departs from 1 four times:
+
+    cmsy10, junction sites at 30..320 px
+      L   1 1 1 1 1 1 1 2 1 1 1 3     departs at 140 and 320
+      G   1 1 3 1 1 1 3 1 1 1 1 1     departs at 50 and 120
+      J   1 1 1 1 1 1 1 1 1 1 1 1
+
+All four fall between the sampled sizes. Same shape as `confluent()`
+taking the first 24 lexicographic permutations and never relabelling
+symbols 0 and 1 -- a checker that sampled where the answer was not.
+
+The DIRECTION survives, and 498 reproduces it on a fourth family
+(mathdesign-utopia's \mathcal measures 4/5/7, in the chancery band).
+The FLATNESS does not, and the cut of 4 is weaker than stated above.
+
+498 also found that none of this transfers to real page ink: a CM
+\mathcal on a rendered page reads 4 to 8 junctions, because
+Zhang-Suen puts a spur on every boundary bump and a charstring
+outline is smooth where a page render is not. Everything in this file
+is a statement about clean outlines.
+
