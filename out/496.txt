@@ -1,0 +1,223 @@
+496 - the resolution caveat at working dpi, on the corpus
+====================================================================
+
+THE ANSWER: A FINDING, NOT A FOOTNOTE -- BUT NOT WHERE 495 POINTED.
+
+  16.6% of compared rows change their finding class between 300 and
+  600 dpi. Not near zero, so every distance in the corpus carries it.
+
+  But it is concentrated. The strongest class survives almost intact
+  and the weakest boundary carries nearly all of the movement, so the
+  caveat attaches to the clean/noise cut rather than to the findings
+  that come out of this project.
+
+  And the cause is not resolution. It is that the LaTeX column is
+  rendered with anti-aliasing OFF, which is a setting rather than a
+  fact about ink. Turning it on takes the rendered column's hole
+  instability from 75.0% to 9.4% on the same cells.
+
+--------------------------------------------------------------------
+1. WHICH CHANNEL MOVES
+
+Per compared cell, 300 dpi against 600, over 2,636 ink-carrying rows:
+
+    channel        rendered col     scan col      either
+    components        2.8%            0.3%         3.1%
+    HOLES            35.7%            0.8%        36.2%
+    stacked          14.9%           11.2%        21.9%
+    centred          11.9%            8.1%        16.6%
+    offset           13.7%           12.0%        20.7%
+    all ten                                       52.8%   (A=B says NO)
+
+Components is the scale-invariant channel and behaves like one: 2.8%.
+Holes is forty-seven times worse on the rendered side (940 cells
+against 20). The three geometric channels sit between, and they move on BOTH columns, because
+they are pixel-geometry predicates rather than topology.
+
+THE TWO COLUMNS ARE NOT THE SAME KIND OF MEASUREMENT, and reading the
+36.2% without that is the whole trap here. A 0.8% against a 35.7% is
+the shape this project has been caught by before -- a class that
+cannot fire -- so it was checked rather than quoted:
+
+    grey levels inside the cell, at 300 dpi
+      rendered column (LaTeX)      2
+      scan column (photograph)   256
+
+The rendered column is a HARD BILEVEL raster. Ghostscript's pgmraw
+device with no alpha bits makes an in/out decision per pixel at the
+sampling grid, so doubling the grid re-decides every near-tangent
+contact and strokes touch or part. The scan column is a real greyscale
+image thresholded at 200: the threshold crossing lies on a contour in
+a smooth field, and sampling that field more finely does not move the
+contour. That is why one column moves and the other does not, and it
+is a statement about rasterisation, not about scans being better.
+
+--------------------------------------------------------------------
+2. HOW FAR THE HOLE COUNT MOVES
+
+5,272 cell measurements (two columns x 2,636 rows):
+
+    unchanged                4,312    81.8%
+    changed                    960    18.2%
+      by 1                     379     7.2%
+      by 2                     224     4.2%
+      by 3                     134     2.5%
+      by 4                     101     1.9%
+      by more                  122     2.3%
+
+    relative change, of cells having holes at 300 dpi:
+      p50 0.000    p95 0.429
+
+So the median cell does not move at all and the 95th percentile moves
+by 43% of its hole count. This is not a rounding difference at the
+margin: a third of the changes are by 3 or more.
+
+--------------------------------------------------------------------
+3. DOES THE CLASS CHANGE -- THE NUMBER THE TASK ASKED FOR
+
+    SAME class at 600 dpi     2,198    83.4%
+    CHANGED class               438    16.6%
+
+    per document: p50 16.7%, min 0.0%, max 40.0% over 37 documents,
+    so no single document is carrying the rate.
+
+BY CLASS, which is where the answer stops being one number:
+
+    class at 300     n     keeps its class    arrivals
+    absent          228      228   100.0%           0
+    stable           35       35   100.0%           0
+    COMPONENT       176      166    94.3%           2
+    noise         1,406    1,167    83.0%         186
+    clean           768      637    82.9%         177
+    weak            251      193    76.9%          73
+
+    rows whose COMPONENT verdict flips either way:  12 of 2,636
+
+TWO OF THOSE 100% FIGURES ARE TAUTOLOGIES AND MUST NOT BE READ AS
+EVIDENCE. `absent` is all-zero on both sides, and `stable` is DEFINED
+as "the five-tuple did not change between 300 and 600" -- so a stable
+row uses identical inputs at both resolutions and cannot be
+reclassified. It is the vocabulary's own scale test, and asking
+whether it survives a scale change is asking whether it equals itself.
+`weak` is the complement (scale_stable false), and its 76.9% is real.
+
+THE TRANSITIONS ARE ALMOST ALL ONE BOUNDARY:
+
+    noise -> clean    173      clean -> noise    128
+    noise -> weak      64      weak  -> noise     55
+                                              --------
+    those four                                    420  of 438
+
+96% of the movement is across the distance floor, between rows scoring
+0, rows scoring 1 to 7, and rows scoring above 7. That is the boundary
+between "no difference" and "a difference too small to be a finding" --
+the two verdicts that are least load-bearing. The component channel,
+which the vocabulary calls the strongest class and the one a consumer
+should act on, flips on 12 rows in 2,636.
+
+--------------------------------------------------------------------
+4. THE CAUSE, AND IT IS FIXABLE
+
+Same document, same pages, same cells, same threshold, rendered twice:
+
+    render         column   cells   holes move 300->600   grey levels
+    aliased        left       32       24     75.0%            2
+    aliased        right      33        0      0.0%          256
+    ANTIALIASED    left       32        3      9.4%           20
+    antialiased    right      33        0      0.0%          256
+
+An eightfold reduction from one pair of ghostscript flags
+(-dTextAlphaBits=4 -dGraphicsAlphaBits=4). The relationship is
+monotone in the grey levels the device wrote: 2 levels gives 75%, 20
+gives 9.4%, 256 gives 0%. Anti-aliasing puts a value between 0 and 255
+on exactly the pixels whose in/out decision the grid would otherwise
+decide, and thresholding that at 200 is then a contour crossing rather
+than a coin flip.
+
+THIS IS NOT A FREE CHANGE AND IS NOT MADE HERE. An anti-aliased render
+thresholded at 200 has different absolute five-tuples, so it moves
+every recorded distance in the corpus, not only the unstable ones.
+Whether it moves them toward the scan column -- which is what would
+make the comparison better rather than merely more repeatable -- is a
+separate measurement that has not been taken. Recorded as the next
+thing to measure, not acted on.
+
+--------------------------------------------------------------------
+5. WHAT THIS DOES TO THE THINGS HOLES CARRY
+
+495 ended by saying hole count carries 218, 91 and every ink
+comparison, and that 12% instability is therefore corpus-wide. At
+working dpi it is 36.2% per row and 18.2% per cell, so the caveat is
+larger than 495 estimated, not smaller. But its shape is different:
+
+  218 (slashed zero against O) SURVIVES, as 495 already said, and for
+  the same reason: a ring and a slashed ring differ by a closure that
+  is nowhere near a sampling threshold.
+
+  91 (table selection by hole count) is UNAFFECTED in kind, because it
+  was changed to select by bounding box. Had it stayed on hole count,
+  a 36% per-row movement would have been a serious problem for it --
+  which is a second argument for that change beyond the one that
+  motivated it.
+
+  The general form "hole count is stable because it is topological"
+  remains WRONG, and now measurably so on real pages rather than on
+  rendered glyphs. The topology of the outline is stable; the topology
+  of a bilevel sampling of that outline is not.
+
+--------------------------------------------------------------------
+6. POPULATION, SPLIT RULE, AND WHAT THE SAMPLE IS NOT
+
+POPULATION: the 544 library directories holding both a report.pdf and
+a report.compare.tsv -- exactly the documents the corpus figures are
+computed over, out of 2,813 directories.
+
+SPLIT RULE: `random.Random(496).shuffle` of that list, the first 40
+taken, every display page of each. Both the seed and the count are
+harness arguments. 37 of the 40 yielded rows; 3 had no scan column in
+their report.tex. 295 pages, 0 refused, 2,864 rows.
+
+ROW FILTERS, all inherited from the compare harness rather than
+invented here: row 0 is the header, a row under 40 px at 300 dpi is a
+sliver, a page whose lattice covers under half its table region is
+refused, a lattice with under two columns is refused.
+
+THE INSTRUMENT WAS CHECKED AGAINST THE RECORDED CORPUS BEFORE IT WAS
+BELIEVED. On 1709.07941 the re-measured 300 dpi five-tuples are
+IDENTICAL to the recorded ones on all 33 shared rows, and the 4 extra
+rows are exactly the all-zero page-break footers `reportcompare`
+drops, one per page.
+
+REPRESENTATIVENESS, and it is imperfect:
+
+    re-measured here, ink-carrying rows        52.8% A=B NO
+    re-measured here, all rows                 48.6%
+    recorded, the same 37 documents            56.8%
+    recorded, all 433 documents                58.6%
+
+The sample reads below the corpus. The reason is not sampling:
+32 OF THE 37 SAMPLED DOCUMENTS HAVE A report.compare.tsv OLDER THAN
+THEIR report.pdf. The recorded 56.8% describes a previous build of
+those reports and this measurement describes the current one, so the
+two are not comparable and the corpus-wide 58.6% is itself largely
+stale. Stated rather than reconciled: reconciling two populations by
+argument is what 325 was told not to do.
+
+WHAT THIS SAMPLE CANNOT SEE. It is 37 arXiv-shaped LaTeX documents.
+The Infineon handbook is not in it, and a Word document's rendered
+column is not built the same way. Section 4's mechanism predicts the
+same behaviour for any bilevel render, but that is a prediction.
+
+--------------------------------------------------------------------
+7. RE-RUN
+
+    python3 tools/dpiclass.py --docs 40 --seed 496 -o rows.tsv
+    python3 tools/dpisummary.py rows.tsv
+    python3 tools/dpialias.py 1709.07941
+
+`--docs` and `--seed` are the split rule. `dpiclass` renders each
+display page at 300 and 600 with pgmraw, builds the compare harness's
+own lattice at each, and emits both columns' five-tuples at both
+resolutions; the rasters are deleted per page, so the run costs
+minutes and no disk. `dpisummary` recomputes `findings.flag_of` from
+each resolution and reports the transitions. `dpialias` is section 4.
