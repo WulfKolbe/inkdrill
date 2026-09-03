@@ -11,7 +11,7 @@ THE DISAGREEMENT IS DPI, AND IT IS NOT THRESHOLD.
   On the docstring's own corpus, at threshold 200:
 
       dpi     n    rows where transport GROWS cycles
-      600    10          0.0%
+      600    11          0.0%
       300    10         30.0%
       200    10         30.0%
       150     9         44.4%
@@ -29,7 +29,7 @@ Same pages, same crops, threshold swept at each of two resolutions:
 
       threshold      GROW at 150 dpi      GROW at 600 dpi
          230            66.7%  (n=9)         27.3%  (n=11)
-         200            44.4%  (n=9)          0.0%  (n=10)
+         200            44.4%  (n=9)          0.0%  (n=11)
          160            36.4%  (n=11)           --
          128            41.7%  (n=12)          0.0%  (n=10)
 
@@ -47,17 +47,17 @@ So the answer to the task's conditional is dpi.
 The rule is right for one path and BACKWARDS for the other, and which
 path is meant is the whole distinction warp.py exists to draw.
 
-    median drift over 56 rows      components      cycles
-      transport                       0.210         0.169
-      resample                        0.177         0.240
+    median drift over 57 rows      components      cycles
+      transport                       0.209         0.170
+      resample                        0.181         0.242
 
     transport's cycle drift exceeds its component drift
-    on 22 of 56 rows (39%)
+    on 23 of 57 rows (40%)
 
-UNDER TRANSPORT THE CYCLES CHANNEL IS THE LESS DAMAGED ONE -- 0.169
-against 0.210 -- and it is the more damaged one only on a minority of
-rows. UNDER RESAMPLE the ordering is the one the rule assumes: 0.240
-against 0.177.
+UNDER TRANSPORT THE CYCLES CHANNEL IS THE LESS DAMAGED ONE -- 0.170
+against 0.209 -- and it is the more damaged one only on a minority of
+rows. UNDER RESAMPLE the ordering is the one the rule assumes: 0.242
+against 0.181.
 
 So "never de-warp before holes" is a statement about a RESAMPLING
 de-warp. Applied to a transport de-warp it forbids the channel that
@@ -94,8 +94,8 @@ A SECOND EXCLUSION IS REPORTED RATHER THAN SILENT. At 100 dpi a 1.5
 inch crop is 150 px, and the first grid produced rows of 12 components
 where one merged blob moves the cycle count by more than the effect
 being measured. Crops under 20 source components are excluded and
-counted: 10 of 66 in the dpi grid, and the surviving n is printed per
-bucket above (8 to 10, never 12).
+counted: 15 of 72 in the dpi grid, and the surviving n is printed per
+bucket above (8 to 11, never 12).
 
 --------------------------------------------------------------------
 4. WHAT 581 SHOULD HAVE SAID
