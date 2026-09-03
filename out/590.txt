@@ -1,0 +1,131 @@
+590 - what a row manifest would replace, written BEFORE stage 2
+====================================================================
+
+Five inferences stand between `report.pdf` and a measured row. Three
+are named in `inkmeasure`'s own docstring; two live on this side, in
+`reportcompare` and the `compare` subcommand it drives. This says
+which the manifest removes and which survive it, so stage 2 is
+designed against the list rather than measured against it afterwards.
+
+SUMMARY
+
+  #  inference                        manifest?   why
+  1  display-equations-only           REMOVES     the row says its kind
+  2  legend rows kept                 REMOVES     the row says it exists
+  3  table selected by ordinal        REMOVES     the row says its page
+  4  the row lattice                  SURVIVES    a rect is not a boundary
+  5  per-document column count        REMOVES     no table means no columns
+
+  Four of five go. The one that stays is the one the residual is
+  actually computed from, which is why "the legend becomes a colour
+  choice" does not follow from four removals -- see the last section.
+
+--------------------------------------------------------------------
+1. DISPLAY EQUATIONS ONLY                                  REMOVED
+
+  Today: `inkconvert.identifiers` matches `\ident{...EQ<digits>}` and
+  nothing else, so formulas, tables and image regions must not be
+  measured, and the harness has to know which table on the page is the
+  equations one before it can measure anything.
+
+  With a manifest: each row carries `kind`, so the selection is a
+  filter on a field. It also stops being a restriction -- the same
+  measurement becomes available for TAB and FO rows, which is what
+  498 needed and could not have (FO rows have no crop of their own).
+
+--------------------------------------------------------------------
+2. THE LEGEND ROWS STAY                                    REMOVED
+
+  Today: `inkconvert.read_tsv` separates one all-zero row per page as
+  the legend footer and counts display pages from them. 311c dropped
+  them and left the consumer with no footers to find and a row count
+  short by one per page. 238 then had to drop all-zero rows BEFORE the
+  zip while keeping that one, and the vocabulary grew `absent` to stop
+  a footer scoring as `clean`.
+
+  With a manifest: the row list IS the row list. A page count comes
+  from `page`, not from counting sentinels, and a row that is not in
+  the manifest is not a row. The `absent` flag stays useful -- a cell
+  with no ink on either side is still a real finding -- but it stops
+  being load-bearing for pagination.
+
+--------------------------------------------------------------------
+3. TABLE SELECTED BY ORDINAL                               REMOVED
+
+  Today: a column count cannot pick a table when two share one (320),
+  and contiguity cannot separate two ADJACENT tables of one width --
+  0049's equations and formulas are both 5 columns, so inkdrill sees
+  one 28-row run. `report.tables.json` says 1 then 27, and the split is
+  taken on a page boundary because the builder puts a `\clearpage`
+  between sections. That is three artefacts agreeing about a boundary
+  none of them states.
+
+  With a manifest: `page` plus `rect` places every row directly. No
+  table has to be identified at all, so a document whose equations and
+  formulas tables are the same width stops being a special case.
+
+--------------------------------------------------------------------
+4. THE ROW LATTICE                                        SURVIVES
+
+  Today: `compare` runs `_table_cells` on the rendered page, clusters
+  the ruling into a lattice, drops slivers under 40 px at 300 dpi, and
+  refuses a page whose rows cover under half the table region. Each of
+  those is a decision with a measured constant behind it, and each has
+  been wrong once: 91 was a selection error (most holes, not largest
+  box), the sliver floor lost a 1,597 px row on DTZ p022, and the
+  coverage floor caught 0902.0431 p13 covering 1.5%.
+
+  THE MANIFEST DOES NOT REPLACE THIS, and it is the important entry.
+  A rect says where a row's CONTENT sits in PDF user space. It does not
+  say where the cell boundary is, and the five-tuple is computed from
+  the CELL -- the ruled box, including the whitespace the renderer put
+  round the content. Two different rectangles:
+
+      manifest rect     the ink's own extent, from the builder
+      lattice cell      the ruled box, from the raster
+
+  Measuring the manifest rect instead would change every number in the
+  corpus, because a tighter crop has different components, different
+  centring and different offsets. So the lattice stays, and the
+  manifest's value here is as a CHECK on it: a lattice row whose box
+  does not contain its manifest rect is a detection error, reported
+  rather than silently measured. That is a new guard the manifest
+  makes possible, not an inference it removes.
+
+--------------------------------------------------------------------
+5. THE PER-DOCUMENT COLUMN COUNT                           REMOVED
+
+  Today: `target_columns` reads the count from the document's own
+  report.tex, because a constant was wrong twice in one day -- 5 before
+  pdfdrill's 099 added a Confidence column, 6 after, and the corpus
+  holds both eras. 496 measured 843 documents at 6 and 492 with no scan
+  column at all. `probe` then renders every page at 150 dpi to find the
+  pages whose lattice has that many columns, which is most of the wall
+  clock of a run and needed its own cache.
+
+  THE SIX-COLUMN ASSUMPTION GOES WITH IT. It is not a separate
+  inference; it is what the column count is FOR -- picking the display
+  pages. If a row states its page, there is nothing to probe: the page
+  list is `{row.page for row in manifest}`, the probe disappears, and
+  with it the cache, the era problem, and 498's finding that a
+  `Rendered`-without-`Scan image` header must be skipped over.
+
+--------------------------------------------------------------------
+WHAT THIS MEANS FOR 583's CONCLUSION
+
+583 proposes that if the residuals agree both ways, the legend and the
+two-phase build become a colour choice. Four of the five inferences do
+go, and #2 in particular means the legend stops carrying pagination.
+
+But #4 says the residual itself is still computed from the lattice
+cell, not from the manifest rect. So "the residuals agree" would be
+testing that the manifest finds the SAME ROWS, not that it supplies
+the same GEOMETRY -- and those are different claims. The stronger one
+is available and worth asking for in stage 2: if the manifest carried
+the CELL rect as well as the content rect, #4 would move from SURVIVES
+to REMOVED and the lattice could be dropped entirely.
+
+That is the one design note this list produces, and it is cheap to act
+on before stage 2 rather than after: the builder knows the cell box, it
+is a longtable cell it just typeset, and recovering it from the raster
+afterwards is the thing this whole inventory is trying to stop doing.
