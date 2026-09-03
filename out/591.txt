@@ -1,0 +1,109 @@
+591 - the ring channel against the speckle floor, with a dpi on it
+====================================================================
+
+THE FINDING IS SAFE, AND NOW HAS A NUMBER.
+
+    crop        size      comp   holes   holes/component
+    EQ0124    531 x 104     38       9        0.237
+    EQ0133    873 x  53     44       7        0.159
+
+    speckle regime, from 589                              ~3.4
+
+Both sit an order of magnitude below the floor -- 14x and 21x clear.
+Neither is near 3. The comparison does not need re-taking, and the
+letter can go out.
+
+--------------------------------------------------------------------
+1. AND THE WHOLE SWEEP POPULATION IS BELOW IT, NOT JUST THESE TWO
+
+Two crops being clean would still leave the question open for the
+other 1,101 documents, so the ratio was taken across the population
+the sweep ran on: 400 crops drawn with a stated seed from 93,028 EQ
+crops in 856 documents, measured the same way `ringmeasure.py` does
+(magick to PNG, threshold 200, `ink_only`) because a second decode
+path would answer a different question.
+
+    holes per component     p50 0.225   p90 0.488   p99 0.890
+                            max 1.636
+
+    at or above 1.0 h/c       2 of 400    0.50%
+    at or above 2.0 h/c       0 of 400    0.00%
+    at or above 3.0 h/c       0 of 400    0.00%
+
+NOT ONE CROP IN 400 REACHES EVEN 2.0, and the maximum observed is
+less than half the speckle level. EQ0124 at 0.237 and EQ0133 at 0.159
+sit at and below the population median -- they are typical crops, not
+lucky ones, which is the part that makes this strong rather than
+merely reassuring.
+
+--------------------------------------------------------------------
+2. THE SWEEP'S DPI: 250, NOT 300 AND NOT 600
+
+NEITHER HARNESS RECORDED ONE. `ringscan.py` and `ringmeasure.py`
+contain no dpi, no density and no resolution, and out/222.txt never
+states one. That is the gap this task names, and it was real: the
+number had to be derived rather than read.
+
+The crops carry no usable density of their own --
+
+    EQ0124   XResolution 1, ResolutionUnit None
+    EQ0133   XResolution 1, ResolutionUnit None
+
+-- so it comes from the page geometry instead: MathPix's page raster
+in pixels against the PDF's MediaBox in points.
+
+    document                    page px      page pts    dpi
+    Voloshin hypergraph       1750 x 2624    504 x 756   250.0
+    0707.4470                 2125 x 2750    612 x 792   250.0
+    1205.3463v2               2066 x 2924    595 x 842   250.0
+    2005.05886                2125 x 2750    612 x 792   250.0
+
+Exactly 250.0 on four of four comparable documents. (A fifth,
+2106.07890, reads 128.5 because pdfinfo reports its FIRST page at
+1191 x 842 pt while the region is on a differently sized page -- a
+per-page MediaBox, not a different render.)
+
+So the sweep ran at 250 dpi. Above the 150 dpi where 589 found the
+speckle regime, below the 300 the channel was assumed to be at, and
+nowhere near 600.
+
+--------------------------------------------------------------------
+3. WHAT "EXACTLY ONE IN 1,101" IS NOW WORTH
+
+The task's reasoning is right and the measurement supports it. A sweep
+run below the speckle floor would find contradictions everywhere or
+nowhere, because at 3.4 holes per component the hole count is noise
+and a rule keyed on it fires arbitrarily. The observed p99 of 0.890
+says the channel was nowhere near that: a crop's hole count at 250 dpi
+is a property of the glyphs, not of the scan.
+
+That upgrades "exactly one" from weak evidence to strong. It was clean
+because the channel was clean, not because the sweep was blind.
+
+ONE THING IT DOES NOT UPGRADE. 222 already corrected 218 on the shape
+question -- a blackboard-bold \mathbb{O} is not a one-hole ring, so
+hole count alone does not separate it from \emptyset. That correction
+stands and is independent of resolution; nothing here revives 218's
+general statement, only its specific pair.
+
+--------------------------------------------------------------------
+4. WHAT THIS CHANGES ABOUT QUOTING THE CHANNEL
+
+Every hole-count figure taken from a MathPix crop is a figure at
+250 dpi, and 589 shows the channel degrades below that. Two
+consequences worth carrying:
+
+  * A CDN crop's dpi is not a property of the file -- it carries none
+    -- but of MathPix's render, and it is derivable from the page
+    geometry as above. Quote it.
+  * A comparison against ink rendered LOCALLY is a comparison across
+    resolutions unless the local render is matched to 250. 498's route
+    renders at 400 by default; that is a different sampling of the same
+    glyph and its hole counts are not interchangeable with a crop's.
+
+RE-RUN
+
+    python3 tools/ringfloor.py --n 400 --seed 591
+
+`--n`, `--seed` and `--threshold` are the split rule. The population
+line prints the crop and document counts on every run.
