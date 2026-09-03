@@ -152,7 +152,7 @@ def cmd_gap(args) -> int:
         r_t = topology_of(rs)
         f = lambda p: f"({p[0]}, {p[1]})"
         print(f"{name:<14} {ink_pct(m):>6.2f} | {f(s_t):>14} {f(t_t):>15} "
-              f"{f(dt):>15} {f(ds):>15} {f(r_t):>14}")
+              f"{f(dt):>15} {f(ds):>15} {f(r_t):>14}", flush=True)
     print("\n(components, cycles). The question is whether dilate(tr) "
           "matches dilate(src),\nNOT whether it matches source: dilation "
           "closes real holes too.")
@@ -180,7 +180,8 @@ def cmd_sweep(args) -> int:
                   f"{str(cmp_.resampled):>15} "
                   f"{td[0]:>7.3f},{td[1]:.3f} {rd[0]:>7.3f},{rd[1]:.3f}  "
                   f"{str(nc):>5} {str(ny):>5} "
-                  f"{'transport' if v else ('resample' if v is False else 'SPLIT')}")
+                  f"{'transport' if v else ('resample' if v is False else 'SPLIT')}",
+                  flush=True)
         print()
     return 0
 
@@ -343,9 +344,136 @@ def cmd_group(args) -> int:
     return 0
 
 
+def _box_down(grey: bytes, w: int, h: int, k: int):
+    """Box-average the GREY by k, then the caller thresholds.
+
+    Averaging before the threshold is what a scanner at the lower
+    resolution actually does, and it is the only fair way to ask the
+    dpi question: decimating the MASK instead would delete thin strokes
+    by sampling rather than by tone, which is the resample failure mode
+    and would put it into the source.
+    """
+    w2, h2 = w // k, h // k
+    out = bytearray(w2 * h2)
+    kk = k * k
+    for y in range(h2):
+        base = y * k
+        row = y * w2
+        for x in range(w2):
+            x0 = x * k
+            s = 0
+            for dy in range(k):
+                o = (base + dy) * w + x0
+                s += sum(grey[o:o + k])
+            out[row + x] = s // kk
+    return bytes(out), w2, h2
+
+
+def _png_dpi(f: pathlib.Path):
+    """The pHYs dpi, from the header alone -- decoding a 34 Mpx PNG in
+    pure Python to read one chunk costs ~24 s a page."""
+    import struct
+    raw = f.open("rb").read(4096)
+    i = 8
+    while i + 8 <= len(raw):
+        ln = struct.unpack(">I", raw[i:i + 4])[0]
+        tag = raw[i + 4:i + 8]
+        if tag == b"pHYs":
+            x, _y, u = struct.unpack(">IIB", raw[i + 8:i + 17])
+            return round(x * 0.0254) if u == 1 else None
+        if tag in (b"IDAT", b"IEND"):
+            return None
+        i += 12 + ln
+    return None
+
+
+def cmd_docreal(args) -> int:
+    """589 -- the docstring's own corpus, at a stated dpi and threshold.
+
+    warp.py's table was measured on DocReal scans; 581 measured
+    RENDERED arXiv pages. That is a population difference, not a
+    disagreement about the code, and it is the first thing to remove
+    before asking about dpi or threshold.
+    """
+    from inkdrill.pngio import auto_mask, read_png
+    D = args.docreal
+    ids = [int(x) for x in args.ids.split(",")]
+    # NATIVE RESOLUTION IS NOT UNIFORM IN THIS CORPUS: 38 of 50 DocReal
+    # scans are 600 dpi and 12 are 72. A downsample factor is an
+    # integer, so a mixed population puts one page's "100 dpi" request
+    # at 72 and another's at 100, and the buckets stop being buckets.
+    # The first grid run here did exactly that. Pages whose native
+    # resolution is not `--native` are refused by name.
+    kept = []
+    for i in ids:
+        f = D / f"{i}.png"
+        if not f.is_file():
+            print(f"  skip {i}: no file", flush=True)
+            continue
+        n = _png_dpi(f)
+        if n is None or abs(n - args.native) > 1:
+            print(f"  skip {i}: native {n} dpi, not {args.native}",
+                  flush=True)
+            continue
+        kept.append(i)
+    print(f"  {len(kept)} of {len(ids)} pages at {args.native} dpi native\n",
+          flush=True)
+    ids = kept
+    excluded = 0
+    inches = args.inches
+    print(f"589 -- DocReal scans, threshold {args.threshold}, "
+          f"{inches}in square crop at the densest window, "
+          f"{args.angle} deg\n")
+    print(f"{'page':>5} {'dpi':>5} {'crop':>10} {'ink%':>6} {'comp':>5} | "
+          f"{'source':>13} {'transport':>13} {'dilate(tr)':>13} "
+          f"{'dilate(src)':>13} {'resample':>13}   cycles")
+    for i in ids:
+        f = D / f"{i}.png"
+        if not f.is_file():
+            print(f"{i:>5}  missing {f}")
+            continue
+        img = read_png(f)
+        native = img.dpi[0] if img.dpi else float(args.native)
+        for dpi in [float(x) for x in args.dpis.split(",")]:
+            k = max(1, int(round(native / dpi)))
+            g, w, h = (img.gray, img.width, img.height) if k == 1 else \
+                _box_down(img.gray, img.width, img.height, k)
+            m0, _ = auto_mask(g, w, h, args.threshold)
+            side = max(16, int(inches * native / k))
+            x, y = densest(m0, side, side)
+            m = crop(m0, x, y, side, side)
+            c = m.width / 2.0
+            M = rot(args.angle, c, c)
+            tr = transport(m, M)
+            s_t, t_t = topology_of(m), topology_of(tr)
+            dt, ds = topology_of(dilate(tr)), topology_of(dilate(m))
+            r_t = topology_of(resample(m, M))
+            fmt = lambda p: f"({p[0]}, {p[1]})"
+            grew = "GROW" if t_t[1] > s_t[1] else "shrink"
+            # A CROP WITH TOO FEW COMPONENTS CANNOT CARRY THE CLAIM.
+            # At 100 dpi a 1.5in crop is 150 px and the earlier grid
+            # produced rows of 12 components, where one merged blob
+            # moves the cycle count by more than the effect. Excluded
+            # BY COUNT and the exclusions are printed, never silent.
+            if s_t[0] < args.min_comp:
+                excluded += 1
+                print(f"{i:>5} {native/k:>5.0f} {m.width}x{m.height:<5} "
+                      f"{ink_pct(m):>6.2f} {s_t[0]:>5} | "
+                      f"EXCLUDED: under {args.min_comp} components",
+                      flush=True)
+                continue
+            print(f"{i:>5} {native/k:>5.0f} {m.width}x{m.height:<5} "
+                  f"{ink_pct(m):>6.2f} {s_t[0]:>5} | {fmt(s_t):>13} "
+                  f"{fmt(t_t):>13} {fmt(dt):>13} {fmt(ds):>13} "
+                  f"{fmt(r_t):>13}   {grew}", flush=True)
+    print(f"\n{excluded} rows excluded for under {args.min_comp} "
+          f"components", flush=True)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=("gap", "sweep", "group"))
+    ap.add_argument("cmd", choices=("gap", "sweep", "group", "docreal"))
     ap.add_argument("--library", type=pathlib.Path,
                     default=pathlib.Path.home() / "pdfdrill-library")
     ap.add_argument("--work", type=pathlib.Path,
@@ -357,10 +485,21 @@ def main() -> int:
     ap.add_argument("--gap", type=float, default=6.0,
                     help="box gap under which two blobs join a group")
     ap.add_argument("--min-ink", type=int, default=12)
+    ap.add_argument("--docreal", type=pathlib.Path,
+                    default=pathlib.Path.home() / "Downloads/DocReal/scanned")
+    ap.add_argument("--ids", default="1,3,6")
+    ap.add_argument("--dpis", default="600,300,150")
+    ap.add_argument("--inches", type=float, default=1.5)
+    ap.add_argument("--threshold", type=int, default=200)
+    ap.add_argument("--native", type=int, default=600,
+                    help="refuse pages whose native pHYs dpi is not this")
+    ap.add_argument("--min-comp", type=int, default=20,
+                    help="a crop with fewer source components is excluded "
+                         "and the exclusion is printed")
     args = ap.parse_args()
     args.work.mkdir(parents=True, exist_ok=True)
-    return {"gap": cmd_gap, "sweep": cmd_sweep,
-            "group": cmd_group}[args.cmd](args)
+    return {"gap": cmd_gap, "sweep": cmd_sweep, "group": cmd_group,
+            "docreal": cmd_docreal}[args.cmd](args)
 
 
 if __name__ == "__main__":

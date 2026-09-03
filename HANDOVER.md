@@ -165,6 +165,20 @@ measurement; a fresh pass is ~2 hours.
   dot into its stem. Count claims survive this; identity claims do
   not, so say which one you are making.
 
+- **A number in a comment is not a measurement, and it outlives the
+  code it described.** `warp.py`'s docstring carries a table of the
+  hatching defect — (436, 180) → (408, 2238), an order of magnitude of
+  new holes — under a heading reading `FIXED: transport used to hatch
+  solid regions`. The heading is accurate and the table is the
+  *before*. It was read as current by two readers, and a task (581 A2)
+  was written to explain growth that has not existed since the fix:
+  transport now *shrinks* cycles on every page and angle measured.
+  A comment describing a defect should not print the defect's numbers
+  without printing the fixed ones beside them, and a measurement that
+  matters belongs in `out/` with a re-runnable subcommand, not only in
+  a docstring. Ask of any number in prose: which commit produced it,
+  and has the code it measured changed since?
+
 ## Chat reports open and close with a Berlin timestamp
 
     2026-08-27 10:56 (MESZ, +02:00)

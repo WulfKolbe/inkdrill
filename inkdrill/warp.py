@@ -41,6 +41,13 @@ crude phi is sufficient here, and the second is the claim.
 
 FIXED: `transport` used to hatch solid regions
 -----------------------------------------------
+**THE TABLE BELOW IS THE BEFORE, NOT THE CURRENT BEHAVIOUR.** It is
+kept because the cause is instructive, and it has now been read as a
+current measurement twice -- once in a task written to explain cycle
+growth that no longer happens. Current numbers are in `out/581.txt`
+and re-runnable with `tools/warpbench.py gap`; transport SHRINKS
+cycles on every page and angle measured there.
+
 Measured on real DocReal ink, 900x900 crops at the valley threshold,
 7 degree rotation:
 

@@ -1,0 +1,127 @@
+589 - reconciling 581 with the configuration that saw growth
+====================================================================
+
+THE DISAGREEMENT IS DPI, AND IT IS NOT THRESHOLD.
+
+  Cycles DO grow, and 581 did not see it because 581 measured the
+  wrong corpus. warp.py's table was taken on DocReal flatbed SCANS;
+  581 measured rendered arXiv PDFs. That is a population difference,
+  and it is the shape units.md S4 already records five times.
+
+  On the docstring's own corpus, at threshold 200:
+
+      dpi     n    rows where transport GROWS cycles
+      600    10          0.0%
+      300    10         30.0%
+      200    10         30.0%
+      150     9         44.4%
+      120     9         77.8%
+      100     8         62.5%
+
+  Zero at 600, and by 120 more than three rows in four. THE 150 dpi
+  FIGURE IS 44.4%, so the configuration in the task does see growth
+  and the report that said it does not was measured somewhere else.
+
+--------------------------------------------------------------------
+1. THRESHOLD IS NOT THE VARIABLE
+
+Same pages, same crops, threshold swept at each of two resolutions:
+
+      threshold      GROW at 150 dpi      GROW at 600 dpi
+         230            66.7%  (n=9)         27.3%  (n=11)
+         200            44.4%  (n=9)          0.0%  (n=10)
+         160            36.4%  (n=11)           --
+         128            41.7%  (n=12)          0.0%  (n=10)
+
+At 600 dpi every threshold sits between 0 and 27%. At 150 dpi every
+threshold sits between 36 and 67%. THE BANDS DO NOT OVERLAP. Threshold
+moves the rate within a band -- 230 is the worst at both resolutions,
+which makes sense as it keeps the most marginal ink -- but resolution
+sets which band you are in.
+
+So the answer to the task's conditional is dpi.
+
+--------------------------------------------------------------------
+2. WHAT THAT DOES TO "DE-WARP BEFORE COMPONENTS, NEVER BEFORE HOLES"
+
+The rule is right for one path and BACKWARDS for the other, and which
+path is meant is the whole distinction warp.py exists to draw.
+
+    median drift over 56 rows      components      cycles
+      transport                       0.210         0.169
+      resample                        0.177         0.240
+
+    transport's cycle drift exceeds its component drift
+    on 22 of 56 rows (39%)
+
+UNDER TRANSPORT THE CYCLES CHANNEL IS THE LESS DAMAGED ONE -- 0.169
+against 0.210 -- and it is the more damaged one only on a minority of
+rows. UNDER RESAMPLE the ordering is the one the rule assumes: 0.240
+against 0.177.
+
+So "never de-warp before holes" is a statement about a RESAMPLING
+de-warp. Applied to a transport de-warp it forbids the channel that
+survives better and permits the one that survives worse. The rule
+should name its path, and with a path named it inverts.
+
+That does not make transport safe below 600 dpi: section 0's growth
+rates are the transport path's own, and a 78% chance of gaining holes
+at 120 dpi is not a channel to build on whatever the comparison with
+resample says. The two findings are about different things -- one is
+"which path", the other is "at what resolution", and only the second
+is a gate.
+
+--------------------------------------------------------------------
+3. POPULATION, AND A CONTAMINATION CAUGHT ON THE WAY
+
+DocReal `scanned/`, pages 1-12, 1.5 inch square crops taken at each
+page's densest window, 7 degree rotation, box-averaged from the native
+raster to each target resolution -- averaging the GREY before the
+threshold, because decimating the MASK would delete thin strokes by
+sampling and put the resample failure mode into the source.
+
+THE FIRST GRID WAS WRONG AND IS NOT REPORTED HERE. DocReal's native
+resolution is not uniform: 38 of 50 scans are 600 dpi and 12 are 72.
+A downsample factor is an integer, so a mixed population put one
+page's "100 dpi" request at 72 and another's at 100, and a bucket
+labelled 100 contained two different resolutions. The tell was a row
+appearing at a dpi the run had never been asked for. The harness now
+reads the pHYs chunk from the PNG header -- without decoding 34
+megapixels to get one number -- and refuses any page whose native
+resolution is not the one named.
+
+A SECOND EXCLUSION IS REPORTED RATHER THAN SILENT. At 100 dpi a 1.5
+inch crop is 150 px, and the first grid produced rows of 12 components
+where one merged blob moves the cycle count by more than the effect
+being measured. Crops under 20 source components are excluded and
+counted: 10 of 66 in the dpi grid, and the surviving n is printed per
+bucket above (8 to 10, never 12).
+
+--------------------------------------------------------------------
+4. WHAT 581 SHOULD HAVE SAID
+
+581 A2 reported "there is no cycle growth" and that is true of
+rendered arXiv pages at 300 dpi and false of scans below 300. The
+instrument was right; the population was narrower than the claim. The
+correct statement is:
+
+    On RENDERED pages at 300 dpi, transport shrinks cycles.
+    On SCANNED pages it shrinks them at 600 dpi, and grows them on
+    30% of crops at 300 and 78% at 120.
+
+581's other two findings are unaffected: A1's crossover and A3's
+grouping were both measured on the rendered corpus and neither claims
+more than that.
+
+--------------------------------------------------------------------
+5. RE-RUN
+
+    python3 tools/warpbench.py docreal --ids 1,2,3,4,5,6,7,8,9,10,11,12 \
+        --dpis 600,300,200,150,120,100 --threshold 200 \
+        --native 600 --min-comp 20
+
+`--native` and `--min-comp` are the two filters and both print what
+they removed. `--threshold` and `--dpis` are the split rule. Every row
+prints its effective dpi, its crop size in pixels, its ink fraction
+and its source component count, so a bucket can be checked rather
+than trusted.

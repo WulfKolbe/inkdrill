@@ -12,6 +12,13 @@ density, 600x600 crops at 300 dpi taken at each page's densest window
 --------------------------------------------------------------------
 A2 - THE PREMISE IS REFUTED: THERE IS NO CYCLE GROWTH TO EXPLAIN
 
+  *** NARROWED BY 589. This section is true of RENDERED pages at 300
+  dpi and false of SCANS below it. warp.py's table was measured on
+  DocReal scans; this was measured on rendered arXiv pages, which is a
+  population difference and not a disagreement about the code. On
+  DocReal at threshold 200 transport grows cycles on 0% of crops at
+  600 dpi, 30% at 300 and 78% at 120. See out/589.txt. ***
+
 The task asks whether the growth is `_fill_quad`'s scanline rounding
 or geometry. It is neither, because transport does not grow cycles.
 It SHRINKS them, on every page and at every angle tried:
