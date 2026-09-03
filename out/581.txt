@@ -1,0 +1,159 @@
+581 - numbers beside warp.py's contract
+====================================================================
+
+POPULATION for all three: three real pages chosen for SEPARATED ink
+density, 600x600 crops at 300 dpi taken at each page's densest window
+(so a result is not a crop of the margin), threshold 200.
+
+    2002.06055 p6    11.34% ink in the crop
+    1205.3463v2 p3    8.60%
+    2005.05886 p5    13.90%
+
+--------------------------------------------------------------------
+A2 - THE PREMISE IS REFUTED: THERE IS NO CYCLE GROWTH TO EXPLAIN
+
+The task asks whether the growth is `_fill_quad`'s scanline rounding
+or geometry. It is neither, because transport does not grow cycles.
+It SHRINKS them, on every page and at every angle tried:
+
+  900x900, 7 deg    source      transport   dilate(tr)  dilate(src)
+  2002.06055     (527, 162)    (411, 127)   (288, 162)   (398, 197)
+  1205.3463v2    (596, 194)    (574, 142)   (394, 344)   (507, 417)
+  2005.05886     (862, 304)    (749, 234)   (446, 470)   (601, 590)
+
+  same at 3 deg and 15 deg, and at 600x600.
+
+The numbers the premise comes from are in warp.py's own docstring --
+(436, 180) -> (408, 2238), an order of magnitude of new holes. Those
+are the PRE-FIX measurement. The docstring says so, under a heading
+reading "FIXED: transport used to hatch solid regions", and then
+prints the table of the defect it fixed. The fix is the quadrilateral
+fill in `_fill_quad`, and it works: a run is transported as its pixel
+area, neighbouring runs still touch, and the hatching is gone.
+
+The dilation control matters and is reported above rather than
+skipped. Dilating closes real holes as well as any rounding gap, so
+dilate(transport) against RAW source would credit the fill for holes
+it merely filled. Against dilate(source) -- the paired comparison --
+transport has FEWER cycles at every page: 162 vs 197, 344 vs 417,
+470 vs 590. There is no gap population to find.
+
+WHAT SHOULD CHANGE: the docstring, not the code. A "FIXED" heading
+above a table of the broken behaviour reads as current, and it was
+read that way. The measurement above belongs beside it.
+
+--------------------------------------------------------------------
+A1 - THE CROSSOVER IS PER CHANNEL, AND ONE PAGE INDEED CANNOT FIND IT
+
+Which path is nearer the source, by channel, over 12 angles:
+
+  angle        2002.06055        1205.3463v2       2005.05886
+              comp    cyc       comp    cyc       comp    cyc
+   0.5        res     TR        TR      TR        TR      TR
+   1          TR      TR        TR      TR        TR      TR
+   3          res     TR        TR      TR        res     TR
+   7          TR      TR        TR      TR        res     TR
+  10          TR      TR        res     TR        res     TR
+  15          res     TR        res     TR        res     TR
+  20          res     res       res     TR        res     TR
+  30          res     TR        res     res       res     TR
+  45          TR      res       res     res       res     TR
+
+  CROSSOVER on cycles   15-20 deg      20-30 deg       none by 45
+
+ON THE CYCLES CHANNEL TRANSPORT IS NEARER ALMOST EVERYWHERE, and the
+angle at which resample overtakes it is 15-20 deg, 20-30 deg, and
+beyond the swept range -- three different answers from three pages,
+which is the task's own point and now measured rather than asserted.
+It does not order with ink density (11.34% -> ~17 deg, 8.60% -> ~25,
+13.90% -> >45), so density is not the variable; something else about
+the ink is, and this does not say what.
+
+ON THE COMPONENTS CHANNEL RESAMPLE IS USUALLY NEARER. So the common
+verdict is SPLIT, which is G7 being right: a single boolean would have
+had to pick a channel, and `max()` would have picked whichever was
+worse.
+
+THE THESIS IS VISIBLE ON ONE PAGE. 1205.3463v2 at 0.5 deg:
+
+    source     (272,  70)
+    transport  (268,  66)      drift 0.015, 0.057
+    resample   (320,  57)      drift 0.150, 0.186
+
+Resample GAINS 48 components against a source of 272 -- thin strokes
+broken into pieces, which is precisely the failure the unit was built
+to demonstrate and which the synthetic fixtures never produced. On the
+other two pages resample does not fragment and the two paths sit
+within a few percent of each other.
+
+A DEFECT FOUND WHILE SWEEPING: THERE IS NO TIE STATE. At 0 degrees
+both paths are exact -- drift (0.0, 0.0) each -- and
+`nearer_by_channel` compares with strict `<`, so both channels read
+False, `transport_is_nearer` returns False, and the harness reports
+that RESAMPLE is nearer at the identity transform. G5 says the
+identity is a fixed point of transport; the verdict says transport
+lost. Not a wrong number, a missing third value: `nearer_by_channel`
+has no way to say "equal". Reported, not changed -- fixing a contract
+property is not a report-only task.
+
+--------------------------------------------------------------------
+A3 - GROUPING IS THE MISSING PIECE, AND THE MARGIN IS TWO ORDERS
+
+Real page ink rotated by a KNOWN angle, so the truth is exact rather
+than estimated. Blobs grouped by union-find over box gaps <= 6 px
+(box distance, not centroid: two fragments of one broken stroke face
+each other along an edge and can be far apart centre to centre).
+
+  skew +3.0 deg applied      blobs -> groups   per BLOB      per GROUP
+                                               median  IQR   median  IQR
+  2002.06055                   279 -> 56        0.00 171.57   -2.42 3.09
+  1205.3463v2                  242 -> 69      -13.55  90.00   -2.86 3.47
+  2005.05886                   395 -> 85       -3.58 173.16   -3.01 3.24
+
+PER BLOB THE ANGLE IS NOISE: an interquartile range of 90 to 172
+degrees on a 180-degree scale is very nearly uniform. A single glyph
+has no orientation to measure -- min-area-rect returns the angle of
+whichever hull edge happens to minimise area, and for a letter that is
+arbitrary. PER GROUP the IQR is about 3 degrees and the median tracks
+the applied skew.
+
+Linear across applied angles, and 0 is a clean fixed point:
+
+    applied     recovered (three pages)
+     -3.0      +2.83  +2.21  +2.86
+      0.0       0.00   0.00   0.00      (IQR 0.72, 0.00, 0.00)
+     +3.0      -2.42  -2.86  -3.01
+     +6.0      -5.54  -5.96  -6.01
+
+Worst error 0.46 deg, best 0.01 deg.
+
+SIGN: recovered = -applied, and both are right. `rot()` is built in
+the package's row-vector order on image coordinates, where positive is
+counter-clockwise ON SCREEN; `min_area_rect` reports `atan2` in those
+same image coordinates, which is the opposite sense. Named here rather
+than silently flipped -- the core stores no angles precisely so that
+each producer has to say which convention it is in.
+
+AND THE GROUP ANGLE IS NOT AN AVERAGE OF ITS MEMBERS. Within-group
+member spread has a median of 88 to 160 degrees. Averaging blob angles
+would reproduce the noise; the group's union has to be re-fitted, and
+that is what the numbers above do.
+
+--------------------------------------------------------------------
+RE-RUN
+
+    python3 tools/warpbench.py gap    --size 900 --angle 7
+    python3 tools/warpbench.py sweep  --size 600
+    python3 tools/warpbench.py group  --size 600 --angle 3
+
+`--size`, `--angle`, `--angles`, `--gap` and `--min-ink` are the split
+rules and every one is an argument. The three pages are a constant in
+the file and are printed with their measured ink fraction on every
+run.
+
+NOT ESTABLISHED. What the crossover actually tracks, given it is not
+ink density. Whether the grouping survives a page with real rather
+than applied skew -- applied rotation gives exact truth and cannot
+show what a scanner's own distortion does. And the tie state in
+`nearer_by_channel`, which is a contract change and belongs to whoever
+owns G7.
