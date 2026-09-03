@@ -1,0 +1,172 @@
+595 - a table is several runs, and the join is by identifier
+====================================================================
+
+THE JOIN WORKS AND NEEDS NOTHING NEW. 6,717 of 6,717 rows on a
+300-page report, 34 of 34 on a 4-page one, both with zero missing --
+using `report.tables.json`, which already exists, and the identifiers
+in report.pdf's text layer. It does not wait on 580 stage 2.
+
+BUT THE GRANULARITY IN THE TASK IS WRONG, and both directions of the
+error are in the corpus. A run can hold SEVERAL TABLES as well as a
+table spanning several runs, so a run cannot be attributed to a table
+at all. The attribution is per IDENTIFIER.
+
+--------------------------------------------------------------------
+1. HOW THE RUN SET IS BUILT
+
+`pagedetect.scan_columns` renders every page at 150 dpi and reports
+its lattice column count. `group_tables` then takes MAXIMAL CONTIGUOUS
+runs of pages sharing a count. Two things end a run: a page whose
+count differs, and a page with no lattice at all, which belongs to no
+table and ends the run it follows (G2).
+
+So a run is a maximal page span of constant detected column count. It
+is not a table, and nothing in its construction refers to one.
+
+2. CAN RUNS BE ORDERED IN DOCUMENT ORDER?  YES, ALREADY.
+
+Each run carries `pages`, a contiguous ascending list, and
+`group_tables` assigns `ordinal` 1-based in page order (G3). Sorting
+by `pages[0]` is document order and is what the ordinal already is.
+Nothing is missing here.
+
+3. CAN A RUN BE ATTRIBUTED BY ANYTHING BUT ORDINAL?  YES -- BY THE
+   IDENTIFIERS, AND THEY ARE ALREADY ON BOTH SIDES.
+
+  `report.tables.json` carries, per table: `caption`, `columns`,
+  `rows`, `ordinal` and `identifiers` -- the full row list. 717
+  documents have one.
+
+  report.pdf's TEXT LAYER carries the row identifiers, so a page can
+  be asked which rows are on it.
+
+  Reading the text layer is not a G6 violation. G6 forbids inkdrill
+  reading text off a RASTER, which is what would make it agree with
+  the tool it cross-checks. `pdftotext` reads the PDF's own text
+  objects -- the same standing as `reportcompare.target_columns`
+  reading report.tex. No ink measurement touches it.
+
+--------------------------------------------------------------------
+4. WHY RUN-LEVEL ATTRIBUTION CANNOT WORK
+
+  0049, 4 pages, 3 tables, 2 runs
+
+    run  cols   pages   ids   tables whose rows appear in it
+      1     5     1-2    28   table 1 x1, table 2 x27
+      2     7     3-4     6   table 3 x6
+
+  ONE RUN, TWO TABLES. Tables 1 and 2 are both 5 columns and
+  contiguous, so they are one run. No attribution of run 1 to a single
+  table is correct, and the first version of this harness dutifully
+  reported it CONTESTED and matched 0 of 28 rows.
+
+  Geometric_topology, 300 pages, 4 tables, 5 runs
+
+    run  cols     pages   ids   tables
+      1     6      1-53   737   table 1 x737
+      2     5    54-260  5748   table 2 x5748
+      3     4       261    20   table 3 x20
+      4     6       262     5   table 4 x5
+      5     5   263-300   207   table 4 x207
+
+  ONE TABLE, TWO RUNS, AND THE COLUMN COUNTS DIFFER. Table 4 is 212
+  rows of image regions; the lattice reads 6 columns on its first page
+  and 5 thereafter, so it splits. Ordinal-with-column-width would take
+  run 4 -- the one whose 6 matches the manifest -- and return 5 of 212
+  rows. The other 207 are in a run whose width says it is a different
+  table.
+
+  COLUMN COUNT IS NOT A USABLE CROSS-CHECK. 0049's table 3 is 6
+  columns in the manifest and its run reads 7. Geometric_topology's
+  table 4 is 6 and spans runs of 6 and 5. In both cases the count
+  would reject the correct run.
+
+  AND ORDINAL HAS NOTHING TO FALL BACK ON: 608 of 717 documents (85%)
+  have two tables sharing a column count.
+
+--------------------------------------------------------------------
+5. THE JOIN, AND WHAT IT RETURNS
+
+  For each identifier the manifest names, find the page it is on;
+  that page's run is the run it was measured in. A table's rows are
+  its manifest identifier list -- SEQUENCE FROM THE MANIFEST, which is
+  the builder's own emission order and needs no inference -- and the
+  runs it occupies are whatever set those pages fall in.
+
+    document              tables  runs  expected  matched  missing
+    0049                       3     2        34       34        0
+    Geometric_topology         4     5     6,717    6,717        0
+
+    per table, Geometric_topology
+      ord  cols  expected  matched  runs        run cols
+        1     6       737      737  [1]         [6]
+        2     5     5,748    5,748  [2]         [5]
+        3     4        20       20  [3]         [4]
+        4     6       212      212  [4, 5]      [5, 6]
+
+  Every row of every table, including the one that spans two runs of
+  different widths.
+
+--------------------------------------------------------------------
+6. THREE EXTRACTION TRAPS, EACH OF WHICH REPORTED ROWS AS MISSING
+
+Every one produced a clean-looking wrong answer, and every one was
+caught only because the manifest states the expected count.
+
+  THE PATTERN WAS GUESSED. `<bibkey>_[A-Z]{2,4}[0-9a-f]+` misses
+  `0049_DIA_0001` -- image-region rows carry an underscore before the
+  digits -- and reported all 6 rows of that table as MISSING. The fix
+  is not a better guess: extraction is now permissive and the MANIFEST
+  decides, with leftover identifier-shaped tokens printed so a pattern
+  that is still too narrow shows as unmatched tokens rather than as
+  missing rows.
+
+  A LONG BIBKEY WRAPS THE IDENTIFIER. `0049_EQ0001` fits the
+  Identifier column; `Geometric_topology_EQ0145` does not, and breaks
+  after the underscore. Plain mode found 0 on such a page, `-layout`
+  found 0 -- it preserves the visual row, so the two halves are
+  separated by the entire rest of the line -- and `-raw` found 14,
+  because content-stream order puts the halves adjacent and a newline
+  join recovers them. This alone would have reported 6,485 of 6,717
+  rows missing on the first run, and did.
+
+  READING ORDER IS NOT ROW ORDER. Plain mode returned 0049's image
+  rows as 0001, 0003, 0004, 0005, 0002 -- the right SET in the wrong
+  SEQUENCE, which mispairs every row while the counts look perfect.
+  Order is therefore taken from the manifest and never from the page.
+
+--------------------------------------------------------------------
+7. THE VOLUME, WITH ITS POPULATION
+
+  717 documents with a table manifest      EQ 63,282   FO 229,991
+                                           FO/EQ 3.63x
+
+  333 with a report.compare.tsv (measured) EQ  8,549   FO  50,659
+                                           FO/EQ 5.93x
+
+The 5.6x is the MEASURED population, and 5.93 here is the nearest
+figure to it. I could not reproduce 37,624: on the measured population
+the rows inkmeasure has never seen are 50,659 formulas plus 2,818
+other, 53,477 in all. The population that gives 37,624 is not one I
+can identify, so the figure above is quoted with its own rule rather
+than reconciled to it -- 325's instruction, and the reason the counts
+are printed per population here.
+
+--------------------------------------------------------------------
+8. RE-RUN, AND WHAT IS NOT DONE
+
+    python3 tools/tablejoin.py Geometric_topology
+    python3 tools/tablejoin.py 0049
+
+The measurement itself is untouched, as the task says. This produces
+the row-to-run join and stops; which lattice row inside a run a given
+identifier corresponds to is the next question and is not answered
+here.
+
+ONE THING THE JOIN STILL CANNOT DO. It places a row on a PAGE, not on
+a lattice ROW. Within a run of 200 pages the rows are ordered by the
+manifest and the pages by the text layer, but the pairing of the k-th
+identifier on a page to the k-th lattice row on that page is still
+positional -- and 590 section 4 is the reason that matters, because
+the lattice cell and the row rect are different rectangles. A manifest
+carrying `page` and the CELL rect would close it.
