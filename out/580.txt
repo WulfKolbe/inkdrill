@@ -1,0 +1,150 @@
+580 stage 1 - the PDF as a channel: what survives, and where to write it
+====================================================================
+
+THE ANSWER, AND THE TASK'S CONDITIONAL IS FALSE
+
+  Ghostscript does NOT strip both. It strips /PieceInfo and leaves the
+  attachment byte-identical. So the carrier choice decides the answer,
+  not the pass:
+
+    EMBEDDED FILE   survives every pass tested, all eight
+    /PieceInfo      survives everything EXCEPT ghostscript pdfwrite,
+                    which removes it silently and completely
+
+  AND THE CHAIN RUNS NO SUCH PASS. pdfdrill's source contains zero
+  `pdfwrite` and zero `qpdf`; every ghostscript call in both repos uses
+  a RASTER device (pgmraw or png16m), which produces an image and never
+  rewrites the PDF. The only thing that writes report.pdf is xelatex,
+  and nothing touches it afterwards -- `_publish` is `shutil.copy2`
+  followed by `os.replace`.
+
+  So the write point is xelatex itself. That is the good news and it
+  comes with a trap, in section 4.
+
+--------------------------------------------------------------------
+1. THE MEASUREMENT
+
+One PDF carrying both carriers at once, with a distinct marker in each
+so a survivor is identified rather than counted: an /EmbeddedFile in
+the catalog's /Names /EmbeddedFiles tree, a /PieceInfo on the catalog,
+and a /PieceInfo on the page.
+
+  pass                            attach  cat/PI  page/PI    bytes
+  (no pass)                         KEPT    KEPT     KEPT     1553
+  gs pdfwrite                       KEPT    GONE     GONE     3025
+  gs pdfwrite -dPDFA=2              KEPT    GONE     GONE     4645
+  qpdf (copy)                       KEPT    KEPT     KEPT     1455
+  qpdf --linearize                  KEPT    KEPT     KEPT     1971
+  qpdf --object-streams=generate    KEPT    KEPT     KEPT     1184
+  mutool clean                      KEPT    KEPT     KEPT     1500
+  mutool clean -gggg                KEPT    KEPT     KEPT     1500
+
+  gs 10.07.1, qpdf 12.3.2, mutool 1.28.0.
+
+"KEPT" for the attachment means `pdfdetach -saveall` returned a file
+whose bytes EQUAL the payload, not that a name survived. Both
+ghostscript variants return the 376 bytes unaltered. "KEPT" for
+/PieceInfo means the marker string is in `qpdf --json`'s object model;
+ghostscript emits zero /PieceInfo dictionaries where the input had two.
+
+--------------------------------------------------------------------
+2. THE INSTRUMENT WAS WRONG FIRST, AND IT SAID THE OPPOSITE
+
+The first version scanned the file's bytes for the markers. It
+reported that ghostscript strips the attachment -- in the same row
+where `pdfdetach` said the file still had one. A marker inside a
+recompressed stream is present and invisible to a byte scan, and a
+naive walk over `stream`/`endstream` does not reliably find the
+boundaries to decompress it.
+
+  what the RAW BYTE SCAN would have reported
+
+    pass                            attach  cat/PI  page/PI
+    gs pdfwrite                       gone    gone     gone
+    qpdf (copy)                       gone    KEPT     KEPT
+    qpdf --linearize                  gone    KEPT     KEPT
+    qpdf --object-streams=generate    gone    gone     gone
+    mutool clean                      KEPT    KEPT     KEPT
+
+Three of seven passes would have been reported as stripping an
+attachment they preserve byte-for-byte, and the conclusion "write the
+channel after the last PDF pass" would have been drawn from an
+artefact of the reader. The contradiction was visible inside the tool's
+own output, which is the only reason it was caught.
+
+The scan is kept in the harness as a separate block, printed under a
+heading saying it is not the answer, so the gap stays visible.
+
+--------------------------------------------------------------------
+3. THE CHAIN, READ RATHER THAN ASSUMED
+
+  step                         writes a PDF?   what it is
+  xelatex (report_tex.py)      YES             the only PDF writer
+  _publish                     no              copy2 + os.replace
+  gs -sDEVICE=pgmraw           no              raster out (7 sites)
+  gs -sDEVICE=png16m           no              raster out (8 sites)
+  pdfinfo / pdfdetach          no              readers
+
+  grep over pdfdrill/src: `pdfwrite` 0 hits, `qpdf` 0 hits.
+
+There is no post-compile PDF pass to survive. The eight passes above
+are therefore a statement about robustness IF one is ever added --
+which is worth having, because it says an attachment is safe against
+all of them and /PieceInfo is not.
+
+--------------------------------------------------------------------
+4. THE WRITE POINT IS xelatex, AND TWO OF THE THREE ROUTES FAIL THERE
+
+The chain compiles with xelatex, not pdflatex -- report_tex.py returns
+None without it, and refine.py records it as the project's rule. That
+rules out the obvious package:
+
+  route                              result
+  \usepackage{embedfile}             FAILS TO COMPILE
+      "! Package embedfile Error: Missing pdfTeX or luaTeX in PDF mode."
+  \usepackage{attachfile}            COMPILES, rc=0, EMBEDS NOTHING
+      0 embedded files; zero /EmbeddedFile objects in the output.
+      A silent failure -- it returns success and produces a PDF with
+      no channel in it, which is the worst of the three outcomes.
+  \special{pdf:fstream} +            WORKS
+  \special{pdf:docview}
+      1 embedded file, extracted byte-identical to the source.
+
+The working route is xdvipdfmx's own, which is what xelatex drives:
+
+    \special{pdf:fstream @rowsjson (rows.json)
+             <</Type/EmbeddedFile/Subtype/application#2Fjson>>}
+    \special{pdf:docview <</Names <</EmbeddedFiles <</Names
+             [(pdfdrill-rows.json) <</Type/Filespec
+             /F(pdfdrill-rows.json)/UF(pdfdrill-rows.json)
+             /EF <</F @rowsjson>> >> ] >> >> >>}
+
+Round-tripped through all eight passes as well, still byte-identical.
+
+A FOURTH ROUTE EXISTS AND IS NOT TESTED HERE: a stdlib incremental
+update appended to the finished PDF, after `_publish`. It needs no TeX
+package and no new dependency, and it is after the last PDF pass by
+construction. It is more code than two \special lines and is only
+worth it if the \special route turns out to constrain the payload --
+the fstream operand is a FILE, so the rows JSON has to exist on disk at
+compile time, which for a generated manifest it does.
+
+--------------------------------------------------------------------
+5. WHAT THIS SETTLES FOR STAGE 2
+
+  * Use the EMBEDDED FILE, not /PieceInfo. Same robustness today,
+    strictly better under any future pass, and pdfdrill already has the
+    reader (`pdf_reading.py`: pdfdetach, pypdf fallback).
+  * Write it from the xelatex build with the two \special lines. There
+    is no later pass to write after.
+  * Do NOT reach for `attachfile`: it succeeds and produces nothing.
+    Whatever Stage 2 uses, its test must extract the bytes and compare
+    them, not check a return code or a file name -- section 2 is the
+    same lesson one level down.
+
+RE-RUN
+
+    python3 tools/pdfchannel.py --work <dir>
+
+builds the two-carrier marker, runs the eight passes, and prints both
+the structural table and the raw-scan table it is not to be read from.
