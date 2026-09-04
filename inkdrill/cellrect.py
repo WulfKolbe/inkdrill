@@ -41,6 +41,13 @@ G5  column rules are given left to right and row rules as
     (above, below) in user space, so `above > below`. Both orders are
     ASSERTED rather than silently sorted: a caller that has them
     backwards has a bug the rect would otherwise hide.
+G7  A ROW WHOSE RULES ARE ON DIFFERENT PAGES HAS NO RECTANGLE, and
+    `rules_on_one_page=False` refuses it by name. It is refused
+    already, incidentally, by G5's ordering check -- the two y values
+    come from different pages so they are not ordered -- but an
+    incidental refusal is one that stops working when the numbers
+    happen to line up. 608 measured `0049_DIA_0006` at above 87.082,
+    below 614.998: a "rect" 528 bp tall on an 841 bp page.
 G6  an empty rect -- rules closer together than the ink they bound --
     is returned as-is with `x1 < x0` or `y1 < y0` rather than clamped,
     because a zero-width cell is a finding about the emission and
@@ -79,8 +86,14 @@ class Rect(NamedTuple):
 
 
 def cell_rect(column_rules_bp, rule_above_bp, rule_below_bp, col, *,
-              page_height_bp, dpi, rule_bp=ARRAYRULE_BP) -> Rect:
-    """The interior of cell `col` of one row (G1-G6)."""
+              page_height_bp, dpi, rule_bp=ARRAYRULE_BP,
+              rules_on_one_page=True) -> Rect:
+    """The interior of cell `col` of one row (G1-G7)."""
+    if not rules_on_one_page:                                        # G7
+        raise ValueError(
+            "the row's bounding rules are on different pages, so it has "
+            "no rectangle; measure the two page-fragments separately or "
+            "skip the row, but do not compute one rect from two pages")
     n = len(column_rules_bp)
     if not 0 <= col < n - 1:
         raise IndexError(f"column {col} of {n - 1} (need {n} rules)")
@@ -109,9 +122,10 @@ def cell_rect(column_rules_bp, rule_above_bp, rule_below_bp, col, *,
 
 
 def row_rects(column_rules_bp, rule_above_bp, rule_below_bp, *,
-              page_height_bp, dpi, rule_bp=ARRAYRULE_BP) -> list:
+              page_height_bp, dpi, rule_bp=ARRAYRULE_BP,
+              rules_on_one_page=True) -> list:
     """Every cell of one row, left to right."""
     return [cell_rect(column_rules_bp, rule_above_bp, rule_below_bp, c,
                       page_height_bp=page_height_bp, dpi=dpi,
-                      rule_bp=rule_bp)
+                      rule_bp=rule_bp, rules_on_one_page=rules_on_one_page)
             for c in range(len(column_rules_bp) - 1)]

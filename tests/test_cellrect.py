@@ -129,6 +129,24 @@ class T602_2_Contract(unittest.TestCase):
             cell_rect(COLS, *R0, len(COLS) - 1,
                       page_height_bp=PAGE_H, dpi=DPI)
 
+    def test_g7_a_page_break_row_is_refused_by_name(self):
+        """608: `0049_DIA_0006` carries above 87.082 and below 614.998
+        -- rules on two different pages, which is not a rectangle. The
+        ordering guard refuses it incidentally; this refuses it for the
+        stated reason, which keeps working when the numbers line up."""
+        with self.assertRaises(ValueError) as cm:
+            cell_rect(COLS, 693.051, 624.906, 0, page_height_bp=PAGE_H,
+                      dpi=DPI, rules_on_one_page=False)
+        self.assertIn("different pages", str(cm.exception))
+
+    def test_g7_the_default_computes_as_before(self):
+        """Both sides: the flag defaults to True, so every existing
+        caller is unaffected."""
+        a = cell_rect(COLS, *R0, 0, page_height_bp=PAGE_H, dpi=DPI)
+        b = cell_rect(COLS, *R0, 0, page_height_bp=PAGE_H, dpi=DPI,
+                      rules_on_one_page=True)
+        self.assertEqual(a, b)
+
     def test_g6_an_empty_cell_is_returned_not_clamped(self):
         """Rules closer together than a rule is wide. A zero-width cell
         is a finding about the emission; clamping it to one pixel would

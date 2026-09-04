@@ -1,0 +1,133 @@
+608 - cellcheck on 0049, against the emitted manifest
+====================================================================
+
+  manifest 34 rows, 3 tables, measured_against report.pdf
+  sha256 ad131b3dd88d7a8d...   MATCH
+
+The stamp is right and the artefact is the one described, which 606B
+could not say. Everything below is therefore about the geometry rather
+than about which build it came from.
+
+THE RESIDUAL, 142 cells
+
+    edge   median    min    max   within 1 px
+      x0    +26.0    +25    +26         0.0%
+      y0     -1.0    -53      0        94.4%
+      x1    +26.0    +25    +26         0.0%
+      y1     -1.0     -1      0       100.0%
+
+TWO SYSTEMATIC OFFSETS, WHICH BY 606C's OWN RULE MAKES THEM CONVERTER
+BUGS RATHER THAN A DIFFERENCE BETWEEN THE DETECTIONS. Both are
+attributed below, and neither is in the lattice.
+
+--------------------------------------------------------------------
+1. x IS +6.177 bp ON EVERY RULE OF EVERY TABLE
+
+Attributed by reading the PDF's own vertical rules and subtracting:
+
+    table 1/2   PDF        54.155  123.202  155.398  204.602  670.499
+                manifest   60.332  129.379  161.575  210.779  676.676
+                delta      +6.177   +6.177   +6.177   +6.177   +6.177
+
+    table 3     PDF        51.223  120.269  152.466  198.835  ...
+                manifest   57.400  126.446  158.642  205.012  ...
+                delta      +6.177   +6.177   +6.177   +6.177
+
+CONSTANT, not proportional -- +6.177 at x=51 and +6.177 at x=676. So
+it is an ORIGIN offset and not the TeX-point conversion 601 warned
+about, which would grow across the page. 6.177 bp is 25.7 px at 300
+dpi, which is the +26 in the table.
+
+The cause is pdfdrill's to find, but the shape says where to look: a
+constant added to x means the position was recorded relative to
+something other than the paper's left edge. `\tabcolsep` defaults to
+6 TeX pt = 5.977 bp, which is near but not equal.
+
+2. THE LAST COLUMN RULE IS MISSING FROM EVERY TABLE
+
+    table 1/2   PDF has 6 vertical rules (5 columns)
+                manifest has 5 (4 columns)     rightmost 1136.396 absent
+    table 3     PDF has 8 vertical rules (7 columns)
+                manifest has 7 (6 columns)     rightmost 1169.510 absent
+
+So the rightmost column of every table is never described and never
+checked. That is why 142 cells were compared where 34 rows x their
+columns would give more, and it is why the page-3 count reads 6
+columns against the lattice's 7.
+
+3. THE FIRST ROW OF EACH TABLE TAKES THE HEADER'S TOP RULE
+
+This is the entire y residual. Two rows of 33 measured have |dy0| > 1:
+
+    0049_EQ0001  page 1  dy0 -53     rule_above 693.051
+    0049_FO0001  page 2  dy0 -52     rule_above 753.883
+
+On page 1 the PDF's horizontal rules are 692.852, 680.498, 624.707 --
+table top, under the header, table bottom. The lattice reads two rows:
+header 622..671 px and data 674..904. EQ0001's `rule_above_bp` is the
+TABLE's top rule, so its rect spans the header as well as the data
+row, and the lattice's header row is left unmatched.
+
+    every other row: |dy0| <= 1 and |dy1| <= 1
+
+So the emitter is not accounting for the repeated header: the first
+data row on a page inherits the rule above the header instead of the
+rule below it.
+
+--------------------------------------------------------------------
+THE THREE THINGS ASKED
+
+  SEVEN COLUMNS. Table 3 has 7 column rules in the manifest and 8 in
+  the PDF. The consumer handles it -- page 3's 30 cells are within
+  1 px on both y edges and carry only the x offset shared with every
+  other table. 602 validated 4, 5 and 6 columns; 6 and (in the PDF) 7
+  behave identically. Nothing about the column count is a problem.
+
+  THE PAGE-BREAK ROW. `0049_DIA_0006`, `rules_on_one_page: false`,
+  above 87.082 and below 614.998 -- a "rectangle" 528 bp tall on an
+  841 bp page.
+
+    THE CONSUMER REFUSES IT. It did so already, but INCIDENTALLY: the
+    two y values come from different pages and so are not ordered, and
+    G5's ordering check caught the inversion. An incidental refusal
+    stops working the moment the numbers happen to line up -- a row
+    breaking near the top of a page would pass it.
+
+    So `cell_rect` and `row_rects` now take `rules_on_one_page` and
+    refuse by name (G7), with the reason in the message. Tested both
+    ways, and deleting the guard fails the suite. The default is True,
+    so every existing caller is unchanged.
+
+  THE 27 ROWS ON PAGE 2. This is where a systematic offset would show
+  and it did -- but not in the y:
+
+    page 1  (4 cells)     y0 median -53.0    x0 median +26.0
+    page 2  (108 cells)   y0 median  -1.0    x0 median +26.0
+    page 3  (30 cells)    y0 median  -1.0    x0 median +26.0
+    page 4                no cells (its only row is the refused one)
+
+    26 of 27 page-2 rows are within 1 px on every y edge. The single
+    outlier is FO0001, the first row, for the header reason above. The
+    x offset is identical on all three pages and both column
+    geometries, which is what makes it one bug rather than three.
+
+--------------------------------------------------------------------
+WHAT TO FIX, IN ORDER
+
+  1. the +6.177 bp x origin -- one constant, affects every cell
+  2. the missing rightmost column rule -- one rule per table
+  3. the first row's `rule_above_bp` on each page -- take the rule
+     BELOW the header, not the table's top rule
+
+None is in the lattice and none needs the spec to change. With those
+three, the residual on this document should be |d| <= 1 px on all four
+edges, which is what 602 measured over 493 cells when both sides were
+reading the same rules.
+
+    python3 tools/manifestcheck.py 0049
+
+reads `pdfdrill-rows.json`, verifies the sha, refuses rows flagged
+`rules_on_one_page: false`, pairs each row to the lattice row it
+overlaps most -- not by index, because a page's lattice includes the
+printed header and the manifest does not -- and prints the per-edge
+distribution overall and per page.
