@@ -1943,6 +1943,8 @@ class T1_17_BothCellsEmptyIsNotClean(unittest.TestCase):
         rows = [[c.strip() for c in l.split("|")[1:-1]]
                 for l in out.getvalue().splitlines()
                 if l.startswith("| 1 |")]
+        self._header = [c.strip() for c in
+                        out.getvalue().splitlines()[0].split("|")[1:-1]]
         return rows, err.getvalue()
 
     #: 388 — the `empty` column is indexed by POSITION, not as the last one.
@@ -1966,6 +1968,57 @@ class T1_17_BothCellsEmptyIsNotClean(unittest.TestCase):
         rows, err = self._rows(self._page(last_row_empty=False))
         self.assertEqual([r[self.EMPTY_COL] for r in rows], ["", "", ""])
         self.assertNotIn("NO INK", err)
+
+    #: 606A -- the row's Y-EXTENT, appended after `row h`.
+    H_COL, Y0_COL, Y1_COL = 17, 18, 19
+
+    def test_606a_the_header_names_the_columns_the_data_is_in(self):
+        """THE HEADER AND THE ROW ARE BUILT IN TWO PLACES. Reordering
+        the header alone leaves every label pointing at another
+        column's data and changes nothing a positional test can see --
+        it survived the mutation sweep until this existed. Indexing by
+        position is right (388), and it needs the position and the NAME
+        checked together."""
+        self._rows(self._page(last_row_empty=False))
+        for name, idx in (("empty", self.EMPTY_COL), ("row h", self.H_COL),
+                          ("row y0", self.Y0_COL), ("row y1", self.Y1_COL)):
+            self.assertEqual(self._header[idx], name,
+                             f"{name!r} is not at index {idx}: "
+                             f"{self._header}")
+
+    def test_606a_the_row_carries_its_y_extent(self):
+        """`line` is an ordinal and carries no geometry, so a consumer
+        pairing rows to anything positional had nothing to pair on. A
+        height says how tall a row is and not where it starts."""
+        rows, _ = self._rows(self._page(last_row_empty=False))
+        for r in rows:
+            self.assertNotEqual(r[self.Y0_COL], "")
+            self.assertNotEqual(r[self.Y1_COL], "")
+
+    def test_606a_the_extent_agrees_with_the_height_beside_it(self):
+        """Two numbers from one lattice row cannot disagree; asserting
+        it stops the pair drifting apart in a later edit."""
+        rows, _ = self._rows(self._page(last_row_empty=False))
+        for r in rows:
+            y0, y1, h = (int(r[self.Y0_COL]), int(r[self.Y1_COL]),
+                         int(r[self.H_COL]))
+            self.assertEqual(y1 - y0, h)
+
+    def test_606a_rows_ascend_and_do_not_overlap(self):
+        """The property positional selection actually needs: row k+1
+        begins at or below where row k ends."""
+        rows, _ = self._rows(self._page(last_row_empty=False))
+        ys = [(int(r[self.Y0_COL]), int(r[self.Y1_COL])) for r in rows]
+        for (_a0, a1), (b0, _b1) in zip(ys, ys[1:]):
+            self.assertGreaterEqual(b0, a1)
+
+    def test_606a_appending_did_not_move_the_earlier_columns(self):
+        """APPENDED, never inserted -- pdfdrill's `compare_page` reads
+        cells 0..13 positionally and 388 already caught one test that
+        said "the last column" when it meant "the empty column"."""
+        rows, _ = self._rows(self._page(last_row_empty=True))
+        self.assertEqual(rows[-1][self.EMPTY_COL], "BOTH-EMPTY")
+        self.assertEqual(rows[-1][3:13], ["0"] * 10)
 
 
 class T1_18_RowCoverageCatchesAMissingRow(unittest.TestCase):

@@ -782,7 +782,8 @@ def cmd_compare(argv) -> int:
 
     header = (["page", "line", "label"]
               + [f"L {k}" for k in keys] + [f"R {k}" for k in keys]
-              + ["A=B", "B stable", "overrun", "empty", "row h"])
+              + ["A=B", "B stable", "overrun", "empty", "row h",
+                 "row y0", "row y1"])
     rows_out = []
     mismatch = unstable = overruns = empties = 0
     for r in range(min(nrows.values())):
@@ -872,6 +873,26 @@ def cmd_compare(argv) -> int:
         # at what it did before.
         _b = cells["A"].get((r, 0))
         row.append(str(_b[3] - _b[1]) if _b else "")
+        # 606A -- THE ROW'S Y-EXTENT, not just its height.
+        #
+        # `line` is an ORDINAL and carries no geometry, so a consumer
+        # pairing rows to anything positional had nothing to pair ON:
+        # a height says how tall a row is and not where it starts, and
+        # summing heights to recover a position fails at the first
+        # dropped sliver. The lattice already knows both edges; this
+        # returns them.
+        #
+        # IN THE A RASTER'S PIXELS, y down, inclusive -- the same space
+        # every other geometric number in this file is in. `compare`
+        # takes two rasters and no dpi ("the five numbers are counts"),
+        # so it cannot convert to points; the caller rendered them and
+        # knows the scale. bp = px * 72 / dpi.
+        #
+        # APPENDED after `row h`, which stays where it is: a consumer
+        # indexing the earlier columns positionally is unaffected, and
+        # pdfdrill's `compare_page` reads cells 0..13 and is unmoved.
+        row.append(str(_b[1]) if _b else "")
+        row.append(str(_b[3]) if _b else "")
         empties += both_empty
         mismatch += not agree
         unstable += not stable

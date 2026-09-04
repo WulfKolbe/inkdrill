@@ -1,0 +1,172 @@
+606 - the row's y-extent, pages 1-2, and the schema
+====================================================================
+
+A. COMPARE NOW RETURNS THE ROW'S Y-EXTENT
+
+`compare` gained two columns, APPENDED after `row h`:
+
+    ... | overrun | empty | row h | row y0 | row y1 |
+                     16      17      18       19
+
+Verified against the lattice on Geometric_topology p20:
+
+    row 0   y0 215  y1 264     lattice 215..264
+    row 1   y0 266  y1 405     lattice 266..405
+    row 2   y0 407  y1 538     lattice 407..538
+
+IN THE A RASTER'S PIXELS, y down, inclusive -- the space every other
+geometric number in that file is in. `compare` takes two rasters and
+no dpi, so it cannot convert to points; the caller rendered them and
+knows the scale. `bp = px * 72 / dpi`.
+
+WHY BOTH EDGES AND NOT THE HEIGHT. `row h` has been there since 386
+and is not enough: a height says how tall a row is and not where it
+starts, and summing heights to recover a position fails at the first
+dropped sliver. `line` is an ordinal. So a consumer pairing rows to
+anything positional had nothing to pair on, which is what blocked the
+join independently of the rect.
+
+APPENDED, NEVER INSERTED. pdfdrill's `compare_page` reads cells 0..13
+and is unmoved; `row h` stays at 17.
+
+FIVE TESTS, and one of them exists because of a mutant that survived.
+Reordering the HEADER alone -- leaving the row-building untouched --
+passed everything, because the header and the row are built in two
+places and nothing tied them together. Every label would have pointed
+at another column's data. `test_606a_the_header_names_the_columns_
+the_data_is_in` checks position AND name together and kills it.
+Mutants: y0/y1 swapped FAILED, y0 from the wrong box index FAILED,
+header reordered FAILED. Suite 1,184.
+
+--------------------------------------------------------------------
+B. PAGES 1-2: THE LATTICE IS RIGHT, AND THE MANIFEST IS OF ANOTHER
+   DOCUMENT
+
+The answer to what was asked, first:
+
+    0707.4470/report.pdf, 2 pages, 1190.55 x 841.89 bp (A3 landscape)
+
+    page 1   lattice columns 0    rows 0    IN NO RUN
+    page 2   lattice columns 6    rows 5    run (6, [2])
+
+  PAGE 1 IS IN NO RUN. It has no lattice at all, and the reason is
+  visible in its own text: it is the summary page --
+
+    "0707.4470 - formula report. 213 inline formulas (section
+     omitted; all rendered), 62 display equations, 0 tables, 12
+     unrecovered image regions."
+
+  One paragraph, no table, so nothing encloses anything and
+  `_table_cells` returns None. Zero rows on page 1 is correct.
+
+BUT THE ROWS IN THE MANIFEST ARE NOT IN THIS REPORT AT ALL, and that
+is the larger finding:
+
+  report.pdf carries exactly ONE identifier in its text layer:
+      0707.4470_FO0175
+
+  report.tables.json describes ONE table:
+      ordinal 1, "Corrected", 6 columns, 3 rows
+      ['0707.4470_FO0175 (was)', '(now)', '(basis)']
+
+  pdfdrill-rows.json carries three rows:
+      0707.4470_EQ0025, _EQ0032, _EQ0035
+
+  the identifier join (597) finds all three MISSING -- no page of
+  report.pdf carries any of them.
+
+  and EQ0035 is emitted with `page_close: 3` in a TWO-PAGE pdf.
+
+THIS report.pdf IS A CORRECTIONS REPORT, not a full listing. It exists
+to show the one FO0175 fix from 229/231. So EQ0025 at y 569-664 and
+EQ0032 at 483-534 are positions in a build that is not this one, and
+no lattice anywhere in this PDF could have matched them.
+
+  pdfdrill-rows.json  written 2026-09-04 10:17:47
+  report.pdf          written 2026-09-04 10:18:01
+
+  The manifest is 14 seconds OLDER than the PDF beside it.
+
+So B is two findings, not one. The lattice's zero on page 1 is
+correct and has nothing to do with identifiers, as suspected. But the
+rows cannot be checked against this report whatever the lattice does,
+because they are not in it -- and the freshness stamp says why. This
+is the staleness class the `report.compare.source` sidecar exists for,
+and the emitter needs the same guard: a manifest must name the build
+it describes.
+
+  RECOMMENDED: re-run the emitter on a FULL listing. 0049 (4 pages,
+  3 tables, 34 rows) or Geometric_topology (300 pages, 4 tables,
+  6,717 rows) both join at 100% and both have a lattice on every
+  table page.
+
+  Also: `"bibkey": ""` in the emitted manifest. Empty, where
+  report.tables.json has "0707.4470". `rowjoin` builds its identifier
+  pattern from the bibkey, so an empty one matches nothing.
+
+--------------------------------------------------------------------
+C. THE SCHEMA cellcheck CONSUMES
+
+TWO FORMS ARE ACCEPTED, and they answer different questions. Emit the
+first if you can; the second is what is being emitted now.
+
+  RULE FORM (601, exact -- reconstructs the cell)
+
+    top level   "bibkey": str
+                "page_height_bp": float      REQUIRED, no default
+                "rule_width_bp": float       default 0.4 (602)
+    per table   "ordinal": int
+                "column_rules_bp": [float]   ncols+1, ascending, ONCE
+    per row     "identifier": str
+                "page": int                  1-based, in report.pdf
+                "rule_above_bp": float       y of the rule above
+                "rule_below_bp": float       y of the rule below
+                                             above > below
+
+    consumed by `inkdrill.cellrect.cell_rect(column_rules_bp,
+    rule_above_bp, rule_below_bp, col, page_height_bp=, dpi=,
+    rule_bp=)` -> `Rect(x0, y0, x1, y1)`, raster px, y DOWN, inclusive.
+
+  RECT FORM (what pdfdrill-rows.json emits today)
+
+    per row     "x0_bp", "y0_bp", "x1_bp", "y1_bp"
+
+    This is the CONTENT extent, not the cell. It cannot be compared
+    to a lattice cell edge-for-edge: the cell includes the padding
+    the renderer put round the content, so the residual would be the
+    padding and would tell you nothing about either side. Use it for
+    containment -- is the content rect inside the lattice cell -- and
+    report that as a boolean per row, not as a distance.
+
+  COORDINATES, all in bp: PDF user space, y UP from the bottom of the
+  page. That is what `\zsavepos` gives once the TeX-point conversion
+  is applied: bp = sp / 65536 * 72 / 72.27. Skipping the 72/72.27 is
+  worth 13 px at 300 dpi over A4 and is proportional, so it looks
+  right at the top of a page and drifts down it (601).
+
+THE RESIDUAL METHOD
+
+  Per CELL, four signed deltas in raster pixels at the stated dpi:
+
+    dx0 = emitted.x0 - lattice.x0        dy0 = emitted.y0 - lattice.y0
+    dx1 = emitted.x1 - lattice.x1        dy1 = emitted.y1 - lattice.y1
+
+  Reported PER EDGE as median, min, max and the fraction within 1 px.
+  NEVER as a pass. The shape is the finding:
+
+    a SYSTEMATIC offset  -> a bug in one converter, and fixable. 602's
+                            own consumer had a constant -1 on x1 over
+                            60 cells; that is how it was found.
+    a SCATTERED offset   -> a real difference between the two
+                            detections, and a reason to change the
+                            spec rather than the code.
+
+  The measured agreement, 493 cells over five pages of two documents:
+  x0 and x1 exactly 0 on every cell; y0 and y1 0 or -1, never +1, so
+  the emitted rect ends at or inside the lattice cell and never
+  overruns into the next row's ink.
+
+    python3 tools/cellcheck.py <document> <page> --rows 30
+
+  It prints the per-cell table and then the per-edge distribution.
+  Run it on ONE document before the corpus.
