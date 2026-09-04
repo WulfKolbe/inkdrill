@@ -1,0 +1,88 @@
+610 - centrelines in the spec, and the direct comparison re-run
+====================================================================
+
+STATED. `rule_above_bp`, `rule_below_bp` and `column_rules_bp` are
+CENTRELINES, in out/601.txt and in `cellrect`'s G2. The consumer
+insets by `rule_width_bp / 2` on every side, which it has done since
+602 and which is now pinned by a test that checks the arithmetic
+rather than a remembered number -- an emitter sending an edge instead
+is the one thing that property cannot survive.
+
+THE DIRECT COMPARISON IS NOT 0.00. The manifest on disk is the one 608
+measured, unchanged (same mtime, same values, sha still MATCH), so
+this re-run says what remains rather than what was fixed.
+
+    0049, no raster and no lattice: manifest bp against the PDF's own
+    stroke paths, both centrelines
+
+    COLUMN RULES (x)   n 17   median +6.1770   min +6.1760  max +6.1770
+    ROW RULES    (y)   n 66   median +0.1990   min -0.1990  max +0.1990
+
+--------------------------------------------------------------------
+1. THE y OFFSET IS EXACTLY HALF A RULE, WHICH IS THE THING 610 NAMES
+
+    half of the declared rule_width_bp 0.4      0.2000
+    half of the ACTUAL stroke width 0.3985      0.19925
+    the measured offset                         0.1990
+
+    rule_above_bp   +0.199 on 32 of 33 rows,  -0.199 on one
+    rule_below_bp   +0.199 on 33 of 33
+
+Every one of the 66 values is exactly one half-rule from a real rule
+centreline. So the manifest is emitting EDGES today, not centrelines,
+and the sign says which edge: the upper one, on 65 of 66. The single
+exception is `0049_DIA_0001` on page 3, which takes the lower edge of
+its rule -- so it is not even a consistent edge convention.
+
+That is the whole of the y disagreement. With centrelines emitted it
+goes to 0.000 by construction, because the consumer already derives
+the edges from `rule_width_bp`.
+
+VERIFIED THAT THE PDF SIDE IS THE CENTRELINE, since the claim rests on
+it. On page 1 the PDF's top rule is 692.852 bp; at 300 dpi that
+predicts ink spanning raster rows 620.16..621.82, and the ink is on
+rows 620 and 621, nothing above or below:
+
+    y 619:   0 px
+    y 620: 250 px   <-- rule
+    y 621: 250 px   <-- rule
+    y 622:   0 px
+
+The manifest's 693.051 would predict rows 619.33..620.99 -- one row
+too high, which is what an upper edge read as a centreline gives.
+
+2. THE x OFFSET IS NOT A CENTRELINE QUESTION
+
+    +6.177 bp on all 17 column rules, across all three tables
+
+Half a rule is 0.199. 6.177 is thirty-one times that, it is constant
+rather than proportional, and it does not change sign. It is the
+origin offset 608 reported and it is untouched by this decision --
+emitting centrelines will not move it.
+
+3. WHAT THE RE-RUN CHANGES ABOUT 608's LIST
+
+608 asked for three fixes. This one refines the third and adds
+nothing:
+
+    1. the +6.177 bp x origin                       UNCHANGED
+    2. the missing rightmost column rule            UNCHANGED
+    3. the first row's rule_above on each page      UNCHANGED
+    4. NEW: emit the rule CENTRELINE, not an edge -- +0.199 bp on
+       every row rule, and inconsistent in sign on one of them
+
+Item 4 is worth 1.66 px at 300 dpi, which is smaller than the other
+two and is the only one the consumer could have absorbed silently. It
+could not be absorbed by INSPECTION, though: an edge is a plausible
+centreline, and it was findable only by comparing against a third
+source that was known to be a centreline.
+
+--------------------------------------------------------------------
+RE-RUN
+
+    python3 tools/rulediff.py 0049
+
+No raster, no lattice, no dpi -- both sides bp in PDF user space, so
+the delta is the emitter's error with nothing else folded into it.
+Expect 0.000 on both lines when the emitter sends centrelines and the
+x origin is corrected; today it is +6.177 on x and +/-0.199 on y.

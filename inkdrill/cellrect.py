@@ -28,7 +28,13 @@ G1  pure -- numbers in, a `Rect` out. No file access, no process, and
     measured from ink.
 G2  input is PDF USER SPACE in bp, y UP from the bottom of the page,
     which is what 601 measured `\zsavepos` to give once the TeX-point
-    conversion is applied. Output is RASTER pixels, y DOWN, inclusive
+    conversion is applied. EVERY RULE POSITION IS A CENTRELINE, never
+    an edge: a stroke's ink covers centre +/- linewidth/2, and G4
+    derives the edges from `rule_bp`. An emitter that converts to an
+    edge before writing the manifest puts a derived number where a
+    measured one belongs, and an edge cannot afterwards be told from a
+    centreline half a rule away -- 610 could name a 0.199 bp error
+    only because both sides were centrelines. Output is RASTER pixels, y DOWN, inclusive
     on both bounds -- `raster`'s convention, so a caller can slice a
     mask with it directly.
 G3  the y flip needs the page height, so it is required and not

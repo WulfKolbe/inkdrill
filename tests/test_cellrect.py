@@ -103,6 +103,19 @@ class T602_2_Contract(unittest.TestCase):
         self.assertEqual(b.y0 - a.y0,
                          round((1190.55 - PAGE_H) * DPI / 72.0))
 
+    def test_g2_a_rule_position_is_read_as_a_CENTRELINE(self):
+        """The cell begins where the rule's INK ends. A stroke centred
+        on c with width w covers [c-w/2, c+w/2], so the first pixel of
+        the cell is at c+w/2 -- checked as an equality against the
+        arithmetic rather than against a remembered number, because
+        this is the one property an emitter can silently violate by
+        sending an edge instead."""
+        import math
+        c, w, dpi = 100.0, 0.4, 300
+        r = cell_rect([c, c + 50.0], *R0, 0, page_height_bp=PAGE_H,
+                      dpi=dpi, rule_bp=w)
+        self.assertEqual(r.x0, math.ceil((c + w / 2) * dpi / 72.0))
+
     def test_g4_the_inset_is_half_a_rule_on_each_side(self):
         wide = cell_rect(COLS, *R0, 0, page_height_bp=PAGE_H, dpi=DPI,
                          rule_bp=0.0)

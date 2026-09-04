@@ -160,6 +160,20 @@ Added to the row manifest of 580 stage 2:
     bounding the row, in PDF user space, y UP from the bottom of the
     paper -- the convention `\zsavepos` already gives, so no flip is
     needed on the emitting side.
+
+    THEY ARE CENTRELINES (610). `\zsavepos` records the reference
+    point, a stroke's ink covers centre +/- linewidth/2, and
+    `rule_width_bp` is already in the manifest -- so the edges are
+    derivable and the consumer derives them. `cellrect.cell_rect`
+    insets by `rule_width_bp / 2` on every side, which it has done
+    since 602.
+
+    EMIT WHAT WAS MEASURED. Converting to an edge at emit time puts a
+    derived number where a measured one belongs and removes the
+    ability to check: an edge cannot be told from a centreline that
+    happens to be half a rule away, and 610 could only name the
+    +/-0.199 bp offset because both sides were centrelines. The same
+    applies to `column_rules_bp`.
   * `page_height_bp` is carried so a consumer can flip to a raster's
     y-down without reading the PDF. A per-page value is needed only if
     a document mixes paper sizes; 496 found one that does
