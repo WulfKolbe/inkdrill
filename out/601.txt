@@ -1,0 +1,194 @@
+601 - the rect spec, so stage 2 is one instrumentation pass
+====================================================================
+
+THE ANSWER TO THE TASK'S QUESTION: PER ROW IS SUFFICIENT. Each cell
+does NOT need its own pair, because a table's column boundaries are
+constant across every page it occupies -- measured exactly, below.
+
+So the emission is:
+
+    per TABLE   the x of every vertical rule        ncols+1 numbers
+    per ROW     page, and the y of the rules
+                above and below it                  1 + 2 numbers
+
+Not per cell, and not per run. `run` must not appear in the format at
+all -- see section 4, where it turns out not to be a property of the
+document.
+
+--------------------------------------------------------------------
+1. THE COORDINATE SYSTEM, MEASURED NOT RECALLED
+
+A probe document with two rules of known size, `\zsavepos` at each
+end, compiled with xelatex and rendered at 300 dpi. Predicted pixel
+positions against measured:
+
+    point            predicted        measured
+    A.x                  295.3             295
+    A.y (baseline)       531.5             531   (rule bottom)
+    B.x                  767.7             767
+    C.x                  295.3             295
+    C.y                 1008.1            1008
+    D.x                 1003.9            1003
+    rule 1 height        236.2             237
+
+So, established rather than assumed:
+
+  UNITS      scaled points. 65536 sp = 1 TeX pt = 1/72.27 in.
+  x          from the LEFT edge of the paper, increasing right.
+  y          from the BOTTOM edge of the paper, increasing UP.
+  the point  `\zsavepos` records the CURRENT POINT -- the baseline --
+             not a box corner. A rule 20mm tall recorded at its
+             baseline has its ink 20mm ABOVE the recorded y.
+
+THE UNIT IS THE FIRST TRAP AND IT IS WORTH 13 PIXELS. TeX's point is
+1/72.27 in; PDF user space is 1/72 in. The ratio is 1.00375, which
+over an A4 page's 841.89 bp is 3.16 bp -- 13.2 px at 300 dpi, about
+half a line of body text. A converter that divides sp by 65536 and
+calls the result PDF points is wrong by that everywhere, and wrong
+PROPORTIONALLY, so it looks right at the top of the page and drifts
+down it.
+
+    bp = sp / 65536 * 72 / 72.27
+
+EMIT PDF USER SPACE (bp), not sp and not pixels. It is dpi-free, it is
+what the MediaBox is in, and it makes the conversion pdfdrill's --
+which is where the paper size is known.
+
+--------------------------------------------------------------------
+2. WHY PER ROW IS ENOUGH: COLUMN BOUNDARIES ARE CONSTANT
+
+Lattice column boundaries, per page, 300 dpi, Geometric_topology:
+
+  table 1, pages  5, 10, 20, 40, 53
+      [225, 513, 647, 852, 1990, 3199]   on all five, to the pixel
+  table 2, pages 54, 150, 260
+      [227, 515, 649, 854, 2795]         on all three
+  table 4, pages 262, 263, 270, 300
+      [215, 502, 637, 830, 1803, 3319]   on all four
+
+  distinct boundary vectors within each table: 1
+
+A longtable fixes its column widths from the first chunk and repeats
+them, and the measurement says it does so exactly. So one vector per
+table reconstructs every cell on every page of it.
+
+IT IS PER TABLE, NOT PER DOCUMENT. The three vectors differ -- 225 vs
+227 vs 215 on the first boundary -- so a single document-wide set
+would be wrong by 10 px for two of the three tables.
+
+AND ALL CELLS IN A ROW SHARE THE ROW'S VERTICAL EXTENT, because a
+longtable row is one `\halign` row and its cells are set to a common
+height and depth. Row extent x column boundaries is therefore the full
+cell grid, with no per-cell emission.
+
+--------------------------------------------------------------------
+3. WHICH CORNERS: THE RULES, NOT THE CONTENT
+
+The lattice cell is the HOLE BETWEEN RULES -- `_table_cells` finds
+enclosed background regions -- so the rectangle inkdrill wants is
+bounded by the rules, not by the ink inside them. Consecutive rows on
+one page:
+
+    row    y0     y1     gap to the next row's y0
+      1   266    405     2
+      2   407    538     2
+      3   541    672     3
+      ...
+    gaps: min 2, max 3 px at 300 dpi
+
+The 2-3 px gap IS the horizontal rule; the cell excludes it on both
+sides. A row's rect must therefore be the pair of rule positions
+bounding it, and two adjacent rows share one rule.
+
+If pdfdrill emits the rule positions, the two sides agree BY
+CONSTRUCTION rather than within a tolerance, and 598's remaining half
+of the legend inference closes with it: a legend footer is a row like
+any other and needs no recognition.
+
+--------------------------------------------------------------------
+4. A CORRECTION TO 595, AND WHY `run` MUST NOT BE IN THE FORMAT
+
+595 reported that Geometric_topology's image table "spans two runs of
+different widths, 6 columns on its first page and 5 after". That is
+what the run scan reports AT 150 dpi. At 300 dpi the same pages read
+6 columns throughout:
+
+    pages 260-300, group_tables
+      150 dpi   4 runs   ... cols 6 p262 | cols 5 pp263-300
+      300 dpi   3 runs   ... cols 6 pp262-300
+
+THE SPLIT IS A DETECTION ARTEFACT OF THE PROBE'S RESOLUTION, not a
+property of the table. 595's conclusion is unaffected and is if
+anything stronger -- ordinal-plus-column-width still returns 5 of 212
+rows, and now for a reason that has nothing to do with the document --
+but the mechanism I attributed it to was wrong, and out/595.txt is
+marked.
+
+The consequence for this spec: a RUN is not a property of the
+document, so nothing pdfdrill emits should mention one. Emit tables
+and rows. inkdrill's run set is an internal detail of how it finds a
+lattice, and after this spec it does not need one.
+
+--------------------------------------------------------------------
+5. THE FORMAT
+
+Added to the row manifest of 580 stage 2:
+
+    {"bibkey": "...",
+     "page_height_bp": 841.89,
+     "tables": [
+       {"ordinal": 1,
+        "caption": "Display equations",
+        "column_rules_bp": [x0, x1, ..., x_ncols],   ncols+1 values
+        "rows": [
+          {"identifier": "Geometric_topology_EQ0145",
+           "page": 8,
+           "rule_above_bp": 712.44,
+           "rule_below_bp": 689.01}
+        ]}]}
+
+  * `column_rules_bp` is x of each vertical rule, left to right, in
+    PDF user space, ONCE per table.
+  * `rule_above_bp` / `rule_below_bp` are y of the horizontal rules
+    bounding the row, in PDF user space, y UP from the bottom of the
+    paper -- the convention `\zsavepos` already gives, so no flip is
+    needed on the emitting side.
+  * `page_height_bp` is carried so a consumer can flip to a raster's
+    y-down without reading the PDF. A per-page value is needed only if
+    a document mixes paper sizes; 496 found one that does
+    (2106.07890), so make it `page_height_bp` per ROW if that is
+    cheap, or state that it is per document and refuse a document
+    with a varying MediaBox.
+  * cell (row, k) is then
+        x in [column_rules_bp[k], column_rules_bp[k+1]]
+        y in [rule_below_bp, rule_above_bp]
+
+    and inkdrill scales by dpi/72 and flips y, with no lattice at all.
+
+WHAT IT COSTS. Two savepos points per row, one vector per table. Over
+the corpus that is 316,007 rows, so ~632,000 `\zsavepos` labels and
+the .aux entries behind them. If that proves too heavy, the fallback
+is N+1 points per page rather than 2N: rows tile, so one rule
+position per row plus a final one bounds every row on the page. That
+is exact for the same reason -- section 3's gaps are the shared rules
+-- and halves the labels. It is a fallback and not the recommendation,
+because it makes a missing label shift every row after it rather than
+damaging one.
+
+--------------------------------------------------------------------
+6. WHAT INKDRILL DOES WITH IT
+
+`rowjoin.join` already gives (table, index) -> (page, identifier).
+With `column_rules_bp` and the two y values, the same call gives
+(table, index) -> (page, cell rect), and the crop is taken directly.
+`_table_cells`, its sliver floor, its coverage refusal and its
+selection rule are then not on the path for a report at all -- which
+is 598 #4 moving from SURVIVES to REMOVED, and #2's remaining half
+with it.
+
+NOT CLAIMED: that the emitted rect and the lattice cell agree. They
+should, and the first thing to run on stage 2's output is the
+comparison -- lattice cell against emitted rect, per row, reported as
+a distribution rather than a pass. A disagreement is a real finding
+about one side or the other, and it is much cheaper to find on the
+first document than after the corpus is rebuilt.

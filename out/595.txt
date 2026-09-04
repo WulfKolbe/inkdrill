@@ -71,7 +71,13 @@ Nothing is missing here.
 
   ONE TABLE, TWO RUNS, AND THE COLUMN COUNTS DIFFER. Table 4 is 212
   rows of image regions; the lattice reads 6 columns on its first page
-  and 5 thereafter, so it splits. Ordinal-with-column-width would take
+  and 5 thereafter, so it splits.
+
+  *** CORRECTED BY 601: that 6-then-5 is an artefact of the probe's
+  150 dpi. At 300 dpi the same pages read 6 columns throughout and the
+  table is ONE run. The conclusion here is unaffected -- ordinal plus
+  column width still returns 5 of 212 rows -- but the cause is
+  detection instability, not the table. See out/601.txt section 4. *** Ordinal-with-column-width would take
   run 4 -- the one whose 6 matches the manifest -- and return 5 of 212
   rows. The other 207 are in a run whose width says it is a different
   table.
