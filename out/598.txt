@@ -1,0 +1,122 @@
+598 - the five inferences, against the identifier join
+====================================================================
+
+590 answered this for a manifest that does not exist yet. 597 exports
+a join that does, so the question is now about a mechanism rather than
+a plan, and two of the five answers change.
+
+  #  inference                      join?          what is left
+  1  display-equations-only         REMOVED        --
+  2  legend rows kept               HALF           still needed to
+                                                   pair within a page
+  3  table selected by ordinal      REMOVED        --
+  4  the row lattice                SURVIVES       the whole of it
+  5  per-document column count      REMOVED        --
+
+Three go outright, one goes for pagination and stays for pairing, one
+is untouched. The one that stays is the one every measured number is
+computed from.
+
+--------------------------------------------------------------------
+1. DISPLAY EQUATIONS ONLY                                  REMOVED
+
+  `inkconvert.identifiers` matches `\ident{...EQ<digits>}` and nothing
+  else, so `inkmeasure` must find the equations table before it can
+  measure, and formulas, tables and image regions are unmeasurable by
+  construction.
+
+  The join returns every table's rows keyed by table ordinal, so the
+  restriction becomes a filter on which ordinals a caller wants. It is
+  not that equations get easier -- it is that the other three tables
+  stop being unreachable. 229,991 formula rows over 717 documents, and
+  50,659 over the 333 already measured.
+
+--------------------------------------------------------------------
+2. THE LEGEND ROWS STAY                                       HALF
+
+  This is the answer that changed, and 590 got it wrong by treating
+  one inference as one thing.
+
+  FOR PAGINATION IT IS REMOVED. `inkconvert.read_tsv` separates one
+  all-zero row per page as the legend footer and COUNTS DISPLAY PAGES
+  from them. The join gives each row a page directly, so the page set
+  is `{r.page for r in join.rows}` and no sentinel is counted.
+
+  FOR PAIRING IT SURVIVES, and this is the live gap. The join places a
+  row on a PAGE. The lattice on that page has rows -- header,
+  data, legend footer -- and which lattice row is the k-th identifier
+  is still positional. It matters because pages are not one row deep:
+
+      0049                34 rows on   4 pages   median 5/page
+      Geometric_topology  6,717 rows on 300 pages  median 28/page
+
+  Twenty-eight rows to a page. So the legend row still has to be
+  recognised and skipped, exactly as before, or every row on the page
+  shifts by one. 238 and the `absent` flag exist for this and are not
+  retired by the join.
+
+--------------------------------------------------------------------
+3. TABLE SELECTED BY ORDINAL                               REMOVED
+
+  Gone, and 595 measured both reasons it had to go. A run can hold
+  SEVERAL tables -- 0049's equations and formulas are both 5 columns
+  and contiguous, so they are one run -- and a table can span several
+  runs of DIFFERENT widths, as Geometric_topology's image table does
+  at 6 columns then 5. Ordinal cannot express either, and it had
+  nothing to fall back on: 608 of 717 documents have two tables
+  sharing a column count.
+
+  The join needs no ordinal, no contiguity and no `\clearpage`
+  convention. It also removes the `report.tables.json` ordinal-based
+  split that `inkmeasure`'s docstring describes as taking the boundary
+  on a page break "because the builder puts a \clearpage between
+  sections" -- a convention the join does not rely on.
+
+--------------------------------------------------------------------
+4. THE ROW LATTICE                                        SURVIVES
+
+  Untouched, and it is the one that matters. Everything measured --
+  the five-tuple, the distance, the flag -- is computed from the
+  ruled CELL found by `_table_cells`, with its sliver floor, its
+  coverage refusal and its selection rule. The join contributes no
+  geometry at all: it maps an identifier to a page number.
+
+  What the join DOES give the lattice is a cross-check it never had.
+  A page whose lattice yields a different number of data rows than the
+  join puts on that page is a detection error, and it can now be
+  named rather than measured through. That is a new guard, not a
+  removed inference.
+
+--------------------------------------------------------------------
+5. THE PER-DOCUMENT COLUMN COUNT                           REMOVED
+
+  `target_columns` reads the count from each document's own report.tex
+  because a constant was wrong twice in one day, and `probe` then
+  renders every page at 150 dpi to find the pages whose lattice has
+  that many columns -- most of the wall clock of a run, and it needed
+  its own cache.
+
+  The join supplies the page list directly, so there is nothing to
+  probe. With it go the probe, the cache, the two-era problem, and
+  498's finding that a `Rendered`-without-`Scan image` header must be
+  skipped over. The six-column assumption is not a separate inference;
+  it is what the column count was for.
+
+  NOTE 595's measurement here: the count is not merely unnecessary,
+  it is WRONG often enough to be harmful as a cross-check. 0049's
+  6-column image table sits in a run the lattice reads as 7, and
+  Geometric_topology's 6-column image table spans runs of 6 and 5.
+  Keeping it as a check would reject correct runs.
+
+--------------------------------------------------------------------
+WHAT WOULD CLOSE #2 AND #4 TOGETHER
+
+Both remaining halves are the same missing datum: which lattice ROW a
+row is, not which page. 590 asked for the CELL rect in 580's stage-2
+manifest and that is still the answer -- the builder knows the box, it
+is a longtable cell it just typeset, and recovering it from the raster
+afterwards is what this inventory exists to stop.
+
+With `page` and the cell rect, #2 loses its remaining half and #4
+moves from SURVIVES to REMOVED. Without them, the join is exact to the
+page and positional within it.

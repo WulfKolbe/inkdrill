@@ -52,66 +52,32 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
+from inkdrill.rowjoin import join                        # noqa: E402
 from pagedetect import npages, tables                    # noqa: E402
 
 
-def page_identifiers(pdf: pathlib.Path, bibkey: str, known: set):
-    """{page: [identifier, ...]} from the PDF's text layer, plus any
-    token that looked like an identifier and is not in the manifest.
+def page_text(pdf: pathlib.Path) -> list:
+    """The report's text, one string per page.
 
-    THE PATTERN IS NOT GUESSED. The first version matched
-    `<bibkey>_[A-Z]{2,4}[0-9a-f]+`, which misses `0049_DIA_0001` --
-    the image-region rows carry an underscore before the digits -- and
-    reported six rows as MISSING when they were on the page all along.
-    A join that silently drops a whole table because of a regex is
-    worse than one that refuses.
+    -raw, AND the identifier is un-wrapped by `rowjoin` afterwards.
+    Three modes were tried and only this one works on both shapes of
+    document:
 
-    So extraction is deliberately permissive and the manifest decides:
-    anything shaped like `<bibkey>_<letters><rest>` is a candidate, and
-    the candidates are intersected with the identifiers the manifest
-    actually lists. Whatever is left over is RETURNED and printed, so a
-    pattern that is still too narrow shows up as unmatched tokens
-    rather than as missing rows.
+      plain    reads column-wise. Keeps a SHORT identifier whole
+               (0049_DIA_0001) but returns it in the wrong sequence,
+               and finds nothing at all when the identifier wraps.
+      -layout  preserves the visual row, so a wrapped identifier is
+               separated by the entire rest of the line and cannot be
+               rejoined without knowing the column geometry.
+      -raw     content-stream order, so the two halves of a wrapped
+               identifier are ADJACENT and rowjoin's G3 recovers them.
 
-    ONE `pdftotext` call, not one per page: it separates pages with a
-    form feed, so the split is free and 300 subprocesses are not.
+    -raw's ordering does not matter because rowjoin takes order from
+    the manifest (G4).
     """
-    # -raw, AND the identifier is then un-wrapped. Three modes were
-    # tried and only this one works on both shapes of document:
-    #
-    #   plain    reads column-wise. Keeps a SHORT identifier whole
-    #            (0049_DIA_0001) but returns it in the wrong sequence,
-    #            and finds nothing at all when the identifier wraps.
-    #   -layout  preserves the visual row, so a wrapped identifier is
-    #            split by the entire rest of the line and cannot be
-    #            rejoined without knowing the column geometry.
-    #   -raw     content-stream order, so the two halves of a wrapped
-    #            identifier are ADJACENT and a newline join recovers
-    #            them. 14 rows on a page where the others found 0.
-    #
-    # A LONG BIBKEY IS WHAT WRAPS IT. `0049_EQ0001` fits the Identifier
-    # column; `Geometric_topology_EQ0145` does not, and breaks after the
-    # underscore. Both shapes are in the corpus, so the extraction has
-    # to survive both -- and the sequence is taken from the manifest,
-    # which is why -raw's ordering does not matter.
     r = subprocess.run(["pdftotext", "-raw", str(pdf), "-"],
                        capture_output=True, text=True, timeout=900)
-    rx = re.compile(re.escape(bibkey) + r"_[A-Za-z]{2,6}_?[0-9A-Za-z]+")
-    unwrap = re.compile(re.escape(bibkey) + r"_\s*\n\s*")
-    out, unmatched = {}, collections.Counter()
-    for i, page in enumerate(r.stdout.split("\f"), 1):
-        page = unwrap.sub(bibkey + "_", page)
-        seen, ordered = set(), []
-        for g in rx.findall(page):
-            if g not in known:
-                unmatched[g] += 1
-                continue
-            if g not in seen:
-                seen.add(g)
-                ordered.append(g)
-        if ordered:
-            out[i] = ordered
-    return out, unmatched
+    return r.stdout.split("\f")
 
 
 def main() -> int:
@@ -143,22 +109,26 @@ def main() -> int:
     for t in tabs:
         for i in t["identifiers"]:
             owner[i] = t["ordinal"]
-    ident_of, unmatched = page_identifiers(pdf, bibkey, set(owner))
+    jn = join(man, page_text(pdf))
+    ident_of = {}
+    for r in jn.rows:
+        if r.page is not None:
+            ident_of.setdefault(r.page, []).append(r.identifier)
     print(f"{len(runs)} runs found; identifiers on "
-          f"{len(ident_of)} of {n} pages")
-    if unmatched:
-        print(f"  {sum(unmatched.values())} identifier-shaped tokens NOT in "
-              f"the manifest, e.g. {list(unmatched)[:4]}")
+          f"{jn.pages_with_rows} of {n} pages")
+    if jn.unknown:
+        print(f"  {sum(jn.unknown.values())} identifier-shaped tokens NOT in "
+              f"the manifest, e.g. {list(jn.unknown)[:4]}")
+    if jn.missing:
+        print(f"  {len(jn.missing)} manifest rows on NO page, "
+              f"e.g. {jn.missing[:4]}")
     print()
 
     # WHICH PAGE EACH ROW IS ON. Set membership comes from the text
     # layer; SEQUENCE comes from the manifest, which is the builder's
     # own emission order and needs no inference. Where the two can be
     # compared they are, and the disagreement is printed.
-    page_of = {}
-    for pg in sorted(ident_of):
-        for i_ in ident_of[pg]:
-            page_of.setdefault(i_, pg)
+    page_of = jn.page_of()
     run_of = {}
     for r in runs:
         for pg in r["pages"]:

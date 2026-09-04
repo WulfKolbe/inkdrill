@@ -1,0 +1,105 @@
+597 - the row join, exported
+====================================================================
+
+`inkdrill/rowjoin.py`. 595 proved the join in a harness; this is the
+function, with the three extraction fixes carried into it and tested
+without a PDF.
+
+THE API
+
+    from inkdrill.rowjoin import join, Row, Join
+
+    join(manifest, pages) -> Join
+
+      manifest   a `report.tables.json`: {"bibkey": str, "tables":
+                 [{"ordinal": int, "identifiers": [str, ...]}, ...]}
+      pages      the report's text, ONE STRING PER PAGE, page 1 first
+
+    Join.rows             every manifest row, ordered (table, index)
+    Join.missing          identifiers no page carried
+    Join.unknown          {identifier-shaped token: count} NOT in the
+                          manifest -- the diagnostic, see below
+    Join.pages_with_rows  how many pages carried any row
+
+    Join.by_table()       {ordinal: [Row, ...]} in row order
+    Join.page_of()        {identifier: page}, found rows only
+
+    Row(table, index, identifier, page)      page is None if not found
+
+IT TAKES TEXT, NOT A PATH. Nothing here opens a file or starts a
+process, which is why the three traps below are testable without a
+PDF. `pdftotext -raw` belongs to the caller that has one --
+`tools/tablejoin.py` -- and the module is recorded in
+`OFF_THE_CLI_PATH` because it joins a manifest to a text layer and
+touches no ink, so it has no place in `page_lines`.
+
+--------------------------------------------------------------------
+THE LEFTOVER-TOKEN DIAGNOSTIC, WHICH IS WHAT CAUGHT TRAP ONE
+
+`Join.unknown` returns every token that matched the identifier SHAPE
+and is not in the manifest, with a count.
+
+That exists because the first version of this guessed the pattern --
+`<bibkey>_[A-Z]{2,4}[0-9a-f]+` -- and `0049_DIA_0001` has an
+underscore before its digits. The join reported all six rows of that
+document's image table as MISSING, which reads as a finding about the
+report rather than a bug in the reader. There was nothing in the
+output to distinguish the two.
+
+Now the pattern is deliberately permissive and the MANIFEST decides
+membership, so a pattern still too narrow shows up as tokens the
+manifest does not list rather than as rows the report does not have.
+The two failure modes are separated:
+
+    Join.missing    the manifest names it, no page carries it
+    Join.unknown    a page carries it, the manifest does not name it
+
+Both are asserted in the tests, including the ACCEPTING side of
+`unknown` -- a permanently non-empty diagnostic would be noise nobody
+reads, so a page fully covered by its manifest must return `{}`.
+
+--------------------------------------------------------------------
+THE THREE FIXES, AS GUARANTEES
+
+  G2  permissive pattern, manifest decides, leftovers returned
+  G3  a `<bibkey>_` ending a line joins the next line -- and does NOT
+      leap a blank line, which would invent an identifier out of two
+      rows. `Geometric_topology_EQ0145` wraps the Identifier column;
+      `0049_EQ0001` does not. Without G3, 6,485 of 6,717 rows read as
+      missing on one report, and did.
+  G4  ORDER FROM THE MANIFEST. A page's text returns 0049's image rows
+      as 1, 3, 4, 5, 2 -- the right SET in the wrong SEQUENCE, which
+      mispairs every row while the counts look perfect.
+
+  G5  a row on two pages keeps the FIRST
+  G6  a row on no page is REPORTED, not omitted: a short result and a
+      complete one must not look alike
+  G7  `rows` holds every manifest row exactly once, ordered, so a
+      consumer walks it without re-sorting or re-counting
+
+--------------------------------------------------------------------
+HELD
+
+16 tests, `tests/test_rowjoin.py`. Six mutants, all killed:
+
+    delete the G3 un-wrap                       FAILED (1)
+    G3 allowed to leap a blank line             FAILED (1)
+    G5 last page wins instead of first          FAILED (1)
+    G6 omits missing rows                       FAILED (1)
+    G2 drops the manifest check                 FAILED (1)
+    G4 takes order from the page                FAILED (3)
+
+Full suite 1,165, 37 skipped. The reachability guard refused the new
+module until it was recorded with a reason -- the project's own rule
+working, and the reason is in `OFF_THE_CLI_PATH`.
+
+REGRESSION, against 595's harness numbers, after routing through the
+exported function:
+
+    0049                 3 tables, 2 runs,     34 of     34 rows
+    Geometric_topology   4 tables, 5 runs,  6,717 of  6,717 rows
+
+Both unchanged, zero missing.
+
+    python3 tools/tablejoin.py 0049
+    python3 tools/tablejoin.py Geometric_topology

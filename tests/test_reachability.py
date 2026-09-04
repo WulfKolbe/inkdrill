@@ -44,6 +44,14 @@ OFF_THE_CLI_PATH = {
                 "exists before a consumer asks for it",
     "typeface": "weight/slant/serif signals; measured, and no lines.json "
                 "field carries them yet -- same standing as qc",
+    "rowjoin": "the report-row identifier join (597). Deliberately off "
+               "the page-measuring CLI: it joins a table MANIFEST to a "
+               "report's TEXT LAYER and touches no ink, so it has no "
+               "place in `page_lines`. Its consumer is the report "
+               "harness in tools/, which supplies the text -- the "
+               "module itself reads no file and starts no process, "
+               "which is what lets the three extraction traps be "
+               "tested without a PDF",
 }
 
 
