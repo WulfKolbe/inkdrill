@@ -1,0 +1,138 @@
+621 - the grid skeleton from white space
+====================================================================
+
+THE TEST PASSES ON THE CASE IT WAS BUILT FOR. On the crop MathPix read
+wrong, the white-space grid gives the right dimensions.
+
+    case                       truth    detected   rows   cols
+    clean    0212032 p7         4 x 4    4 x 4      OK     OK
+    ddots    1501.00696 p3      4 x 4    6 x 4      MISS   OK
+    WRONG    1006.4908 p4       1 x 16   1 x 16     OK     OK
+
+        MathPix on that last one: 2 rows, [10, 6]
+        the ink:                  1 row,  16
+
+  Columns: 3 of 3. Rows: 2 of 3, and the miss is the `\ddots` row,
+  which is why it was in the set.
+
+--------------------------------------------------------------------
+1. THE CROPS, AND HOW TRUTH WAS ESTABLISHED
+
+Every one was cropped from its source PDF at 600 dpi through its
+MathPix region, and READ BY EYE. The truth below is what the picture
+shows, not what any tool said.
+
+  CLEAN   0212032 p7, `\left[ array{cccc} \right]`
+          a 4x4 of r_{i,j}. The crop also contains a line of prose
+          ABOVE the matrix, which the region swallowed.
+
+  DDOTS   1501.00696 p3, `\left( array{cccc} \right)`
+          X (x) Y = a 4x4 of x_{ij}Y with \cdots across row 1-2,
+          \vdots down each column and \ddots at (3,3). The crop
+          contains `X (x) Y =` to the LEFT of the delimiter and a
+          full stop to the right.
+
+  WRONG   1006.4908 p4, `\left[ array{llllllllll} \right]`
+          ONE row of sixteen: nu_L nu_R e_L e_R u^r_L u^r_R d^r_L
+          d^r_R u^g_L u^g_R d^g_L d^g_R u^b_L u^b_R d^b_L d^b_R.
+          MathPix declared ten columns and split it into two rows of
+          10 and 6 -- it invented a line break after the tenth item.
+          This is the one the whole task turns on.
+
+--------------------------------------------------------------------
+2. EXCLUDING THE DELIMITERS DOES TWO JOBS
+
+A delimiter is a component nearly as tall as the matrix at the left or
+right extreme, and narrow. Found without reading it:
+
+    clean    L(148,162,175,561)   R(1064,162,1092,561)
+    ddots    L(420, 25,465,474)   R(1595, 25,1641,474)
+    wrong    L( 29, 32, 41,115)   R(2024, 32,2036,115)
+
+The grid is what lies BETWEEN them, bounded vertically by their own
+span -- and that second part removes what the region swallowed for
+free. `clean`'s grid region starts at y=162, so the line of prose
+above it is outside. `ddots`' starts at x=466, so `X (x) Y =` is
+outside. Neither needed a special case.
+
+AND A CROP WITH NO DELIMITERS IS REFUSED. 0902.0431 p14 was the first
+candidate for the "wrong" slot -- MathPix reads it [3,3,3,2] against a
+{ccc} spec -- but the picture is four ragged lines of an ALIGNED
+DISPLAY, not a matrix, and the last line is one centred expression. So
+[3,3,3,2] is not a misreading, and the detector returns
+
+    "the delimiters enclose nothing"
+
+rather than a 4x3 grid. Reporting a grid there would be inventing
+structure, which is the failure this channel would be built to avoid.
+
+--------------------------------------------------------------------
+3. THE SEPARATORS ARE FOUND BY A BREAK, NOT BY A WIDTH
+
+Full-height white columns inside the grid region, sorted widest first:
+
+    clean   94  93  92 | 24  21  20  19   8   8   8   8   2 ...
+    ddots  103  95  89 | 21  16   3   2
+    wrong   39  39  38  38  38  37  37  36  35 ...          (no step)
+
+The step between a column separator and the white inside a cell is
+3.8x, 4.2x and 4.9x. That is a separation, not a tuned cut, and it is
+the same shape 309 measured for word spaces -- two populations with a
+trough between them.
+
+TWO RULES THAT LOOK RIGHT AND ARE NOT:
+
+  Taking the LARGEST step is wrong. `clean` has a 4.0x step at k=11,
+  between two intra-cell gaps, which is later and bigger than the 3.8x
+  that actually divides the columns. First step above 2x, not biggest.
+
+  Always looking for a step is wrong. A matrix whose cells are single
+  symbols has no intra-cell white at all: `clean`'s rows are 40, 40,
+  39 and the answer is three separators. A rule that must find a break
+  invents one and returns 3 rows where there are 4.
+
+--------------------------------------------------------------------
+4. THE \ddots ROW BREAKS ROW DETECTION, AS PREDICTED
+
+    ddots row gaps:  59  42  22  16  16      detected 6 rows, truth 4
+
+The `\vdots` in each column is three separated dots, and the white
+BETWEEN those dots runs the full width of the grid region -- because
+every column has a \vdots at the same height. So they are
+indistinguishable from row separators by the full-width test, and
+there is no step to find: 42/22 is 1.9 and 22/16 is 1.4, both below
+the 2x the column axis clears comfortably.
+
+IT IS NOT FIXABLE BY LOWERING THE RATIO. The true separators are the
+top three of five; a 1.3x cut would take them, but 1.3x is inside the
+noise the other two crops show and would split cells elsewhere. The
+row axis needs something the column axis does not: a \vdots is a
+COLUMN of small round components with large gaps, and recognising it
+as one glyph is a component-level question, not a white-space one.
+
+The column axis is unaffected -- \ddots and \vdots sit inside their
+columns and never bridge a column separator.
+
+--------------------------------------------------------------------
+5. THE ANSWER TO THE QUESTION ASKED
+
+  "does the detected rows x cols match what the matrix actually is?"
+      2 of 3 exactly; the third is right on columns and wrong on rows.
+
+  "on the one MathPix got wrong -- does the grid say the right
+   number?"
+      YES. 1 x 16 against MathPix's 2 x [10, 6]. Both axes right, on
+      the case where the reader invented a row break that is not in
+      the ink.
+
+So the channel has evidence. It is worth building, with the \vdots
+row as a named open problem rather than a hidden one.
+
+WHAT THIS IS NOT. Three crops, all LaTeX-rendered arXiv papers at 600
+dpi. No scan, no handwriting, no nested matrix, no `\hdotsfor` and no
+spanning cell. The delimiter test assumes a bracket that is tall and
+narrow; a matrix set with `\big(` on one side only, or with none,
+falls to the refusal path -- correctly, but it means the channel
+covers delimited matrices and nothing else.
+
+    python3 tools/gridskel.py <crop.pgm> [--cells]
