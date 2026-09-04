@@ -131,3 +131,68 @@ reads `pdfdrill-rows.json`, verifies the sha, refuses rows flagged
 overlaps most -- not by index, because a page's lattice includes the
 printed header and the manifest does not -- and prints the per-edge
 distribution overall and per page.
+
+====================================================================
+608 #3 CONTINUED - the working recipe for the header rule
+====================================================================
+
+The page must be in the label, confirmed, and `\thepage` is the one
+that works. Measured on a two-page longtable with an `\endhead`:
+
+  A LABEL INSIDE \endhead IS MULTIPLY DEFINED
+      \zsavepos{hdr}          2 pages -> 2 definitions of `hdr`
+                              "LaTeX Warning: Label `hdr' multiply
+                              defined."
+
+  \thepage FIXES IT
+      \zsavepos{hdr\thepage}  labels hdr1, hdr2
+                              0 multiply-defined, 0 errors
+
+  \theabspage DOES NOT
+      \zsavepos{hdr\theabspage}
+                              both pages write `hdr0` -- the counter
+                              reads 0 at contribution time -- and it
+                              is multiply defined again. zref-abspage
+                              is loaded and still does not help here.
+
+AND THE POSITION MUST BE TAKEN IN A \noalign, NOT IN THE HEAD'S TEXT.
+
+  \zsavepos placed in the header ROW records a baseline, and the
+  baseline is not the rule:
+
+      page 1   zsavepos 764.076 bp   nearest rule 772.644   -8.568
+      page 2   zsavepos 764.076 bp   nearest rule 772.644   -8.568
+
+  Eight and a half points below the rule it is meant to mark. In a
+  `\noalign` immediately after the header's `\hline`, INSIDE
+  `\endhead`, it lands on the rule:
+
+      \hline A & B \\ \hline
+      \noalign{\zsavepos{hdrule\thepage}}
+      \endhead
+
+      page 1   zsavepos 772.445 bp   nearest rule 772.644   -0.1993
+      page 2   zsavepos 772.445 bp   nearest rule 772.644   -0.1993
+
+      0 errors, 0 multiply-defined, labels hdrule1 and hdrule2.
+
+THE RESIDUAL -0.1993 IS EXACTLY HALF A RULE (0.3985 / 2 = 0.19925),
+so this records the rule's LOWER EDGE and the centreline 610 asks for
+is that value plus `\arrayrulewidth / 2`. That is also the explanation
+of 610's finding: the emitted y values are half a rule out because a
+`\noalign` savepos sits at an edge, and 610's single outlier -- one
+row at -0.199 where 32 were at +0.199 -- is a savepos on the other
+side of its rule.
+
+WHAT I DID NOT CONFIRM. That a `\noalign` placed AFTER `\endhead` is
+discarded. In longtable's structure the material between `\endhead`
+and `\endfoot` is FOOT material, so a savepos there records the foot
+and the question does not arise in the recipe above -- the savepos
+belongs inside the head, before `\endhead`. My attempt to test the
+discard put the `\noalign` in the foot and recorded it twice, which
+measures the foot repeating rather than the head discarding, so it is
+reported as untested rather than as a refutation.
+
+RE-RUN: the four probe documents are minimal longtables of 60 rows
+over two pages; the recipe above is the only one of the four that is
+simultaneously singly-defined, error-free and on the rule.
