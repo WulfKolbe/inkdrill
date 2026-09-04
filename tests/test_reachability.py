@@ -44,6 +44,15 @@ OFF_THE_CLI_PATH = {
                 "exists before a consumer asks for it",
     "typeface": "weight/slant/serif signals; measured, and no lines.json "
                 "field carries them yet -- same standing as qc",
+    "cellrect": "a table cell's rect from EMITTED rule positions (602). "
+                "Off the page-measuring CLI for the same reason as "
+                "rowjoin: it converts numbers a typesetter knows into "
+                "raster pixels and never looks at ink. It is the "
+                "consumer half of 601's spec, written before the "
+                "emitter so the spec could be checked -- 493 cells on "
+                "five pages agreed with `_table_cells` to within 1 px "
+                "on every edge, and the check found a constant "
+                "off-by-one in it first",
     "rowjoin": "the report-row identifier join (597). Deliberately off "
                "the page-measuring CLI: it joins a table MANIFEST to a "
                "report's TEXT LAYER and touches no ink, so it has no "

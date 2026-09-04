@@ -134,8 +134,15 @@ lattice, and after this spec it does not need one.
 
 Added to the row manifest of 580 stage 2:
 
+    *** 602 ADDS ONE FIELD: `rule_width_bp`. The cell is the interior,
+    not the span between rule centres, so the rect is inset by half a
+    rule on each side -- 0.83 px at 300 dpi, systematic at every dpi.
+    The emitter knows `\arrayrulewidth`; the consumer defaults to
+    LaTeX's 0.4 pt when it is absent. ***
+
     {"bibkey": "...",
      "page_height_bp": 841.89,
+     "rule_width_bp": 0.4,
      "tables": [
        {"ordinal": 1,
         "caption": "Display equations",

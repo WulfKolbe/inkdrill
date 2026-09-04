@@ -1,0 +1,139 @@
+602 - the consumer, and the rect agrees with the lattice
+====================================================================
+
+THEY AGREE. 493 cells over five pages of two documents and three
+tables of 4, 5 and 6 columns:
+
+    edge   median   min   max   within 1 px
+      x0      0.0     0     0        100%
+      y0      0.0    -1     0        100%
+      x1      0.0     0     0        100%
+      y1      0.0    -1     0        100%
+
+The x edges are EXACT on every cell. The y edges are 0 or -1 and never
++1, so the emitted rect ends at or inside the lattice cell and never
+past it -- a rect that overran would crop the neighbouring row's ink.
+
+So pdfdrill can emit against a consumer that exists and a test that
+passes, which is what 602 was for. One thing changed in the spec on
+the way, and one bug was caught before any emission.
+
+--------------------------------------------------------------------
+1. THE INDEPENDENCE, WHICH IS THE POINT
+
+A checker fed a manifest derived from the lattice would agree by
+construction and prove nothing. So the "emitted" side comes from the
+PDF's OWN VECTOR CONTENT -- `mutool trace` reports the rules as
+`stroke_path` at linewidth .3985, which is `\arrayrulewidth` -- and
+that is the same geometry `\zsavepos` would report, read from the
+typesetter's output rather than from the raster.
+
+  Geometric_topology p20:  7 vertical rules, 22 full-width horizontal
+                           -> 6 columns, 20 rows
+  the lattice on the same page: 6 columns, 20 rows
+
+Two detections, no shared code, same answer.
+
+--------------------------------------------------------------------
+2. THE BUG THE CHECKER CAUGHT, BEFORE 316,007 ROWS
+
+The first consumer returned `floor(x) - 1` for the high bounds. The
+checker reported:
+
+    x1   median -1.0   min -1   max -1     over 60 cells
+
+A CONSTANT -1 ON EVERY CELL OF EVERY ROW. `floor(x)` is already the
+last pixel index at or inside x, so the further -1 was one too many;
+`ceil` for the low bound and `floor` for the high one is the
+half-open-to-closed conversion and needs nothing else.
+
+That is the distinction the checker was built to draw and it drew it:
+a SYSTEMATIC residual is a bug in the consumer and fixable; a
+SCATTERED one would have been a real difference between the two
+detections and a reason to change the spec. Reporting a per-edge
+distribution rather than a pass is what made the two tellable apart.
+
+--------------------------------------------------------------------
+3. A CHANGE TO 601's FORMAT: THE RULE WIDTH IS NEEDED
+
+601 specified `column_rules_bp`, `rule_above_bp`, `rule_below_bp` and
+`page_height_bp`. Building the consumer showed a fifth field is
+required.
+
+THE CELL IS THE INTERIOR, NOT THE SPAN BETWEEN RULE CENTRES.
+`_table_cells` reports the enclosed BACKGROUND region, and the
+background begins where the rule ends, so the rect is inset by half a
+rule on each side. At 0.4 pt and 300 dpi that is 0.83 px a side.
+Dropping the inset moves five of the fifteen tests and is a systematic
+error at every dpi.
+
+    add   "rule_width_bp": 0.4
+
+`\arrayrulewidth` is a document setting and the emitter knows it; the
+consumer defaults to LaTeX's 0.4 pt when it is absent, which is right
+for every report in this corpus and wrong for one that changes it
+silently.
+
+--------------------------------------------------------------------
+4. THE CONSUMER
+
+`inkdrill/cellrect.py`
+
+    cell_rect(column_rules_bp, rule_above_bp, rule_below_bp, col, *,
+              page_height_bp, dpi, rule_bp=0.4) -> Rect
+    row_rects(...)  -> [Rect, ...]        every cell of one row
+
+    Rect(x0, y0, x1, y1)   raster pixels, y DOWN, inclusive both ends
+                           .width .height .is_empty
+
+  G1  pure: numbers in, a Rect out. No file, no process, no raster --
+      the geometry is the typesetter's, not measured from ink
+  G2  input PDF user space (bp), y UP from the bottom; output raster
+      px, y DOWN, inclusive, so a caller slices a mask with it
+  G3  `page_height_bp` is REQUIRED, not defaulted: A4's height on an
+      a3-landscape report moves every row by 1,452 px at 300 dpi, and
+      the reports are a3 landscape
+  G4  inset by half a rule; `rule_bp` an argument, LaTeX's default
+  G5  column rules must ascend and `above > below`, both ASSERTED
+      rather than silently sorted -- a caller with them backwards has
+      a bug the rect would otherwise hide
+  G6  an empty rect is returned as-is, never clamped: a zero-width
+      cell is a finding about the emission
+
+HELD. 15 tests, `tests/test_cellrect.py`. Seven mutants, all killed:
+
+    restore the off-by-one              FAILED (5)
+    drop the half-rule inset            FAILED (5)
+    no y flip                           FAILED (5)
+    ceil/floor swapped                  FAILED (3)
+    drop the ascending guard            FAILED (1)
+    drop the above/below guard          FAILED (1)
+    dpi ignored                         FAILED (1)
+
+Full suite 1,180, 37 skipped.
+
+THE FIRST DRAFT OF THE TESTS ASSERTED MORE THAN THE MEASUREMENT SHOWED
+and failed, which is worth recording. It asserted the y edges equal to
+the lattice; the measurement says 0 or -1. The tests now pin the x
+edges exactly, the y edges to the measured 1 px, and the SIGN of the y
+residual separately -- three claims of different strength rather than
+one tolerance standing in for all of them.
+
+--------------------------------------------------------------------
+5. THE CHECKER, AND WHAT TO RUN ON STAGE 2's FIRST OUTPUT
+
+    python3 tools/pdfrules.py <report.pdf> <page>
+    python3 tools/cellcheck.py <document> <page> --rows 30
+
+`pdfrules` is the stand-in emitter and is throwaway once stage 2
+exists. `cellcheck` is not: point it at a real manifest and it is the
+acceptance test for the emission, per page, reported as a per-edge
+distribution. Run it on ONE document before the corpus, and read the
+shape of the residual rather than a pass -- section 2 is why.
+
+WHAT IS NOT ESTABLISHED. Five pages of two documents, both LaTeX
+reports built by the same builder at a3 landscape. A document whose
+`\arrayrulewidth` differs, or whose rules are drawn as filled
+rectangles rather than strokes, is not covered -- `pdfrules` reads
+`stroke_path` only, and would return nothing rather than something
+wrong, which is the right failure but is still a gap.
