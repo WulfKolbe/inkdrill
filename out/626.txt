@@ -1,0 +1,110 @@
+626 - the fixed build, and the fifth candidate is excluded
+====================================================================
+2501.06662 report.pdf rebuilt 2026-09-05 12:26, page 2, 300 dpi
+
+THE SCAN COLUMN READS. Every data cell is non-zero, the grey band is a
+real greyscale image, and BOTH renderers agree. The rasteriser was
+never the problem -- 624's placement finding was the whole of it.
+
+--------------------------------------------------------------------
+1. THE PLACEMENT MOVED
+
+    before (624)   six images at x  59.83 .. up to  405.65 bp
+    now            six images at x 773.56 .. up to 1119.39 bp
+    Scan column                     767.76 .. 1136.64 bp
+
+All six are inside it.
+
+2. THE DIRECT COUNT, SAME METHOD AS 624
+
+    col 5 (Scan)    rect                          ink      was
+    header    (3199,  215, 4736,  264)           2867     2867
+    data 1    (3199,  266, 4736,  609)           8447        0
+    data 2    (3199,  611, 4736, 1560)          23337        0
+    data 3    (3199, 1563, 4736, 2014)           7817        0
+
+    and the remaining three: 8857, 10262, 8764
+
+3. THE GREY HISTOGRAM, col-5 data band x 3199..4736 y 266..2014
+
+    2,686,676 pixels
+    distinct values      256      (624: 1)
+    darkest                0      (624: 255)
+    non-white (<250)  94,686 = 3.52%   (624: 0 = 0.00%)
+    most common       255 x 2,501,580, then 254, 253, 252
+
+Not pure white, and the tail of 254/253/252 is what a JPEG scan's
+anti-aliased edge looks like. In 624 the same band held exactly one
+value.
+
+--------------------------------------------------------------------
+4. TWO RENDERERS, ONE HISTOGRAM EACH
+
+    renderer      raster        distinct  darkest  non-white   ink@200
+    gs pgmraw     4961x3508          256        0      3.52%    47,286
+    pdftoppm      4961x3508          256        0      3.97%    47,773
+
+THEY AGREE. The ink counts differ by 487 pixels in 47,000, about 1%,
+which is the ordinary difference between two JPEG decoders and two
+anti-aliasing choices at the same threshold -- not a dropped image.
+
+SO THE FIFTH CANDIDATE IS EXCLUDED, and it is worth saying how
+completely: it was never testable on the old build, because there the
+placement was wrong and BOTH renderers would have drawn white. The
+test only became meaningful once the images were in the column, and
+now that they are, neither device drops them. Ghostscript's pgmraw
+renders this page's image XObjects correctly at 300 dpi.
+
+--------------------------------------------------------------------
+5. THREE COUNTS THAT NOW AGREE
+
+    identifiers in the page-2 text layer      6
+    image placements (mutool trace)           6
+    lattice data rows                         6     (7x6, header + 6)
+
+The lattice was 6x6 before the fix and is 7x6 after -- one more row,
+because the images give the rows their height and the sliver filter
+now keeps a row it previously merged. All three counts agreeing is
+the check 624 could not make, since the column was empty.
+
+  CHECKED AND DISMISSED: rows 4 and 6 report identical ink in columns
+  3 and 4 (17,376 and 5,527). Two rows agreeing to the byte in two
+  columns is the kind of coincidence worth opening. They are not
+  duplicates -- the bands are not byte-identical, the rects are 691 px
+  apart, and column 5 differs (8,857 against 8,764). Both rows are
+  243 px tall with similar-length source, which is enough to produce
+  it.
+
+--------------------------------------------------------------------
+6. THE TWO OPEN ITEMS FROM 624, BOTH CLEARED
+
+  THE LABEL WARNING IS GONE. The old report.log repeated "LaTeX
+  Warning: Label `rul00001' multiply defined"; the new one has ZERO.
+  608 #3's problem -- a label in a repeating head -- is fixed in this
+  build.
+
+  PAGE 3 NOW READS SIX COLUMNS, not five, and its Scan column reads
+  through:
+
+      page 3 lattice          6 x 6      (was 6 x 5)
+      last-column ink         2867, 11190, 23758, 10578, 3284, 4567
+
+  624 suspected the five-column reading was downstream of the same
+  misplacement rather than a separate defect, and it was: with the
+  images inside their cells the sixth column has ink to be bounded by
+  and the lattice finds it. One cause, three symptoms -- the empty
+  column, the missing column, and the row count.
+
+--------------------------------------------------------------------
+7. WHAT IS AND IS NOT SETTLED
+
+  SETTLED: pages 2 and 3 of this document. The read that returned 0 of
+  6 now returns 6 of 6, the cause was the placement as 624 said, and
+  the rasteriser is excluded by two devices agreeing.
+
+  NOT SETTLED: the other 16 pages of this document and the other 20
+  documents. Nothing here measures them, and the page-3 result is a
+  reason to expect the fix carries rather than evidence that it does.
+  The cheap check before publishing is the col-5 data cells reading
+  non-zero on every page of every document, which is one pass of the
+  same count used here.
