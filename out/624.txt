@@ -1,0 +1,125 @@
+624 - the cell read, with the geometry printed
+====================================================================
+2501.06662, report.pdf page 2, 300 dpi, A3 landscape 1190.55 x 841.89
+
+IT IS NONE OF THE THREE. The rects are right, the ink is not outside
+them, and the five-tuple is not at fault -- because THE SCAN COLUMN IS
+EMPTY. The images are on page 2, they are placed at the correct
+VERTICAL position for their rows, and they are drawn in the wrong
+COLUMN: at the left edge of the table, across columns 0 to 3.
+
+--------------------------------------------------------------------
+1. THE NUMBERS ASKED FOR
+
+Lattice 6 rows x 6 columns. Ink counted DIRECTLY over each rect, by
+summing 0xFF bytes -- not through the five-tuple:
+
+    Scan column (col 5)        rect (x0,y0,x1,y1)      ink
+    header      row 0    (3199,  215, 4736,  264)     2867
+    data        row 1    (3199,  266, 4736,  763)        0
+    data        row 2    (3199,  765, 4736, 1067)        0
+    data        row 3    (3199, 1069, 4736, 1531)        0
+
+    the column beside it (col 4), same rows, same y-bands
+    header      row 0    (1990,  215, 3196,  264)     2635
+    data        row 1    (1990,  266, 3196,  763)     6281
+    data        row 2    (1990,  765, 3196, 1067)     4984
+    data        row 3    (1990, 1069, 3196, 1531)     5822
+
+  Full grid, ink per cell:
+
+      row      col 0   col 1   col 2   col 3   col 4   col 5
+        0       2590    1333    1248    3083    2635    2867
+        1       2695    1077    2797   35419    6281       0
+        2       3283    2384    4593   13980    4984       0
+        3       2438    2761    3580   17811    5822       0
+        4       3624    5206    6213   59745   14535       0
+        5       2275    1861    2184   36194    5826       0
+
+--------------------------------------------------------------------
+2. WHY IT IS NOT ANY OF THE THREE
+
+  NOT the five-tuple. The count above is a direct byte count over the
+  rect. It is zero. Nothing downstream of the crop can be blamed for a
+  zero that is already zero in the raster.
+
+  NOT the rects. Column 5's data rects share their y-bands EXACTLY
+  with column 4, which reads 6281, 4984 and 5822 over the same rows.
+  They are 1537 px wide, on-page (the raster is 4961 wide), non-empty,
+  and in ascending order. A shifted or zero-height rect cannot produce
+  a neighbour that reads correctly on the same band.
+
+  NOT ink outside the rects. In row 1's band the only ink anywhere to
+  the right of x=3199 is at x 4736..4737 -- the table's right-hand
+  rule, two pixels of it. And it is not a threshold artefact: sampled
+  over the whole col-5 data band the grey histogram is 85,158 pixels
+  of value 255 and NOTHING else. Darkest value 255.
+
+--------------------------------------------------------------------
+3. WHAT IT IS: THE IMAGES ARE DRAWN IN THE WRONG COLUMN
+
+`pdfimages -list` says page 2 carries three image objects, and
+`mutool trace` says five image placements. All five are at
+
+    x = 59.825 bp, extending to at most 405.65 bp
+
+against the lattice's own columns, which agree with the PDF's vertical
+rules to a fraction of a point:
+
+    col 0    54.00 .. 122.40 bp        rules: 53.65
+    col 1   123.12 .. 154.56           122.69
+    col 2   155.28 .. 203.76           154.89
+    col 3   204.48 .. 476.88           204.09
+    col 4   477.60 .. 767.04           477.24
+    col 5   767.76 .. 1136.64          767.38, 1136.90
+
+So every image begins inside COLUMN 0 and spills across columns 1, 2
+and into 3. None of them is within 360 bp of the Scan column.
+
+AND THE VERTICAL POSITION IS CORRECT. Each image falls inside the row
+band it belongs to:
+
+    row 1   band  63.84 ..  183.12 bp     image 132.1 .. 179.5
+    row 2   band 183.60 ..  256.08        image 219.8 .. 252.5
+    row 3   band 256.56 ..  367.44        image 307.4 .. 364.0
+    row 4   band 368.16 ..  651.36        image 517.3 .. 647.8
+    row 5   band 651.84 ..  785.28        image 735.1 .. 781.8
+
+Right row, wrong column, five times out of five. The crops exist on
+disk (445 files; the five identifiers on this page all resolve, 17 KB
+to 53 KB each) and report.tex references them by name, so this is not
+a missing file and not a failed \includegraphics -- the image is drawn,
+at the wrong x.
+
+--------------------------------------------------------------------
+4. WHERE THE FIX GOES
+
+Not in the lattice and not in the five-tuple: both are reporting the
+raster correctly. It is in what the emitter typesets.
+
+The suspect is visible in report.tex. The last cell of each row reads
+
+    & \pdcolpos{col00006}\rule{0pt}{0.6mm}\\[-0.6mm]\includegraphics
+      [width=120.0mm]{report-crops/2501.06662_EQ0051.jpg}...
+
+with a `\\[-0.6mm]` between the strut and the image, in a
+`p{126mm}` column. Naming it as the cause is pdfdrill's to confirm --
+what is measured here is that the image lands at the table's left
+edge at the row's correct height, which is the signature of content
+leaving its cell horizontally while keeping its place vertically.
+
+TWO THINGS SEEN IN PASSING, both worth a look on that side:
+
+  report.log carries "LaTeX Warning: Label `rul00001' multiply
+  defined", repeatedly. That is 608 #3's problem -- a label in a
+  repeating head -- present in this build.
+
+  Page 3's lattice reports 6 rows x FIVE columns where page 2 reports
+  six, in the same report. Its last column also reads header-only.
+  A column count that changes between pages of one table is the
+  instability 601 section 4 recorded; here it may be downstream of
+  the same misplacement.
+
+NOTHING WAS CHANGED. 0 of 21 publish until the placement is fixed, and
+the number that says it is fixed is the col-5 data cells reading
+non-zero on this page.
