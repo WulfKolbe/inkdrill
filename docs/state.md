@@ -851,7 +851,7 @@ of a tuple that had **already drifted silently at two** — both dropping
 `parts` and `closes`. They now live in the package as
 `classify.signature_features` and `classify.template_of`, and the
 harness imports them. And the whole classifier path first ran on a real
-page with **905 tests green**: nothing supplied a classifier, so a
+page with **1188 tests green**: nothing supplied a classifier, so a
 missing `InkMask` import raised `NameError` only on real data. A branch
 no test reaches executes first in production.
 

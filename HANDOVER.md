@@ -1,7 +1,7 @@
 # HANDOVER — inkdrill
 
-Written 2026-08-21. Read `docs/state.md` for the full record; this is
-the page you need to resume.
+Written 2026-08-21, last revised 2026-09-06. Read `docs/state.md` for
+the full record; this is the page you need to resume.
 
 ## What this is now
 
@@ -17,7 +17,16 @@ disagree. The residual is the product.
 `inkfit.py`, `punctprofile.py`, `threeway.py`, gated by
 `tools/corpusgate.py`, vocabulary in `tools/findings.py`.
 
-**Suite:** 1,072 tests, 37 skipped (opt-in corpus/font modules).
+**Three modules are off the CLI path on purpose** and recorded with
+their reason in `tests/test_reachability.py`'s `OFF_THE_CLI_PATH`:
+
+| module | what it is |
+|---|---|
+| `skeleton.py` | Zhang-Suen thinning, the junction count and `parts()` (491, 498). Measured across 20 font-blocks and NOT wired in — 26% of glyphs change their junction count with size |
+| `rowjoin.py` | a report's table manifest joined to its text layer: `(table, row) -> (page, identifier)` (597). Takes TEXT, not a path |
+| `cellrect.py` | a cell's rect from emitted rule positions (602). Numbers in, `Rect` out; no raster |
+
+**Suite:** 1,188 tests, 37 skipped (opt-in corpus/font modules).
 
 ## The measured constants — quote the population with the number
 
@@ -29,11 +38,21 @@ disagree. The residual is the product.
 | stacked gap bound | 1.5× median component height | without it the count measures line spacing |
 | column floor | 2% of table span, **content-decided** | width is a pre-filter only |
 | report lattice dpi | **≥200** | below it, scan cells merge with their rules |
+| MathPix's render | **250 dpi** | derived from page raster / MediaBox, exactly 250.0 on four of four comparable documents (591). NOT 300, and a crop carries no usable density of its own |
+| ring channel floor | **p99 0.890 holes/component** | 400 crops from 93,028 across 856 documents; not one reaches 2.0, against the ~3.4 where hole counts become speckle (591) |
+| `\mathcal` junction cut | **4** | derived from the exception (txfonts G) not the gap; holds on CM, LM and XITS, fails on txfonts (495, 497) |
 
 Current findings, 49 of 49 P13 documents: **4,262 rows, ~399 findings
-(9.4%), 228 in the component channel.** Stale by one regeneration —
-42 previously-demoted rows now render and belong back in the
-measurement; a fresh pass is ~2 hours.
+(9.4%), 228 in the component channel.** STALE — see open item 9: 32 of
+37 sampled documents have a compare TSV older than their report.pdf,
+so this describes a corpus that has since been rebuilt more than once.
+Treat it as history until a fresh pass lands.
+
+**Every measured figure since 495 is in `out/NNN.txt`, 63 files, one
+per task, each carrying its population, its split rule and the command
+that reproduces it.** `git log --diff-filter=A -- out/NNN.txt` dates
+one; do not use `git log -1` on it, which returns whatever retrofit
+last touched the file.
 
 ## Open items
 
@@ -52,16 +71,15 @@ measurement; a fresh pass is ~2 hours.
    unilaterally.
 5. **`prune()` unused by `emit`**; CFG parser undecided; `group()`
    absorbs an inline limit — all need symbol identity.
-6. **The compare probe still selects 5-column pages; the reports are
-   now 6.** pdfdrill's task 099 added a Confidence column, so a
-   display-equation table with crops is **6 columns with crops, 5
-   without** (inline formulas 5, tables 4, diagrams 4, each section
-   preceded by `\clearpage` so no page mixes two). The fix is
-   `reportcompare.py`'s probe; the fix is MINE and the change
-   ORIGINATES in 099, which matters because **it will move row counts
-   corpus-wide.** If someone later asks why the counts moved, the
-   answer is a column that was added, not a change in what the ink
-   found. Write that beside the new numbers when they land.
+6. ~~The compare probe still selects 5-column pages~~ **CLOSED.**
+   `pagedetect.target_columns` reads the count from each document's
+   own `report.tex` (the header carrying both `Rendered` and `Scan
+   image`), so both eras work. 496 measured 843 documents at 6 and
+   492 with no scan column at all. **And 595 then made the whole
+   mechanism unnecessary** — see the manifest section below: a run's
+   column count cannot identify a table anyway, and 601 §4 showed the
+   count is not even stable, reading 6 at 300 dpi where it reads 5 at
+   150.
 7. **`0902.0431`'s render cache has a 16-page hole** (113–115,
    118–130), so `overrun.py` withholds identifiers for its 320
    flagged rows and three of the four cases pdfdrill confirmed by eye
@@ -76,6 +94,30 @@ measurement; a fresh pass is ~2 hours.
    artifact it was measured on**, and only the first has a guard. It
    is held by a message between sessions, which is why it is written
    down.
+
+9. **The corpus figures are stale against the corpus.** 496 found
+   **32 of 37** sampled documents with a `report.compare.tsv` OLDER
+   than their `report.pdf`, and the corpus-wide `A_eq_B` rate of
+   58.6% therefore describes a previous build. Any number quoted from
+   `report.compare.tsv` needs its freshness checked first;
+   `tools/comparestale.py` does it.
+
+10. **`warp.py`'s docstring prints the numbers of the defect it
+    fixed**, under a heading reading `FIXED`. It has now been read as
+    current twice, once as the premise of a whole task. The table is
+    marked in place and points at `out/581.txt`, but the general
+    lesson is in the failure classes below.
+
+11. **The five-tuple's stability is measured and it is not good.**
+    496: at 300 vs 600 dpi, **36.2% of rows** change their hole count
+    and **16.6% change their finding class**. It concentrates at the
+    weakest boundary — 96% of class changes are noise/clean or
+    noise/weak, and the `component` class keeps its verdict on 94.3%.
+    The cause is the render, not the resolution: the rendered column
+    is drawn with anti-aliasing OFF (2 grey levels against the scan's
+    256), and turning it on takes hole instability from 75.0% to
+    9.4%. **Not acted on** — it moves every recorded distance in the
+    corpus, and whether it moves them toward the scan is unmeasured.
 
 ## Known failure classes — every one cost real time here
 
@@ -179,6 +221,57 @@ measurement; a fresh pass is ~2 hours.
   a docstring. Ask of any number in prose: which commit produced it,
   and has the code it measured changed since?
 
+- **A guessed pattern reports a whole class as absent.** 597's first
+  identifier regex was `<bibkey>_[A-Z]{2,4}[0-9a-f]+`, which misses
+  `0049_DIA_0001` — an underscore before the digits — and reported all
+  six rows of that table as MISSING. Nothing distinguished a reader
+  bug from a report finding. The fix is not a better guess: extract
+  permissively and let the MANIFEST decide membership, then RETURN the
+  leftovers. `Join.unknown` exists for exactly that and is asserted
+  on both sides, because a permanently non-empty diagnostic is noise
+  nobody reads.
+- **A long identifier wraps and disappears.** `0049_EQ0001` fits a
+  report's Identifier column; `Geometric_topology_EQ0145` does not and
+  breaks after the underscore. `pdftotext` plain found 0 on such a
+  page, `-layout` found 0 — it preserves the visual row, so the halves
+  are separated by the rest of the line — and `-raw` found 14. Without
+  the un-wrap, **6,485 of 6,717 rows read as missing**, and did.
+- **Reading order is not row order.** Plain `pdftotext` returned
+  0049's image rows as 1, 3, 4, 5, 2: the right SET in the wrong
+  SEQUENCE, which mispairs every row while the counts look perfect.
+  Take the sequence from the manifest, never from the page.
+- **A raw byte scan cannot tell a stripped attachment from a
+  compressed one.** 580's first probe reported ghostscript stripping
+  an embedded file in the same row where `pdfdetach` said the file was
+  still there. Three of seven passes were false strips, and the
+  conclusion "write the channel after the last PDF pass" would have
+  been drawn from a reader artefact. Extract and compare the BYTES.
+- **An incidental refusal stops working when the numbers line up.**
+  `cell_rect` refused a page-break row because its two y values came
+  from different pages and so were not ordered — the ordering guard
+  caught it, not the page-break flag. A row breaking near the top of a
+  page would have passed. Refuse by name (602's G7), then the refusal
+  survives the coincidence ending.
+- **The header and the row are built in two places.** Reordering
+  `compare`'s header list alone, leaving the row-building untouched,
+  passed the whole suite while every label pointed at another
+  column's data. Assert position AND name together.
+- **A tolerance asserted as an equality fails honestly.** 602's first
+  test asserted the emitted y edges EQUAL to the lattice's; the
+  measurement said 0 or -1. Pin the exact part exactly, the tolerant
+  part to its measured tolerance, and the SIGN separately — three
+  claims of different strength rather than one standing in for all.
+- **A number in a comment outlives the code it described.** See open
+  item 10.
+- **`pkill -f` matches the shell running it.** It killed this session
+  twice (exit 144), orphaning children both times. Collect PIDs with
+  `pgrep`, then `kill` them.
+- **Wait on process exit, not on log growth.** 589's analysis ran when
+  six logs had stopped growing; one row finished afterwards and the
+  published figures were one row short. `while ps -eo args | grep -q
+  <pattern>; do sleep N; done` is the form. Launch it ONCE — layering
+  a fresh waiter at each progress check left four orphans for one job.
+
 ## Chat reports open and close with a Berlin timestamp
 
     2026-08-27 10:56 (MESZ, +02:00)
@@ -208,13 +301,76 @@ but a rename is now a DELIBERATE act with a known blast radius.
 | pdfdrill.github.io deploy gate | `rows` and each row's `flag` from `report.ink.json` | a sixth flag value fails the deploy by name, telling whoever sees it the legend needs updating in the same commit |
 
 The flag vocabulary they depend on is `tools/findings.py`'s `FLAGS`,
-exactly five: **component, weak, stable, noise, clean**. That tuple
+now **six: absent, clean, noise, weak, stable, component**. That tuple
 is the published legend of a website. Adding a class is allowed and
 breaks the deploy loudly; it must not be added silently.
+
+`absent` was added by 238 and this page said "exactly five" until
+2026-09-06 — a stale count in the one place that documents a
+published contract. If you add a seventh, change this line in the
+same commit as `FLAGS`, or the next reader inherits the same defect.
+
+**`absent` before `clean` is the whole point of it.** A row with no
+ink on either side scores distance 0 and component delta 0 —
+arithmetically a perfect match, from a comparison that did not
+happen. Reading it as `clean` reports an absence as the best possible
+result.
 
 Key presence over key value is the distinction worth keeping: a
 genuinely hole-free page and a renamed field are the same number and
 different keys, and only the second is a defect.
+
+## The row manifest — the interface being built with pdfdrill
+
+A live piece of work, spread over out/590, 595, 597, 598, 601, 602,
+606, 608, 610, 624, 626. The state on 2026-09-06:
+
+**WHY.** `inkmeasure` had to infer which table a lattice run belonged
+to, and could not: 595 measured a run holding TWO tables (0049's
+equations and formulas are both 5 columns and contiguous) and a table
+spanning TWO runs. 608 of 717 documents have two tables sharing a
+column count, so an ordinal has nothing to fall back on.
+
+**THE JOIN, which needs nothing new.** `rowjoin.join(manifest, pages)`
+takes `report.tables.json` — 717 documents already have one — and the
+identifiers in `report.pdf`'s text layer, and returns every row's
+page. 6,717 of 6,717 rows on a 300-page report, 34 of 34 on a 4-page
+one, zero missing. Reading the TEXT LAYER is not a G6 violation: G6
+forbids reading text off a RASTER.
+
+**THE RECT SPEC** (601, 602, 610). Per TABLE `column_rules_bp`
+(ncols+1, ascending, once); per ROW `page`, `rule_above_bp`,
+`rule_below_bp`; per document `page_height_bp` and `rule_width_bp`.
+
+| decided | because |
+|---|---|
+| **centrelines**, not edges | a derived number must not sit where a measured one belongs, and an edge cannot afterwards be told from a centreline half a rule away. `cell_rect` insets by `rule_width_bp/2` |
+| **bp**, not sp or px | `bp = sp / 65536 * 72 / 72.27`. Skipping the 72/72.27 is worth 13 px at 300 dpi and is PROPORTIONAL, so it looks right at the top of a page and drifts down it |
+| **rule positions**, not content | the lattice cell is the hole BETWEEN rules; emitting rules makes the two sides agree by construction rather than within a tolerance |
+| **per row**, not per cell | column boundaries are constant across every page a table occupies, measured to the pixel |
+| **no `run`** | 601 §4: the same pages are 2 runs at 150 dpi and 1 at 300. A run is not a property of the document |
+
+**THE RESIDUAL METHOD.** Four signed per-edge deltas in raster px,
+reported as median/min/max and fraction within 1 px, **never as a
+pass**. A SYSTEMATIC offset is a converter bug and fixable; a
+SCATTERED one is a real difference between the detections and a reason
+to change the spec. That distinction found a constant -1 in
+inkdrill's own consumer over 60 cells, and later a +6.177 bp origin
+error and a missing rightmost rule in the emitter.
+
+**TOOLS.** `tools/tablejoin.py` (join over a document),
+`tools/manifestcheck.py` (residual against an emitted manifest, pairing
+rows to lattice rows BY GEOMETRY because a page's lattice includes the
+printed header and the manifest does not), `tools/cellcheck.py` and
+`tools/pdfrules.py` (the same against the PDF's own vector content —
+an independent source, which is the point), `tools/rulediff.py`
+(emitted bp against the PDF's, no raster and no dpi).
+
+**WHAT REMAINS.** The join places a row on a PAGE, not on a lattice
+ROW. Within a run the pairing of the k-th identifier to the k-th
+lattice row is still positional, and pages are 28 rows deep on
+Geometric_topology. A manifest carrying the CELL rect closes it; that
+is 598 #4 and #2's remaining half.
 
 ## Coordination
 
@@ -223,3 +379,16 @@ and the corpus, and holds regeneration while a compare is in flight.
 Standing contract: it runs this project's probe as its acceptance test
 before handing reports over; neither session edits a shared artifact
 the other is reading.
+
+**A manifest must name the build it describes.** 606 measured one 14
+seconds OLDER than the `report.pdf` beside it, whose rows were not in
+that PDF at all. `pdfdrill-rows.json` now carries
+`measured_against: {pdf, sha256}` and `manifestcheck` refuses on a
+mismatch. This is the same class as `report.compare.source`: an
+artifact can be stale against its source AND a result stale against
+the artifact, and only the first had a guard.
+
+**Tasks arriving here that are pdfdrill's** (563, 564, 66, 483-485)
+are reported as theirs rather than executed. `ListAgents` shows no
+pdfdrill session reachable from this one, so relaying is not possible
+and saying so is the useful answer.

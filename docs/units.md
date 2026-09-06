@@ -527,7 +527,7 @@ consuming memory when a screened figure appears.
 Run: `python3 -m unittest discover -s tests -t .`
 
 ```
-Ran 635 tests in 2.4s
+Ran 1188 tests in 2.4s
 OK (skipped=23)
 ```
 

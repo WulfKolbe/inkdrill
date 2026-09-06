@@ -27,16 +27,22 @@ inner-loop performance analysis and the ranked improvement list.
 
 **Current state.** All fifteen units exist. U14 is its geometry only (no
 structure tree) and U8's band tier was deliberately not built; both are
-recorded with the measurement that decided them. U9's rasterizer is
-**under way**: `type1.py` reads Type 1 font programs (font -> charstring
-bytes); the charstring interpreter and scan conversion are not built
-yet. See `docs/state.md` §5 for why that chain unblocks maths
-classification and the structure tree.
+recorded with the measurement that decided them. **U9's rasterizer is
+COMPLETE**: `type1.py` -> `charstring.py` -> `scan.py` renders a glyph
+from a `.pfb` to an `InkMask` with no ghostscript and no PDF, and 495
+to 497 used it across 22 font-blocks. See `docs/state.md` §5 for why
+that chain unblocks maths classification and the structure tree, and
+the module list below for each part's oracle.
+
+Three modules sit off the CLI path deliberately and are recorded with
+their reason in `tests/test_reachability.py`: `skeleton.py` (thinning
+and the junction count), `rowjoin.py` and `cellrect.py` (the report
+row manifest — see HANDOVER).
 
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 635, of which 23 skip
+python3 -m unittest discover -s tests -t .   # full suite: 1188, of which 37 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
