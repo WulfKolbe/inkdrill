@@ -470,15 +470,21 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                 pj += 1
 
             # roots BEFORE any union caused by this run -- a merge is
-            # defined by what was distinct on arrival, not after the fact
-            roots_before = tuple(sorted({uf.find(p) for p in adj}))
+            # defined by what was distinct on arrival, not after the fact.
+            # Read ONLY by the MERGE event below, so it is not paid for
+            # at Capture.NONE -- which is the level every topological
+            # caller uses, since G4 says NONE already yields all counts.
+            roots_before = (tuple(sorted({uf.find(p) for p in adj}))
+                            if keep_events else ())
 
             if not adj:
                 if keep_events:
                     events.append(Event(EventKind.BIRTH, line, nid))
 
             for p in adj:
-                kids_of.setdefault(p, []).append(nid)
+                # kids_of is read only by the SPLIT block below.
+                if keep_events:
+                    kids_of.setdefault(p, []).append(nid)
                 if keep_graph:
                     node.up.append(p)
                     nodes[p].down.append(nid)
@@ -513,13 +519,16 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                                         tuple(sorted(kids))))
 
         # -- closures ------------------------------------------------------
-        touched = {uf.find(n) for (_, _, n) in cur}
+        # `touched` costs one find per run of the line and `open_roots`
+        # is read only here and in the final-closure block, both of
+        # which are event-only.
         if keep_events:
+            touched = {uf.find(n) for (_, _, n) in cur}
             for r0 in sorted(open_roots):
                 if uf.find(r0) not in touched:
                     events.append(Event(EventKind.CLOSE, line, r0, (),
                                         (uf.find(r0),)))
-        open_roots = touched
+            open_roots = touched
 
         prev, prev_line = cur, line
 
