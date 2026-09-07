@@ -1,0 +1,52 @@
+STEP 4 -- the explicit case dispatch on the number of parents
+=============================================================
+
+Change (inkdrill/sweep.py)
+--------------------------
+The edge loop no longer treats every parent alike.
+
+  nadj == 0   BIRTH. The only place a counter pair is created.
+  nadj >= 1   FIRST parent, handled OUTSIDE the loop: this edge can
+              NEVER close a cycle, because `nid` was created this
+              iteration and has not been unioned, so `rn == rp` is
+              impossible. No root comparison, and `nid`'s counts are 0
+              by definition rather than by lookup.
+              -> this is the 86-91% case, and it is now the cheap one.
+  k in (pi+1, pj)  FURTHER parents: the only place a CYCLE can occur.
+
+The `adj` list is no longer built at Capture.NONE: the touching runs are
+the slice [pi, pj) of `prevline` and the ids are read back by index. The
+two-pointer scan is written out twice, once appending to `adj` for the
+event path and once bare, rather than branching per step -- a first
+version used one scan plus a list comprehension and made Capture.GRAPH
+1.5% SLOWER, which is why it is written this way.
+
+Equivalence
+-----------
+tests.test_sweep_equiv : 8 tests, ALL PASSED
+  test_fixtures  test_empty_mask  test_root_identity_trap
+  test_fuzz  test_glyph_like            (828 checks)
+  test_find_budget  test_union_count_unchanged
+  test_banded_matches_sweep
+
+Mutation gate (tools/mutate_sweep.py, new)
+------------------------------------------
+10 mutants, each a single edit to the LIVE sweep only:
+  M1  union_roots tie-break < -> <=            KILLED
+  M2  first-parent union arguments swapped     KILLED
+  M3  first-parent edge not counted            KILLED
+  M4  further-parents loop restarts at first   KILLED
+  M5  root not carried forward after a merge   KILLED
+  M6  BIRTH counter pair wrong initial value   KILLED
+  M7  CYCLE does not raise the hole count      KILLED
+  M8  adjacency predicate loses the endpoint   KILLED
+  M9  adj/roots_before guarded on keep_graph   KILLED
+  M10 kids_of not recorded for first parent    KILLED
+10/10 killed. M1 is the one that matters: it changes NO count, only
+Component.root, and it is killed by test_root_identity_trap.
+
+Full suite
+----------
+Ran 1197 tests, 1 error, 60 skipped. The error is the pre-existing
+`import pytest`; the count is 1197 rather than 1194 because this step
+added 3 tests.

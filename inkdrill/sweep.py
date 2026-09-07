@@ -470,73 +470,96 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
             nodes.append(node)
 
             # -- adjacency: two-pointer sweep over the previous line -------
-            adj: list[int] = []
+            # The touching runs are the slice [pi, pj) of `prevline`.
+            # Their ids are read from it by index below, so the common
+            # case builds no list at all.
             while pi < nprev and prevline[pi][1] < r.lo - slack:
                 pi += 1
             pj = pi
-            while pj < nprev and prevline[pj][0] <= r.hi + slack:
-                adj.append(prevline[pj][2])
-                pj += 1
+            # `adj` and `roots_before` are read ONLY by the MERGE event,
+            # so neither is paid for at Capture.NONE -- the level every
+            # topological caller uses, since G4 says NONE already yields
+            # all counts. The scan is written out twice rather than
+            # branching per step: this is the innermost code in the
+            # package, and the ids are read back by index anyway.
+            if keep_events:
+                adj = []
+                while pj < nprev and prevline[pj][0] <= r.hi + slack:
+                    adj.append(prevline[pj][2])
+                    pj += 1
+                # roots BEFORE any union caused by this run -- a merge is
+                # defined by what was distinct on arrival, not after the
+                # fact.
+                roots_before = tuple(sorted({uf.find(q) for q in adj}))
+            else:
+                adj = ()
+                roots_before = ()
+                while pj < nprev and prevline[pj][0] <= r.hi + slack:
+                    pj += 1
+            nadj = pj - pi
 
-            # roots BEFORE any union caused by this run -- a merge is
-            # defined by what was distinct on arrival, not after the fact.
-            # Read ONLY by the MERGE event below, so it is not paid for
-            # at Capture.NONE -- which is the level every topological
-            # caller uses, since G4 says NONE already yields all counts.
-            roots_before = (tuple(sorted({uf.find(p) for p in adj}))
-                            if keep_events else ())
-
-            if not adj:
-                # BIRTH is the ONLY place a counter pair is created.
-                # A run with an adjacency was previously given a (0, 0)
-                # pair here and had it popped again by its first edge --
-                # two dict inserts and a pop for ~98% of runs.
+            # -- the case dispatch, on the number of parents ---------------
+            # Measured on a synthetic page of ring glyphs, 176,000 runs:
+            # 2.3% have no parent, 2.3% have more than one, and 95.5%
+            # have exactly one. The middle case is the one worth naming.
+            if nadj == 0:
+                # BIRTH. The only place a counter pair is created: this
+                # run is, and stays, its own root.
                 edges_of[nid] = 0
                 cycles_of[nid] = 0
                 if keep_events:
                     events.append(Event(EventKind.BIRTH, line, nid))
-
-            # The root of this run's component, TRACKED rather than
-            # re-found: `nid` is its own root at creation and every
-            # union below returns the new one. This removes uf.find(nid)
-            # from the edge loop and from the MERGE event, and
-            # union_roots removes the two finds that uf.union repeated.
-            rn = nid
-
-            for p in adj:
-                # kids_of is read only by the SPLIT block below.
+            else:
+                # FIRST parent. This edge can NEVER close a cycle: `nid`
+                # was created this iteration and has not been unioned, so
+                # its root cannot already be the parent's. So there is no
+                # root comparison here, and `nid`'s counts are 0 by
+                # definition rather than by lookup.
+                #
+                # `rn` is the root of this run's component, TRACKED from
+                # here on rather than re-found -- only `union_roots` can
+                # change it, and it returns the new one.
+                p = prevline[pi][2]
                 if keep_events:
                     kids_of.setdefault(p, []).append(nid)
                 if keep_graph:
                     node.up.append(p)
                     nodes[p].down.append(nid)
                 rp = uf.find(p)
-                if rn == rp:
-                    # both endpoints already in one component: a loop
-                    # closes here, i.e. a hole is born
-                    cycles_of[rn] += 1
-                    edges_of[rn] += 1
-                    if keep_events:
-                        events.append(Event(EventKind.CYCLE, line, nid,
-                                            (p,), (rp,), rn))
-                else:
-                    # `rn` has no entry on the FIRST edge of a run that
-                    # was not a birth, and its counts are 0 there by
-                    # definition, which is what the default encodes.
-                    # `rp` is a root of a live component and always has
-                    # one. The first edge can never be a CYCLE -- `nid`
-                    # was created this iteration and has not been
-                    # unioned -- so the branch above cannot be reached
-                    # with `rn` missing.
-                    e = edges_of.pop(rn, 0) + edges_of.pop(rp) + 1
-                    c = cycles_of.pop(rn, 0) + cycles_of.pop(rp)
-                    rn = uf.union_roots(rn, rp)
-                    edges_of[rn] = e
-                    cycles_of[rn] = c
+                e = edges_of.pop(rp) + 1
+                c = cycles_of.pop(rp)
+                rn = uf.union_roots(nid, rp)
+                edges_of[rn] = e
+                cycles_of[rn] = c
 
-            if adj and len(roots_before) >= 2 and keep_events:
-                events.append(Event(EventKind.MERGE, line, nid, tuple(adj),
-                                    roots_before, rn))
+                # FURTHER parents. Only from here can an edge find its
+                # two endpoints already in one component.
+                for k in range(pi + 1, pj):
+                    p = prevline[k][2]
+                    if keep_events:
+                        kids_of.setdefault(p, []).append(nid)
+                    if keep_graph:
+                        node.up.append(p)
+                        nodes[p].down.append(nid)
+                    rp = uf.find(p)
+                    if rn == rp:
+                        # both endpoints already in one component: a loop
+                        # closes here, i.e. a hole is born
+                        cycles_of[rn] += 1
+                        edges_of[rn] += 1
+                        if keep_events:
+                            events.append(Event(EventKind.CYCLE, line, nid,
+                                                (p,), (rp,), rn))
+                    else:
+                        e = edges_of.pop(rn) + edges_of.pop(rp) + 1
+                        c = cycles_of.pop(rn) + cycles_of.pop(rp)
+                        rn = uf.union_roots(rn, rp)
+                        edges_of[rn] = e
+                        cycles_of[rn] = c
+
+                if keep_events and len(roots_before) >= 2:
+                    events.append(Event(EventKind.MERGE, line, nid,
+                                        tuple(adj), roots_before, rn))
 
             cur.append((r.lo, r.hi, nid))
 

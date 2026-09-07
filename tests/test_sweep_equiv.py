@@ -26,8 +26,11 @@ from __future__ import annotations
 import random
 import unittest
 
+from inkdrill import sweep as sweepmod
 from inkdrill.raster import InkMask
 from inkdrill.sweep import Capture, sweep, _sweep_reference
+
+_BASE = sweepmod._UF
 
 AXES = ("row", "col")
 CONNS = (4, 8)
@@ -262,3 +265,127 @@ class TestStructuredRandom(_SameMixin, unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --------------------------------------------------------------------------
+# T5 -- the find budget: what this change is actually about
+# --------------------------------------------------------------------------
+
+class _CountingUF(sweepmod._UF):
+    """Counts calls without changing behaviour. `_BASE` is captured at
+    class-creation time so rebinding `sweep._UF` cannot make the
+    delegation recursive."""
+
+    __slots__ = ()
+    finds = [0]
+    unions = [0]
+
+    def find(self, i):
+        _CountingUF.finds[0] += 1
+        return _BASE.find(self, i)
+
+    def union(self, a, b):
+        _CountingUF.unions[0] += 1
+        return _BASE.union(self, a, b)
+
+    def union_roots(self, a, b):
+        _CountingUF.unions[0] += 1
+        return _BASE.union_roots(self, a, b)
+
+
+def _glyph_page(w=240, h=176):
+    """Ring glyphs on a grid: mostly single-parent runs, the shape the
+    case dispatch is aimed at."""
+    buf = bytearray(w * h)
+    for gy in range(2, h - 12, 12):
+        for gx in range(2, w - 10, 10):
+            for y in range(gy, gy + 10):
+                for x in range(gx, gx + 8):
+                    if y in (gy, gy + 9) or x in (gx, gx + 7):
+                        buf[y * w + x] = 0xFF
+    return InkMask(bytes(buf), w, h)
+
+
+class TestFindBudget(unittest.TestCase):
+    """A wall-clock assertion would be flaky and would not say WHAT
+    regressed. The find count is deterministic, machine-independent, and
+    is the quantity the change is about."""
+
+    # Measured on this fixture after the case dispatch: 2.00 at NONE and
+    # 4.57 at GRAPH, against 6.95 and 7.52 for the reference. The bounds
+    # sit above the measurement and below the reference, so they catch a
+    # regression toward the old behaviour without pinning an exact count
+    # that a legitimate refactor could move.
+    BUDGET = {Capture.NONE: 2.5, Capture.GRAPH: 5.0}
+
+    def _count(self, fn, mask, capture):
+        _CountingUF.finds[0] = 0
+        _CountingUF.unions[0] = 0
+        orig = sweepmod._UF
+        sweepmod._UF = _CountingUF
+        try:
+            res = fn(mask, capture=capture)
+        finally:
+            sweepmod._UF = orig
+        return res, _CountingUF.finds[0], _CountingUF.unions[0]
+
+    def test_find_budget(self):
+        mask = _glyph_page()
+        for capture, budget in self.BUDGET.items():
+            got, gf, gu = self._count(sweep, mask, capture)
+            ref, rf, ru = self._count(_sweep_reference, mask, capture)
+            v = got.node_count
+            self.assertEqual(v, ref.node_count)
+            self.assertLessEqual(
+                gf / v, budget,
+                f"{capture.value}: {gf/v:.2f} finds/run exceeds the "
+                f"budget of {budget}; reference is {rf/v:.2f}")
+            self.assertLess(gf, rf,
+                            f"{capture.value}: no reduction against the "
+                            f"reference ({gf} vs {rf})")
+
+    def test_union_count_unchanged(self):
+        """The unions are the real work and must not move: a change that
+        cut them would be computing something else."""
+        mask = _glyph_page()
+        _, _, gu = self._count(sweep, mask, Capture.NONE)
+        _, _, ru = self._count(_sweep_reference, mask, Capture.NONE)
+        # The reference's union() now delegates to union_roots, so the
+        # wrapper sees each of its unions twice.
+        self.assertEqual(gu, ru // 2)
+
+
+# --------------------------------------------------------------------------
+# T7 -- orthogonality: band stitching runs the same union logic twice
+# --------------------------------------------------------------------------
+
+class TestBandRegression(unittest.TestCase):
+    """`band.stitch` re-applies U3's adjacency predicate across seams
+    with its own union-find, and its G2 is 'indistinguishable from
+    sweep()'. It is the strongest single regression check on this
+    change, because it exercises the same partition through a second
+    implementation."""
+
+    def test_banded_matches_sweep(self):
+        from inkdrill import band
+        masks = [InkMask.from_rows(FIXTURES["nested_rings"]),
+                 InkMask.from_rows(FIXTURES["ring_grid"]),
+                 _glyph_page(120, 96)]
+        for i, mask in enumerate(masks):
+            whole = sweep(mask, axis="row", conn=8, capture=Capture.GRAPH)
+            want = {frozenset(c.nodes) for c in whole.components}
+            for k in (1, 2, 3, 5, 8):
+                if k > max(1, mask.height):
+                    continue
+                got = band.sweep_banded(mask, k)
+                self.assertEqual(got.node_count, whole.node_count,
+                                 f"mask{i} k={k} V")
+                self.assertEqual(got.edge_count, whole.edge_count,
+                                 f"mask{i} k={k} E")
+                self.assertEqual(got.component_count, whole.component_count,
+                                 f"mask{i} k={k} C")
+                self.assertEqual(got.cycle_count, whole.cycle_count,
+                                 f"mask{i} k={k} cycles")
+                self.assertEqual({frozenset(c.nodes) for c in got.components},
+                                 want, f"mask{i} k={k} partition")
+                self.assertTrue(got.check_cycle_rank())
