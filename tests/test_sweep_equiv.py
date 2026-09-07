@@ -433,6 +433,81 @@ class TestBandRegression(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------
+# G8 -- node ids are dense and equal their index in `nodes`
+# --------------------------------------------------------------------------
+
+class TestNodeIdsAreDense(unittest.TestCase):
+    """G8, asserted for both producers of a `SweepResult`.
+
+    It held as an accident of construction -- `_UF.make` returns the
+    pre-append length and `nodes.append` follows immediately -- and
+    seven call sites in six modules rebuilt `{n.id: n for n in nodes}`
+    from it anyway. Before those maps go, the accident has to become a
+    guarantee, which means a test that fails when a producer breaks it.
+
+    `band` is the one that could break it, because stitching renumbers.
+    """
+
+    def _assert_dense(self, res, where):
+        for i, n in enumerate(res.nodes):
+            self.assertEqual(n.id, i, f"{where}: nodes[{i}].id == {n.id}")
+        # Dense means the ids are exactly range(V), which is what makes
+        # `nodes[i]` a total lookup rather than one that happens to work.
+        self.assertEqual({n.id for n in res.nodes}, set(range(len(res.nodes))),
+                         f"{where}: ids are not 0..V-1")
+        # Everything that keys on a node id must land inside that range.
+        for c in res.components:
+            for i in c.nodes:
+                self.assertTrue(0 <= i < len(res.nodes),
+                                f"{where}: component node id {i} out of range")
+            self.assertTrue(0 <= c.root < len(res.nodes),
+                            f"{where}: root {c.root} out of range")
+
+    def test_node_ids_are_dense(self):
+        """`sweep`, over the whole fixture set at every axis, conn and
+        capture."""
+        n = 0
+        for name, rows in FIXTURES.items():
+            mask = InkMask.from_rows(rows)
+            for axis in AXES:
+                for conn in CONNS:
+                    for capture in CAPTURES:
+                        res = sweep(mask, axis=axis, conn=conn,
+                                    capture=capture)
+                        self._assert_dense(
+                            res, f"{name} {axis} conn={conn} "
+                                 f"{capture.value}")
+                        n += 1
+        self._assert_dense(sweep(InkMask(b"", 0, 0)), "empty")
+        self._assert_dense(sweep(_glyph_page(80, 64)), "glyph_page")
+        rng = random.Random(23)
+        for d in (0.02, 0.2, 0.6):
+            self._assert_dense(_sweep_of_random(rng, d), f"random d={d}")
+        self.assertGreater(n, 0)
+
+    def test_node_ids_are_dense_after_stitching(self):
+        """`band.sweep_banded`, which renumbers across seams and is the
+        producer that could plausibly break G8."""
+        from inkdrill import band
+        masks = [("nested_rings",
+                  InkMask.from_rows(FIXTURES["nested_rings"])),
+                 ("ring_grid", InkMask.from_rows(FIXTURES["ring_grid"])),
+                 ("comb", InkMask.from_rows(FIXTURES["comb"])),
+                 ("all_blank", InkMask.from_rows(FIXTURES["all_blank"])),
+                 ("glyph_page", _glyph_page(120, 96))]
+        for label, mask in masks:
+            for k in (1, 2, 3, 5, 8, 13):
+                if k > max(1, mask.height):
+                    continue
+                res = band.sweep_banded(mask, k)
+                self._assert_dense(res, f"banded {label} k={k}")
+
+
+def _sweep_of_random(rng, density):
+    return sweep(_random_mask(rng, 33, 27, density), capture=Capture.GRAPH)
+
+
+# --------------------------------------------------------------------------
 # component_of -- the index must answer exactly what the scan answered
 # --------------------------------------------------------------------------
 

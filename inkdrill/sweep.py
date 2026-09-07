@@ -54,6 +54,14 @@ G5  components, events and nodes are produced in deterministic order:
     components keyed by their lowest node id
 G6  the component partition is identical for axis="row" and axis="col"
 G7  a blank scan line closes every open component
+G8  node ids are DENSE and equal their index in `nodes`, so
+    `result.nodes[i]` is the run with id `i`. Every producer of a
+    `SweepResult` must preserve this -- `sweep` does because `_UF.make`
+    returns the pre-append length and the `nodes.append` follows
+    immediately, and `band.stitch` does because it renumbers into scan
+    order and rebuilds the list from the new ids. It is a guarantee to
+    consumers, not an accident of construction: seven call sites in six
+    modules were rebuilding `{n.id: n for n in result.nodes}` from it.
 
 Non-guarantees (out of scope for U3)
 ------------------------------------
@@ -166,6 +174,20 @@ class Component:
 
 @dataclass(slots=True)
 class SweepResult:
+    """One sweep of one mask: its runs, its components, its events.
+
+    Guarantees carried by the OBJECT, numbered with the module contract
+    at the top of this file:
+
+    G5  `nodes` are in scan order, `events` in (line, kind, node) order,
+        `components` keyed by their lowest node id.
+    G8  node ids are dense and equal their index in `nodes`, so
+        `result.nodes[i]` IS the run with id `i` and no `{n.id: n}` map
+        is needed to look one up. Producers of a `SweepResult` must
+        preserve this; `sweep` and `band.stitch` both do, and
+        `tests/test_sweep_equiv.test_node_ids_are_dense` holds them to
+        it.
+    """
     axis: str
     conn: int
     capture: Capture
