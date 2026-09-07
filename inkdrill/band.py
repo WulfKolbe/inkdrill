@@ -320,10 +320,13 @@ def canonical(result: SweepResult) -> tuple:
     Node ids and component roots depend on how the work was divided, so
     they cannot be compared directly; the pixel sets and the counts can.
     """
-    by_id = {n.id: n for n in result.nodes}
+    # U3's G8: node ids are dense and equal their index in `nodes`.
+    # `stitch` preserves that when it renumbers, which is what lets a
+    # stitched result be canonicalised the same way as a swept one.
+    nodes = result.nodes
     comps = []
     for c in result.components:
-        runs = tuple(sorted((by_id[i].line, by_id[i].lo, by_id[i].hi)
+        runs = tuple(sorted((nodes[i].line, nodes[i].lo, nodes[i].hi)
                             for i in c.nodes))
         comps.append((runs, c.edge_count, c.cycle_count,
                       c.first_line, c.last_line))
