@@ -35,14 +35,19 @@ MUTANTS = {
         "        return ra\n",
     ),
     "M2": (
-        "first-parent union arguments swapped",
-        "                rn = uf.union_roots(nid, rp)",
-        "                rn = uf.union_roots(rp, nid)",
+        "first-parent attach arguments swapped",
+        "                rn = uf.attach(nid, rp)",
+        "                rn = uf.attach(rp, nid)",
     ),
     "M3": (
-        "first-parent edge not counted",
-        "                e = edges_of.pop(rp) + 1",
-        "                e = edges_of.pop(rp) + 0",
+        "first-parent edge not counted on the root-stays branch",
+        "                    edges_of[rp] += 1",
+        "                    edges_of[rp] += 0",
+    ),
+    "M3b": (
+        "first-parent edge not counted on the root-moves branch",
+        "                    edges_of[rn] = edges_of.pop(rp) + 1",
+        "                    edges_of[rn] = edges_of.pop(rp) + 0",
     ),
     "M4": (
         "further-parents loop starts at the first parent again",
@@ -86,6 +91,18 @@ MUTANTS = {
         "                    kids_of.setdefault(p, []).append(nid)",
         "                p = prevline[pi][2]\n                if False:\n"
         "                    kids_of.setdefault(p, []).append(nid)",
+    ),
+    "M11": (
+        "attach fast path does not grow the component size",
+        "        if self.size[root] > 1:\n            self.parent[new_id] = root\n"
+        "            self.size[root] += 1\n            return root\n",
+        "        if self.size[root] > 1:\n            self.parent[new_id] = root\n"
+        "            return root\n",
+    ),
+    "M12": (
+        "attach fast path returns the new singleton instead of the root",
+        "            return root\n        return self.union_roots(new_id, root)",
+        "            return new_id\n        return self.union_roots(new_id, root)",
     ),
 }
 

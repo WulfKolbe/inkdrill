@@ -280,6 +280,33 @@ class _UF:
         self.size[ra] += self.size[rb]
         return ra
 
+    def attach(self, new_id: int, root: int) -> int:
+        """Add a freshly made singleton `new_id` to the component rooted
+        at `root`, returning the surviving root.
+
+        Exactly `union_roots(new_id, root)`. It exists because that call
+        is the commonest operation in the sweep and its outcome is
+        almost always `root` itself -- a fresh singleton loses the size
+        comparison against any component of two runs or more, so from a
+        component's third run onward the root does not move. Naming that
+        case lets the caller skip moving counters that are not going
+        anywhere.
+
+        The `size[root] == 1` case is NOT a special case here: it is
+        delegated to `union_roots` precisely so the tie-break that makes
+        a new run the root of a two-singleton component stays in one
+        place (see `test_root_identity_trap`).
+
+        Precondition: `new_id` is its own root with size 1. Not checked
+        -- this is the innermost path in the package, and `sweep` calls
+        it only on the id it just made.
+        """
+        if self.size[root] > 1:
+            self.parent[new_id] = root
+            self.size[root] += 1
+            return root
+        return self.union_roots(new_id, root)
+
 
 # --------------------------------------------------------------------------
 # The sweep
@@ -557,11 +584,17 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                     node.up.append(p)
                     nodes[p].down.append(nid)
                 rp = uf.find(p)
-                e = edges_of.pop(rp) + 1
-                c = cycles_of.pop(rp)
-                rn = uf.union_roots(nid, rp)
-                edges_of[rn] = e
-                cycles_of[rn] = c
+                # ATTACH: `nid` joins `rp`'s component. The root stays
+                # `rp` unless that component is a lone run, so the
+                # counter pair usually does not move at all -- which is
+                # the whole reason `attach` is named separately from
+                # `union_roots`.
+                rn = uf.attach(nid, rp)
+                if rn == rp:
+                    edges_of[rp] += 1
+                else:
+                    edges_of[rn] = edges_of.pop(rp) + 1
+                    cycles_of[rn] = cycles_of.pop(rp)
 
                 # FURTHER parents. Only from here can an edge find its
                 # two endpoints already in one component.

@@ -274,7 +274,16 @@ if __name__ == "__main__":
 class _CountingUF(sweepmod._UF):
     """Counts calls without changing behaviour. `_BASE` is captured at
     class-creation time so rebinding `sweep._UF` cannot make the
-    delegation recursive."""
+    delegation recursive.
+
+    `unions` counts UNIONS PERFORMED, not calls made -- one increment
+    per pair of distinct roots actually merged, wherever in the `_UF`
+    surface the merge happens. The whole surface is overridden so a new
+    entry point cannot make merges invisible: `union` delegates and is
+    counted by the `union_roots` it calls on this same instance, and
+    `attach` is counted here only on its fast path, which merges without
+    going through `union_roots`.
+    """
 
     __slots__ = ()
     finds = [0]
@@ -285,12 +294,21 @@ class _CountingUF(sweepmod._UF):
         return _BASE.find(self, i)
 
     def union(self, a, b):
-        _CountingUF.unions[0] += 1
+        # No increment: `_BASE.union` calls `self.union_roots`, which is
+        # the override below, so counting here would double-count.
         return _BASE.union(self, a, b)
 
     def union_roots(self, a, b):
-        _CountingUF.unions[0] += 1
+        if a != b:
+            _CountingUF.unions[0] += 1
         return _BASE.union_roots(self, a, b)
+
+    def attach(self, a, b):
+        if self.size[b] > 1:
+            # The fast path merges directly and never reaches
+            # `union_roots`; below it, `_BASE.attach` delegates there.
+            _CountingUF.unions[0] += 1
+        return _BASE.attach(self, a, b)
 
 
 def _glyph_page(w=240, h=176):
@@ -346,13 +364,36 @@ class TestFindBudget(unittest.TestCase):
 
     def test_union_count_unchanged(self):
         """The unions are the real work and must not move: a change that
-        cut them would be computing something else."""
-        mask = _glyph_page()
-        _, _, gu = self._count(sweep, mask, Capture.NONE)
-        _, _, ru = self._count(_sweep_reference, mask, Capture.NONE)
-        # The reference's union() now delegates to union_roots, so the
-        # wrapper sees each of its unions twice.
-        self.assertEqual(gu, ru // 2)
+        cut them would be computing something else.
+
+        Asserted as a TOPOLOGICAL IDENTITY rather than against the
+        reference's tally. Every union merges two distinct components,
+        so V singletons reaching C components took exactly V - C of
+        them; that number is a property of the partition, not of how
+        many `_UF` methods a run happens to call. Counting calls at the
+        boundary would instead have been an instrumentation detail, and
+        `attach`'s fast path -- which merges by writing `parent`
+        directly -- would have moved it without changing any answer.
+        """
+        masks = [("glyph_page", _glyph_page()),
+                 ("nested_rings",
+                  InkMask.from_rows(FIXTURES["nested_rings"])),
+                 ("checkerboard",
+                  InkMask.from_rows(FIXTURES["checkerboard"])),
+                 ("all_blank", InkMask.from_rows(FIXTURES["all_blank"]))]
+        for label, mask in masks:
+            for capture in (Capture.NONE, Capture.GRAPH):
+                got, _, gu = self._count(sweep, mask, capture)
+                ref, _, ru = self._count(_sweep_reference, mask, capture)
+                want = got.node_count - got.component_count
+                self.assertEqual(
+                    gu, want,
+                    f"{label} {capture.value}: {gu} unions performed, "
+                    f"V - C = {want}")
+                self.assertEqual(
+                    ru, ref.node_count - ref.component_count,
+                    f"{label} {capture.value}: reference off the identity")
+                self.assertEqual(gu, ru, f"{label} {capture.value}")
 
 
 # --------------------------------------------------------------------------
