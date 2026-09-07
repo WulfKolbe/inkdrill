@@ -1,0 +1,132 @@
+629 - where the processing time goes, on penev_A
+====================================================================
+44 prepared pages, inspect/pages/*.png, 3311 x 4678 = 15.5 Mpx each
+
+THE SHORT ANSWER. Extracting the runs -- the pass that touches each
+pixel once -- runs at 73 Mpx/s. The pipeline delivers 3.43 Mpx/s.
+EVERYTHING ABOVE THE PIXEL SCAN COSTS 21x THE PIXEL SCAN, and that
+factor is the whole of the gap the other readings are pointing at.
+
+--------------------------------------------------------------------
+1. THE LAYERS, BY ABLATION (p10: 12.46% ink, 382,738 fg runs)
+
+    iter_runs, foreground only        0.213 s     <- 73 Mpx/s
+    sweep fg conn8 Capture.NONE       1.823 s     +1.610 over the runs
+    sweep fg conn8 Capture.GRAPH      2.358 s     +0.535 over NONE
+    sweep bg conn4 Capture.NONE       1.956 s
+    nest (fg + bg + parent lookup)    5.248 s     +1.469 over the two
+    _table_cells                      4.51  s
+
+  So of `nest`'s 5.25 s:
+      run extraction        0.43 s     8%
+      graph building        3.36 s    64%
+      parent lookup         1.47 s    28%
+
+  92% of it is above the scan.
+
+2. AND THE PAGE IS SWEPT TWICE
+
+`_table_cells` makes exactly two sweep calls, both full-page:
+
+    15.5 Mpx  conn=8  Capture.NONE      (the ink)
+    15.5 Mpx  conn=4  Capture.NONE      (the inverted background)
+    total swept 31.0 Mpx = 2.0x the page
+
+That is the paired-connectivity design -- 8 foreground, 4 background --
+and it is what `nest` needs to find holes. It is also the difference
+from a one-direction scan that never revisits a pixel: this one visits
+every pixel at least twice before any bookkeeping.
+
+3. THE BOOKKEEPING, COUNTED
+
+cProfile on one `_table_cells` call: **27,686,891 function calls**.
+Against 382,738 foreground runs, that is about 36 Python-level
+operations per run:
+
+    list.append          7,006,343
+    uf.find              5,325,199
+    dict.pop             2,948,933
+    _iter_runs_row         770,158
+    RunNode make           770,156
+    union                  737,211
+    dict.setdefault      1,540,330
+    bytes.find           1,549,672
+
+`bytes.find` is the C-speed part and is 1.5 M of the 27.7 M. The other
+26 M are interpreter work: an object per run, a union-find with path
+compression in Python, and per-line dicts built and popped.
+
+--------------------------------------------------------------------
+4. AGAINST 750 fps
+
+    inkdrill        3.43 Mpx/s   = 11.2 fps at 640x480
+    the original    750 fps at 640x480 = about 230 Mpx/s
+
+    ratio ~67x on pixel throughput.
+
+The 20x the other readings estimate is not optimism: 73 / 3.43 = 21x is
+already the measured distance between this program's own pixel scan and
+its own output rate. A rewrite that kept the run extraction and made
+the graph work cost what the scan costs would land there. Whether that
+is reachable in CPython is a different question -- 26 M interpreter
+operations per page is the thing to remove, not to speed up.
+
+--------------------------------------------------------------------
+5. A CLAIM IN CLAUDE.md DOES NOT HOLD ON THIS POPULATION
+
+CLAUDE.md and docs/state.md say decode is **85-95% of per-page work**,
+and U8's band tier was cancelled on it: "decode is 85-95% of per-page
+work, so parallelising the sweep ceilings at 1.17x."
+
+On penev_A it is not:
+
+    page      ink%      runs    decode    nest   decode share
+    p1        1.23    35,938     0.506   0.429      54.1%
+    p2        5.91   183,496     0.733   2.090      26.0%
+    p3        6.14   196,692     0.753   2.209      25.4%
+    p5        7.98   257,821     0.809   3.133      20.5%
+    p4       10.58   342,270     0.782   4.131      15.9%
+
+    12 pages: decode 8.85 s, nest 29.85 s -> decode is 22.9%
+
+DECODE DOMINATES ONLY A NEARLY BLANK PAGE. At 1.23% ink it is 54%; at
+10.6% it is 16%. Throughput falls with it, 16.6 Mpx/s to 3.1.
+
+The consequence is not that U8 should now be built -- that needs its
+own measurement -- but that the number which closed it describes a
+different population from this one. At 22.9% decode the Amdahl ceiling
+on parallelising the rest is about 4.4x, not 1.17x. The figure should
+carry its population, and does not.
+
+--------------------------------------------------------------------
+6. THE sweep-fastpath BUNDLE ON THIS PAGE
+
+Real, and not structural:
+
+                          main      bundle    change
+    sweep fg conn8 NONE   1.823 s   1.383 s   -24.1%
+    sweep bg conn4 NONE   1.956 s   1.396 s   -28.6%
+    nest                  5.248 s   4.259 s   -18.8%
+
+It removes interpreter work from the inner loop. It does not change
+that there are two full sweeps, an object per run, or a Python
+union-find, so it moves 21x to about 17x.
+
+--------------------------------------------------------------------
+7. WHERE THE WASTE IS, RANKED
+
+  1. ONE PYTHON OBJECT AND ~36 OPERATIONS PER RUN. 382,738 runs became
+     27.7 M calls. This is the 21x.
+  2. TWO FULL SWEEPS PER PAGE, foreground and inverted background. A
+     2.0x floor before any of (1) is paid.
+  3. THE PARENT LOOKUP, 28% of `nest` on this page, on top of the two
+     sweeps it already ran.
+  4. Decode, at 22.9% here and only dominant on blank pages -- the
+     opposite of what the recorded figure says.
+
+  Not on the list: `bytes.find` and `bytes.translate`, which are 1.5 M
+  of 27.7 M calls and are doing their job.
+
+    python3 tools/profile/sweeps_per_page.py
+    python3 tools/profile/layers.py <tree>
+    python3 tools/profile/decode_vs_nest.py
