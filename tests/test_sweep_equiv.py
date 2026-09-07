@@ -28,7 +28,8 @@ import unittest
 
 from inkdrill import sweep as sweepmod
 from inkdrill.raster import InkMask
-from inkdrill.sweep import Capture, sweep, _sweep_reference
+from inkdrill.sweep import (Capture, EventKind, sweep,
+                            _sweep_reference)
 
 _BASE = sweepmod._UF
 
@@ -172,6 +173,55 @@ FIXTURES = {
     ],
     "one_by_one_ink": ["#"],
     "one_by_one_blank": ["."],
+
+    # -- the RETIRE cases -------------------------------------------------
+    # An external review flagged that nothing advances the previous-line
+    # pointer on a line with no runs, so everything pending must be
+    # flushed explicitly. A missing flush loses CLOSE events SILENTLY:
+    # no exception, and the G2 cycle-rank identity still balances,
+    # because CLOSE is an event and not a count.
+    "leading_blank_lines": [
+        ".....",
+        ".....",
+        "..##.",
+        "..##.",
+    ],
+    "trailing_blank_lines": [
+        ".##..",
+        ".##..",
+        ".....",
+        ".....",
+    ],
+    "two_blank_lines_between_components": [
+        "##...",
+        "##...",
+        ".....",
+        ".....",
+        "...##",
+        "...##",
+    ],
+    "full_width_line_between_regions": [
+        "#...#",
+        ".....",
+        "#####",
+        ".....",
+        "#...#",
+    ],
+    # Nothing follows the last ink line, so the final flush is the only
+    # thing that can close this component.
+    "open_at_eof": [
+        "..#..",
+        ".###.",
+        "#####",
+    ],
+    "single_column": [
+        "#",
+        "#",
+        ".",
+        "#",
+        "#",
+    ],
+    "single_row": ["##.###"],
 }
 
 
@@ -182,10 +232,43 @@ class TestFixtures(_SameMixin, unittest.TestCase):
         for name, rows in FIXTURES.items():
             mask = InkMask.from_rows(rows)
             n += self.assert_same_all(mask, label=name)
-        self.assertGreater(n, 0)
+        # Pinned rather than `> 0`, so a fixture deleted or a capture
+        # level dropped from the product shows up as a failure here
+        # rather than as a quietly smaller run.
+        self.assertEqual(n, len(FIXTURES) * len(AXES) * len(CONNS)
+                         * len(CAPTURES))
+        self.assertEqual(n, 276)
 
     def test_empty_mask(self):
         self.assert_same_all(InkMask(b"", 0, 0), label="empty")
+
+    def test_every_component_closes_exactly_once(self):
+        """The retire cases, checked WITHOUT the oracle.
+
+        `assert_same` compares two implementations, and both carry their
+        own copy of the flush -- the loop over `open_roots` after the
+        last line. A flush lost from BOTH would be invisible to it, and
+        invisible to G2 as well, because CLOSE is an event and not a
+        count. Every component is closed exactly once, at a blank line
+        (G7) or at EOF, so the CLOSE count must equal the component
+        count. That is the assertion a lost flush actually trips.
+        """
+        for name, rows in FIXTURES.items():
+            mask = InkMask.from_rows(rows)
+            for axis in AXES:
+                for conn in CONNS:
+                    for capture in (Capture.EVENTS, Capture.GRAPH):
+                        res = sweep(mask, axis=axis, conn=conn,
+                                    capture=capture)
+                        closes = res.events_of_kind(EventKind.CLOSE)
+                        self.assertEqual(
+                            len(closes), res.component_count,
+                            f"{name} axis={axis} conn={conn} "
+                            f"{capture.value}: {len(closes)} CLOSE events "
+                            f"for {res.component_count} components")
+                        self.assertEqual(
+                            len({e.node for e in closes}), len(closes),
+                            f"{name} axis={axis}: a component closed twice")
 
     def test_root_identity_trap(self):
         """The named trap, asserted on its own so a failure says which
