@@ -1,0 +1,43 @@
+STEP 3, batch 1 -- the identity maps in aggregate, band, nest
+=============================================================
+
+Three of the seven `{n.id: n for n in <result>.nodes}` maps removed,
+one commit per module, the full suite between each. They rebuilt what
+G8 (step 2) now guarantees: the id IS the index, so a node is reached
+by `result.nodes[i]`.
+
+  aggregate.py:331  by_id  ->  nodes = result.nodes
+  band.py:323       by_id  ->  nodes = result.nodes   (in `canonical`)
+  nest.py:260       by_id  ->  nodes = res.nodes
+  nest.py:380       by_id  ->  nodes = res.nodes
+
+`nest`'s two went together, as the CR allows. Each site keeps a local
+alias rather than repeating `result.nodes[i]`, because each is inside a
+per-component loop and the alias is what the dict was doing for
+readability in the first place. The name changed from `by_id` to
+`nodes`: `by_id = res.nodes` would read as a dict and is not one.
+
+`band.canonical` is the one worth a second look. It is called on
+STITCHED results, so it depends on `stitch` preserving G8 through its
+renumbering -- which it does, and which
+`test_node_ids_are_dense_after_stitching` now holds it to. Before step
+2 that dependency was unstated, and the map hid it.
+
+NOT touched, as the CR directs: `__main__.py:310`, `emit.py:746`,
+`mathstruct.py:349`. Those key Components, `(run, hole)` pairs and
+groups; they are not identity maps.
+
+Tests
+-----
+Full suite after aggregate   Ran 1202, 1 failure, 37 skipped
+Full suite after band        Ran 1202, 1 failure, 37 skipped
+Full suite after nest        Ran 1202, 1 failure, 37 skipped
+
+Unchanged from the step-2 baseline in every run. The one failure is
+the pre-existing worktree `version` failure described in out/009.txt.
+
+Not claimed
+-----------
+  * No measurement. Removing a V-entry dict per call saves an
+    allocation and a pass; none of these are in the sweep's inner loop
+    and none of it was timed. This is a clarity change.
