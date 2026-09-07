@@ -288,7 +288,10 @@ def contract(result: SweepResult,
         direction = (Direction.ROW_DOWN if result.axis == "row"
                      else Direction.COL_DOWN)
 
-    by_id = {n.id: n for n in result.nodes}
+    # U3's G8: run ids are dense and equal their index in
+    # `result.nodes`, so a predecessor is reached by indexing. Named
+    # `runs` because `nodes` below is the ReebNode list.
+    runs = result.nodes
 
     # A run continues its predecessor's arc only when neither is a
     # junction and the predecessor leads here and nowhere else.
@@ -297,7 +300,7 @@ def contract(result: SweepResult,
 
     for run in result.nodes:
         if not _junction(run) and len(run.up) == 1:
-            up = by_id[run.up[0]]
+            up = runs[run.up[0]]
             if not _junction(up) and up.down == [run.id]:
                 rn = nodes[owner[up.id]]
                 rn.runs.append(run.id)
