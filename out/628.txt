@@ -1,0 +1,106 @@
+628 - the sweep-fastpath bundle: verified, measured, mergeable
+====================================================================
+
+NO BRANCH WAS PUSHED. `git ls-remote origin` shows only `main` at
+99bfed7. The work arrived as the two files in ~/Downloads and nowhere
+else -- so it exists on this machine and in nobody's repository.
+
+BOTH FILES ARE GOOD, and they are the same change:
+
+    sweep-fastpath.bundle   2,147,469 B   valid, complete history,
+                                          refs/heads/sweep-fastpath
+                                          at 6f38f494
+    sweep-fastpath.diff        56,204 B   BYTE-IDENTICAL to
+                                          `git diff f3fc189 <branch>`
+
+The bundle needs no third file. It is self-contained -- "Das Paket
+speichert eine komplette Historie" -- so the failed patch download
+cost nothing:
+
+    git fetch ~/Downloads/sweep-fastpath.bundle \
+        sweep-fastpath:refs/remotes/bundle/sweep-fastpath
+
+Eight commits off f3fc189, +1,257 -7 over 11 files: `inkdrill/sweep.py`
+(+260), `tests/test_sweep_equiv.py` (new, 449), `tools/mutate_sweep.py`
+(new, 127) and out/001-008.txt.
+
+--------------------------------------------------------------------
+1. IT PRODUCES IDENTICAL OUTPUT TO MAIN
+
+Not "passes its own oracle" -- that is their test and it passes, 12 of
+12. This is main's output against the branch's, hashed over six real
+pages at both connectivities and all three capture levels, and over
+`sweep`, `nest`/`ink_only` and `_table_cells`:
+
+    main    34efe558006e057ff408f889f9089f1618bf12407e68506e91478931603ee784
+    branch  34efe558006e057ff408f889f9089f1618bf12407e68506e91478931603ee784
+
+Byte-identical. Also checked directly against the retained
+`_sweep_reference` on the same pages: equal at every level and both
+connectivities, 36 comparisons.
+
+Their suite: 1,200 tests, 37 skipped, green.
+
+--------------------------------------------------------------------
+2. THE PERFORMANCE GAIN, MEASURED HERE
+
+Six real pages, 19,649 to 126,974 runs each. Best of five per
+measurement, gc collected between, and THE WHOLE THING RUN TWICE WITH
+THE TREES IN OPPOSITE ORDER, because a single-shot timing in a fixed
+order is not a measurement.
+
+    operation              main      branch    change
+    sweep Capture.NONE    1.638 s    1.201 s   -26.7%   (1.36x)
+    sweep Capture.GRAPH   1.931 s    1.874 s    -3.0%   (1.03x)
+    _table_cells          4.912 s    3.897 s   -20.7%   (1.26x)
+
+    order reversed: NONE 1.654/1.187, GRAPH 1.931/1.878,
+    cells 4.876/3.888 -- the same to within a percent.
+
+THEIR OWN CLAIM IS ACCURATE AND IS NOT OVERSTATED. out/006 says -27.5%
+and -31.0% at Capture.NONE and -1.9% and -4.5% at Capture.GRAPH; I
+measure -26.7% and -3.0%. out/005 even records a step that is "1.5%
+SLOWER, which is why it is written this way". Nothing here needed
+discounting.
+
+WHERE IT LANDS IN THE PIPELINE. Both levels are live: `Capture.NONE`
+in `nest` (the ink and background passes) and `pngio`; `Capture.GRAPH`
+in `__main__`, `aggregate`, `qc` and `nest`'s third pass. The gain is
+almost entirely at NONE, and the end-to-end figure that matters is
+`_table_cells` at **-20.7%**, because that is what every lattice, every
+`compare` and every `reportcompare` page pays.
+
+A SINGLE-SHOT MEASUREMENT WOULD HAVE MISREPORTED THIS. My first pass
+timed one run per page at Capture.GRAPH only and read 1.06x overall
+with three of six pages apparently SLOWER. That is noise at a level
+where the true effect is 3%, and it would have been reported as "no
+gain" against a change that is worth a fifth of the lattice.
+
+--------------------------------------------------------------------
+3. IT MERGES CLEAN
+
+    git merge-tree main bundle/sweep-fastpath   -> no conflicts
+
+The two sides are disjoint. The branch touches `sweep.py`,
+`test_sweep_equiv.py`, `mutate_sweep.py` and out/001-008; 627 touched
+`rowjoin.py`, `rulediff.py`, `manifestcheck.py`, `joinbench.py` and
+out/627. No file is on both lists and no out/ number collides.
+
+The branch is one commit behind main -- based on f3fc189, where main
+is 99bfed7 -- so a merge or a rebase both work.
+
+--------------------------------------------------------------------
+4. WHAT I HAVE NOT CHECKED
+
+  The mutation harness they added (`tools/mutate_sweep.py`) was not
+  run. Their out/00N reports say it was; I have not reproduced that.
+
+  Six pages, all LaTeX-rendered, 300-400 dpi. No scan, no Infineon,
+  and the corpus counterexample in CLAUDE.md is there precisely
+  because layout results have inverted on it before. A page whose run
+  distribution differs -- theirs measure 86-94% "pure continue" -- may
+  gain less, and out/007 already reports the spread as 89.5% to 94.2%
+  across 42 pages, which is narrow.
+
+  Nothing is merged. This is a report on a bundle sitting in
+  ~/Downloads.
