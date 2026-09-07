@@ -328,10 +328,13 @@ def moments_per_component(result: SweepResult) -> dict[int, Moments]:
     what is accumulated, so this works at any capture level that retains
     nodes.
     """
-    by_id = {n.id: n for n in result.nodes}
+    # U3's G8: node ids are dense and equal their index in `nodes`, so
+    # a node is looked up by indexing rather than through a rebuilt
+    # {id: node} map.
+    nodes = result.nodes
     out: dict[int, Moments] = {}
     for comp in result.components:
-        runs = (by_id[i].as_run() for i in comp.nodes)
+        runs = (nodes[i].as_run() for i in comp.nodes)
         out[comp.root] = _accumulate(runs, result.axis)
     return out
 
