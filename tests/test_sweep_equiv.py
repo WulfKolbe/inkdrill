@@ -389,3 +389,61 @@ class TestBandRegression(unittest.TestCase):
                 self.assertEqual({frozenset(c.nodes) for c in got.components},
                                  want, f"mask{i} k={k} partition")
                 self.assertTrue(got.check_cycle_rank())
+
+
+# --------------------------------------------------------------------------
+# component_of -- the index must answer exactly what the scan answered
+# --------------------------------------------------------------------------
+
+class TestComponentOf(unittest.TestCase):
+    """`component_of` was a linear scan and is now a lazy index. The
+    index is checked against the scan for EVERY node, not sampled: a
+    lookup table that is right for most ids and wrong for a few is the
+    failure mode worth excluding."""
+
+    @staticmethod
+    def _by_scan(res, node_id):
+        for c in res.components:
+            if node_id in c.nodes:
+                return c
+        raise KeyError(node_id)
+
+    def _check(self, mask, label):
+        for capture in (Capture.NONE, Capture.EVENTS, Capture.GRAPH):
+            res = sweep(mask, axis="row", conn=8, capture=capture)
+            for n in res.nodes:
+                self.assertIs(res.component_of(n.id),
+                              self._by_scan(res, n.id),
+                              f"{label} capture={capture.value} node={n.id}")
+
+    def test_matches_the_scan(self):
+        for name in ("nested_rings", "ring_grid", "comb", "checkerboard",
+                     "root_identity_trap", "diagonal_chain"):
+            self._check(InkMask.from_rows(FIXTURES[name]), name)
+        self._check(_glyph_page(80, 64), "glyph_page")
+        rng = random.Random(97)
+        for d in (0.05, 0.5):
+            self._check(_random_mask(rng, 31, 29, d), f"random d={d}")
+
+    def test_unknown_id_raises(self):
+        res = sweep(InkMask.from_rows(FIXTURES["ring"]), capture=Capture.NONE)
+        with self.assertRaises(KeyError):
+            res.component_of(10 ** 6)
+        with self.assertRaises(KeyError):
+            res.component_of(-1)
+
+    def test_index_does_not_affect_equality(self):
+        """Building the index must not make two identical results
+        compare unequal -- the field is compare=False."""
+        mask = InkMask.from_rows(FIXTURES["ring_grid"])
+        a = sweep(mask, capture=Capture.GRAPH)
+        b = sweep(mask, capture=Capture.GRAPH)
+        a.component_of(0)                      # a has an index, b has none
+        self.assertEqual(a.components, b.components)
+        self.assertEqual(a.nodes, b.nodes)
+        self.assertEqual(a, b)
+
+    def test_empty_result(self):
+        res = sweep(InkMask(b"", 0, 0), capture=Capture.NONE)
+        with self.assertRaises(KeyError):
+            res.component_of(0)

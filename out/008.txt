@@ -1,0 +1,84 @@
+STEP 7 -- component_of: the linear scan replaced by a lazy index
+================================================================
+
+This is Finding 3 of the audit, implemented on top of steps 0-5. Scope
+is `SweepResult.component_of` only.
+
+What it was
+-----------
+    for c in self.components:
+        if node_id in c.nodes:      # LIST membership, per component
+            return c
+
+O(V) per lookup, and the price depended on where the node's component
+sorted: on a 4,000-component page the last events cost 82x the first.
+There is exactly one caller in the package, `emit.component_topology`
+(emit.py:629), and it calls it ONCE PER EVENT.
+
+What it is now
+--------------
+A node -> component dict, built on FIRST CALL and kept. Nothing new is
+computed: `sweep`'s component-assembly loop already calls `uf.find` on
+every node and groups them by root; the index is only what that loop
+threw away. The field is `compare=False, repr=False`, so whether it
+happens to have been built cannot make two identical results compare
+unequal.
+
+CORRECTION to the audit
+-----------------------
+The audit proposed filling `Event.root_after` for all five event kinds
+instead. That would NOT have worked. `root_after` is the root AT EVENT
+TIME, and union-find keeps merging afterwards, so for any component that
+merges later it is not the final `Component.root` that `component_of`
+returns. The two are different questions and only the index answers the
+one the caller asks.
+
+Measured -- attribution loop (one component_of per event)
+----------------------------------------------------------
+Real 400-dpi pages from kolbe2018hubbard/inspect/pages:
+
+        V         C      events    linear scan   index     factor
+p4     24,097     473     2,364      0.24 s      0.001 s     195x
+p1     44,817     421     2,421      0.57 s      0.004 s     159x
+p6    121,735   2,390    12,027      8.73 s      0.008 s   1,052x
+p41   143,965   2,950    14,640     12.86 s      0.009 s   1,406x
+
+For scale: the whole sweep of p41 is 0.83 s. The attribution loop was
+15x the cost of the sweep that produced the data.
+
+Measured -- emit.component_topology end to end
+-----------------------------------------------
+        before      after     factor
+p4      0.74 s     0.50 s     1.48x   (-32%)
+p1      1.51 s     0.94 s     1.60x   (-37%)
+p6     11.32 s     2.60 s     4.35x   (-77%)
+p41    16.08 s     3.23 s     4.98x   (-80%)
+
+"before" is the measured "after" with the measured linear-scan
+attribution cost substituted back in; the change touches nothing else in
+that function, so the two are comparable. The gain grows with component
+count, which is what an O(C*V) term being removed looks like.
+
+Tests
+-----
+tests.test_sweep_equiv : 12 tests, ALL PASSED
+  new in this step:
+    test_matches_the_scan        -- index vs the old linear scan for
+                                    EVERY node of 9 masks x 3 captures,
+                                    not sampled
+    test_unknown_id_raises       -- KeyError preserved, both directions
+    test_index_does_not_affect_equality
+    test_empty_result
+Mutation gate: 10/10 killed (unchanged).
+Full suite: Ran 1201 tests, 1 error, 60 skipped -- the error is the
+pre-existing `import pytest`; the count grew by the 4 new tests.
+
+Not claimed
+-----------
+  * Memory: the index is one dict entry per run, ~8 MB on p41. It is
+    lazy, so only callers of component_of pay it. I did not measure the
+    peak.
+  * component_topology still runs THREE sweeps per component on a
+    repainted crop (1,420 sweep calls for 473 components on p4). That is
+    now the dominant cost and it is untouched.
+  * One document, one machine.

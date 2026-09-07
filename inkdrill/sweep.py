@@ -172,6 +172,10 @@ class SweepResult:
     nodes: list[RunNode]
     components: list[Component]
     events: list[Event]
+    # Lazy node -> component index for `component_of`. Excluded from
+    # equality and repr, so whether it happens to be built cannot make
+    # two otherwise identical results compare unequal.
+    _index: dict | None = field(default=None, compare=False, repr=False)
 
     @property
     def node_count(self) -> int:
@@ -198,10 +202,37 @@ class SweepResult:
         return [e for e in self.events if e.kind is kind]
 
     def component_of(self, node_id: int) -> Component:
-        for c in self.components:
-            if node_id in c.nodes:
-                return c
-        raise KeyError(node_id)
+        """The component holding `node_id`.
+
+        Backed by a node -> component index built on FIRST CALL and kept
+        for the rest of this result's life. Nothing new is computed: the
+        component-assembly loop in `sweep` already calls `uf.find` on
+        every node and groups them, and this is only what that loop
+        threw away.
+
+        It was a linear scan over components with a LIST membership test
+        per component, so a lookup cost O(V) and its price depended on
+        where the node's component sorted -- the last component on a
+        page cost ~80x the first. `emit.component_topology` calls this
+        once per event. Measured on a dense 400-dpi page (p41 of
+        kolbe2018hubbard: V=143,965, C=2,950, 14,640 events) the
+        attribution loop cost 11.8 s against a 0.83 s sweep for the same
+        page.
+
+        The index costs one dict entry per run and is only paid by
+        callers that actually use this method.
+        """
+        idx = self._index
+        if idx is None:
+            idx = {}
+            for c in self.components:
+                for i in c.nodes:
+                    idx[i] = c
+            self._index = idx
+        try:
+            return idx[node_id]
+        except KeyError:
+            raise KeyError(node_id) from None
 
 
 # --------------------------------------------------------------------------
