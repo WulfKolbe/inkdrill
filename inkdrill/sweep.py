@@ -468,8 +468,6 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
             nid = uf.make()
             node = RunNode(nid, r.line, r.lo, r.hi)
             nodes.append(node)
-            edges_of[nid] = 0
-            cycles_of[nid] = 0
 
             # -- adjacency: two-pointer sweep over the previous line -------
             adj: list[int] = []
@@ -489,6 +487,12 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                             if keep_events else ())
 
             if not adj:
+                # BIRTH is the ONLY place a counter pair is created.
+                # A run with an adjacency was previously given a (0, 0)
+                # pair here and had it popped again by its first edge --
+                # two dict inserts and a pop for ~98% of runs.
+                edges_of[nid] = 0
+                cycles_of[nid] = 0
                 if keep_events:
                     events.append(Event(EventKind.BIRTH, line, nid))
 
@@ -516,8 +520,16 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                         events.append(Event(EventKind.CYCLE, line, nid,
                                             (p,), (rp,), rn))
                 else:
-                    e = edges_of.pop(rn) + edges_of.pop(rp) + 1
-                    c = cycles_of.pop(rn) + cycles_of.pop(rp)
+                    # `rn` has no entry on the FIRST edge of a run that
+                    # was not a birth, and its counts are 0 there by
+                    # definition, which is what the default encodes.
+                    # `rp` is a root of a live component and always has
+                    # one. The first edge can never be a CYCLE -- `nid`
+                    # was created this iteration and has not been
+                    # unioned -- so the branch above cannot be reached
+                    # with `rn` missing.
+                    e = edges_of.pop(rn, 0) + edges_of.pop(rp) + 1
+                    c = cycles_of.pop(rn, 0) + cycles_of.pop(rp)
                     rn = uf.union_roots(rn, rp)
                     edges_of[rn] = e
                     cycles_of[rn] = c

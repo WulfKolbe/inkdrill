@@ -1,0 +1,38 @@
+STEP 3 -- lazy counter initialisation
+=====================================
+
+Change (inkdrill/sweep.py)
+--------------------------
+`edges_of[nid] = 0; cycles_of[nid] = 0` was written for EVERY run and
+popped again by that run's first edge. It now happens only in the BIRTH
+branch, which is the only case where the new run is and stays its own
+root. The merge branch reads `edges_of.pop(rn, 0)` / `cycles_of.pop(rn, 0)`,
+the default encoding "a run that was not a birth has 0 edges and 0
+cycles before its first edge".
+
+The invariant this rests on, stated in the code: the FIRST edge of a run
+can never be a CYCLE, because `nid` was created this iteration and has
+not been unioned, so `rn == rp` is impossible there. The CYCLE branch
+therefore cannot be reached with `rn` missing.
+
+Dict operations avoided: 2 inserts per non-birth run = 344,000 on the
+test page (172,000 of 176,000 runs).
+
+Equivalence
+-----------
+tests.test_sweep_equiv : 5 tests, ALL PASSED -- 828 checks
+
+Full suite
+----------
+Ran 1194 tests, 1 error, 60 skipped -- identical to the step-0 baseline.
+
+Wall clock, best and median of 7, same synthetic A4 page
+---------------------------------------------------------
+                  reference          sweep              delta
+Capture.NONE      best 0.833 s       best 0.596 s       -28.4%
+                  med  0.859 s       med  0.634 s       -26.2%
+Capture.GRAPH     best 0.921 s       best 0.843 s        -8.5%
+                  med  0.955 s       med  0.922 s        -3.5%
+
+The GRAPH median moves by less than its own spread, so the honest
+reading there is "no measured change", not -3.5%.
