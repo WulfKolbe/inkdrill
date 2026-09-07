@@ -1,0 +1,144 @@
+627 - testing the join across the corpus, and what it costs
+====================================================================
+
+REPO STATE. inkdrill unchanged since f3fc189. pdfdrill has moved --
+634, 637, 640 -- and every report was rebuilt on 5 September.
+
+THE HEADLINE. The join is **128x faster** than the probe it replaces
+on the page-discovery step, and testing it broadly found **three
+documents where it was silently under-counting**, now fixed. The
+correctness fix matters more than the speed.
+
+--------------------------------------------------------------------
+1. THE PERFORMANCE, MEASURED BOTH ROUTES IN ONE RUN
+
+`tools/joinbench.py` times, per document, the two ways of answering
+"which pages carry table rows, and which rows are on them":
+
+  PROBE  `scan_columns` renders EVERY page at 150 dpi and builds a
+         lattice on each; `group_tables` groups them; an ordinal picks
+         the table. This is what `reportcompare` does.
+  JOIN   `rowjoin.join` reads the text layer once and the manifest.
+
+    document                pp | probe s  join s      x | rows  found
+    0049                     4 |    1.44    0.02   91.1x |    34    34
+    anglemaps_SIGGRAPH_2015 12 |    5.71    0.03  176.4x |   160   160
+    AttachBBlocaldim        30 |   13.43    0.09  152.4x |   584   584
+    fulltext                60 |   34.05    0.28  123.2x |  2431  2431
+    dmoi4                  125 |   59.52    0.43  139.3x |  4032  4032
+    Geometric_topology     300 |  133.49    1.10  121.2x |  6717  6717
+
+    totals            531 pp |  247.63s   1.94s  127.6x | 13,958 13,958
+
+Both routes scale linearly in pages, so the ratio is roughly flat at
+120-180x rather than growing. Four minutes becomes two seconds over
+531 pages; the corpus is 1,331 reports.
+
+**AND IT ANSWERS A DIFFERENT QUESTION.** The probe finds pages whose
+lattice has N columns, which 595 measured as the wrong question: a run
+can hold two tables and a table can span several runs. So this is not
+a faster implementation of the same computation -- it is a cheaper one
+that is also correct, and the speed is the smaller half of that.
+
+WHAT IS NOT INCLUDED. The probe's result is cached by
+`reportcompare`, so a repeated run pays this once rather than every
+time. The 128x is the cost of the FIRST pass over a document, which
+is what a rebuild pays.
+
+--------------------------------------------------------------------
+2. TESTING BROADLY FOUND A SILENT UNDER-COUNT
+
+Running the join over documents of every size, rather than the two it
+was built on, turned up a third wrap shape it could not read.
+
+    anglemaps_SIGGRAPH_2015    16 of 160 rows      -> 160 of 160
+    fulltext                 2381 of 2431 rows     -> 2431 of 2431
+    dmoi4                    4026 of 4032 rows     -> 4032 of 4032
+
+THE CAUSE. 597 handled an identifier wrapping AFTER the bibkey
+(`Geometric_topology_` / `EQ0145`). This one wraps INSIDE it:
+
+    anglemaps_SIGGRAPH_
+    2015_EQ0018
+
+The un-wrap rule joined a line ending with the COMPLETE bibkey, so it
+saw nothing to join and the whole document read as 22 and 122 rows
+missing across two tables. Exactly the failure class HANDOVER records
+-- a guessed pattern reporting a whole class as absent -- one rule
+further down than the guess it replaced.
+
+THE FIX, and two wrong turns on the way to it:
+
+  Deciding membership on the SQUEEZED page (all whitespace removed) is
+  break-point independent and correct. But used as the PRIMARY pass it
+  breaks two other things: it loses page order, and a regex over
+  squeezed text invents tokens -- `0049_EQ0001` beside
+  `0049_DIA_0001` squeezes to a run in which `0049_EQ00010049`
+  matches the identifier shape and is then reported as an unknown
+  token.
+
+  So the squeeze became a SECOND pass, for what the first missed. But
+  probing `identifier in flat` for every unfound identifier is
+  O(identifiers x pages) and took the 300-page report past two
+  minutes -- a correctness fix that made the thing it fixed unusable.
+
+  The second pass now SCANS rather than probes, with one alternation
+  compiled from the manifest's own strings, longest first. O(page),
+  exact, and it cannot invent a token because it only matches strings
+  the manifest already lists. Geometric_topology's join is 1.10 s.
+
+Both wrong turns are in the module's G3 as the reason it is written
+that way.
+
+--------------------------------------------------------------------
+3. TWO CRASHES IN MY OWN TOOLS, FOUND BY RUNNING THEM WIDE
+
+`tools/rulediff.py` raised a TypeError on **21 of 22** documents. Not
+a finding about the corpus -- a tool that crashes where it should
+refuse. Both causes are now named refusals:
+
+  * `nearest()` returns None for a page with no rules, and the caller
+    subtracted it. Now the page is reported.
+  * a row may carry NO PAGE at all -- 488 established that inline
+    formulas do -- and `max()` over a generator holding a None raises
+    while comparing. Now counted and printed: two documents carry
+    4,359 and 4,393 page-less rows, about 91% of their manifests.
+
+`tools/manifestcheck.py` had the second bug too. Tracebacks across the
+22: **21 -> 0.**
+
+--------------------------------------------------------------------
+4. WHAT THE WIDE RUN SAYS ABOUT THE CORPUS
+
+21 of 22 manifests are stale, and systematically so:
+
+    0049                 manifest and pdf written the same second
+    the other 21         manifest written FIRST, pdf 9 s to 32 min later
+
+That ordering is the two-pass `\zsavepos` compile: the manifest is
+emitted from the .aux after one pass and the PDF is rewritten by the
+next. The sha guard refuses all 21, correctly.
+
+AND THEY ARE NOT COSMETICALLY STALE. The manifests describe far larger
+builds than the PDFs beside them:
+
+    manifest names page ... 15   247    64   458   296   280   220
+    the pdf has ...          3    11     3    15     8     7     3
+
+These reports are corrections and summary builds; the manifests are
+from full listings. No delta computed against them would mean
+anything, which is what `rulediff` now says instead of crashing.
+
+    0049 is the one clean pair, and it is clean: sha MATCH, 175 cells,
+    all four edges median 0, 100% within 1 px, and rulediff at
+    +-0.001 bp. All three of 608's defects and 610's centreline are
+    fixed there.
+
+--------------------------------------------------------------------
+5. RE-RUN
+
+    python3 tools/joinbench.py 0049 dmoi4 Geometric_topology
+    python3 tools/rulediff.py <doc>
+    python3 tools/manifestcheck.py <doc>
+
+Suite 1,189, 37 skipped -- one more than before, for the wrap shape.

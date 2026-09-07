@@ -31,12 +31,22 @@ G2  THE PATTERN IS PERMISSIVE AND THE MANIFEST DECIDES. Extraction
     reported all six rows of that table as absent. Tokens that look
     like identifiers and are not in the manifest are RETURNED in
     `unknown`, never dropped -- that diagnostic is what caught it.
-G3  A WRAPPED IDENTIFIER IS REJOINED. `0049_EQ0001` fits the report's
-    Identifier column; `Geometric_topology_EQ0145` does not and breaks
-    after the underscore. In content-stream order the halves are
-    adjacent, so a `<bibkey>_` ending a line is joined to the next
-    line. Without this, 6,485 of 6,717 rows on one report read as
-    missing.
+G3  A WRAPPED IDENTIFIER IS REJOINED, AT ANY BREAK POINT.
+    `0049_EQ0001` fits the report's Identifier column;
+    `Geometric_topology_EQ0145` does not and breaks after the
+    underscore; `anglemaps_SIGGRAPH_2015_EQ0018` breaks INSIDE THE
+    BIBKEY, as `anglemaps_SIGGRAPH_` / `2015_EQ0018`.
+
+    The first version joined only a line ending with the complete
+    `<bibkey>_`, and so found 0 of 144 rows on the third shape while
+    finding every row on the other two -- a whole document reading as
+    empty, which is the shape this contract exists to prevent.
+    Membership is therefore decided against the page with ALL
+    whitespace removed, which is break-point independent: the manifest
+    supplies the exact strings, so a match on the stripped text is a
+    match on the page however the column wrapped it. Without this,
+    6,485 of 6,717 rows on one report read as missing, and 144 of 160
+    on another.
 G4  ORDER COMES FROM THE MANIFEST, never from reading order. A page's
     text can return the right SET in the wrong SEQUENCE -- 0049's
     image rows come back 1, 3, 4, 5, 2 -- which mispairs every row
@@ -58,7 +68,7 @@ from __future__ import annotations
 import re
 from typing import NamedTuple
 
-__all__ = ["Row", "Join", "join", "IDENT"]
+__all__ = ["Row", "Join", "join", "IDENT", "known_pattern"]
 
 #: permissive on purpose (G2) -- the manifest, not this, decides
 IDENT = r"_[A-Za-z]{2,8}_?[0-9A-Za-z]+"
@@ -94,29 +104,84 @@ def _tables_of(manifest):
     return sorted(ts, key=lambda t: t["ordinal"])
 
 
-def find_identifiers(text: str, bibkey: str, known) -> list:
-    """Identifiers in ONE page's text, first occurrence first (G2, G3).
+def _squeeze(text: str) -> str:
+    """The text with every whitespace character removed (G3).
 
-    `known` decides membership; anything matching the shape and not in
-    it is the caller's problem to see, not this function's to hide --
-    `join` collects those separately.
+    Break-point independent, which the line-end rule was not: a column
+    can wrap an identifier anywhere, including inside the bibkey.
     """
-    # G3: a bibkey left dangling at a line end belongs to the token
-    # beginning the next line.
-    text = re.sub(re.escape(bibkey) + r"_[ \t]*\n[ \t]*", bibkey + "_", text)
+    return re.sub(r"\s+", "", text)
+
+
+def known_pattern(known):
+    """One alternation over the manifest's own strings, longest first.
+
+    Longest first because `re` alternation is first-match, not
+    longest-match: with `X_EQ1` before `X_EQ12` the shorter wins and
+    the longer identifier is never seen.
+
+    This is what the second pass matches with, rather than the shape
+    regex. Over SQUEEZED text the shape regex is greedy across what
+    follows -- `Geometric_topology_EQ0145` beside `0.791` squeezes to
+    `...EQ01450.791` and the match runs on to `EQ01450`, which the
+    manifest does not list, so a real row reads as missing. Matching
+    the exact strings cannot do that.
+    """
+    return re.compile("|".join(re.escape(i) for i in
+                               sorted(known, key=len, reverse=True)))
+
+
+def find_identifiers(text: str, bibkey: str, known, known_rx=None) -> list:
+    """Identifiers from `known` present in ONE page's text (G2, G3).
+
+    TWO PASSES, and the second only for what the first missed.
+
+    The first is a scan of the page as written, which is exact and
+    which orders its results. The second squeezes ALL whitespace out of
+    the page and asks, for each identifier still unaccounted for,
+    whether it appears -- that is break-point independent, so a column
+    that wrapped inside the bibkey still matches.
+
+    THE SQUEEZE IS NOT USED AS THE PRIMARY, because a regex over
+    squeezed text finds tokens that are not there: `0049_EQ0001`
+    followed by `0049_DIA_0001` squeezes to a run in which
+    `0049_EQ00010049` matches the identifier shape. Restricting the
+    second pass to EXACT strings the manifest lists removes that
+    entirely -- it can only find something the manifest already named.
+    """
     seen, out = set(), []
     for m in re.finditer(re.escape(bibkey) + IDENT, text):
         g = m.group(0)
         if g in known and g not in seen:
             seen.add(g)
             out.append(g)
+    # THE SECOND PASS SCANS, IT DOES NOT PROBE. Asking `i in flat` for
+    # every unfound identifier is O(identifiers x pages) and took a
+    # 300-page report past two minutes; running the same regex over the
+    # squeezed page is O(page) and gives the same answer, because a hit
+    # is kept only when the MANIFEST lists it. Squeezing does produce
+    # tokens that are not there -- `0049_EQ0001` beside `0049_DIA_0001`
+    # yields `0049_EQ00010049` -- and every one of them fails that
+    # membership test, which is why the check is safe here and is not
+    # safe in `unknown_tokens`.
+    if len(seen) < len(known):
+        rx = known_rx if known_rx is not None else known_pattern(known)
+        for m in rx.finditer(_squeeze(text)):
+            g = m.group(0)
+            if g not in seen:
+                seen.add(g)
+                out.append(g)
     return out
 
 
 def unknown_tokens(text: str, bibkey: str, known) -> list:
-    """The diagnostic of G2: identifier-shaped, manifest-absent."""
-    text = re.sub(re.escape(bibkey) + r"_[ \t]*\n[ \t]*", bibkey + "_", text)
-    return [m.group(0) for m in re.finditer(re.escape(bibkey) + IDENT, text)
+    """The diagnostic of G2: identifier-shaped, manifest-absent.
+
+    Scanned on the SQUEEZED page too, so a token the manifest does not
+    list is reported whether or not the column wrapped it.
+    """
+    return [m.group(0)
+            for m in re.finditer(re.escape(bibkey) + IDENT, text)
             if m.group(0) not in known]
 
 
@@ -133,10 +198,12 @@ def join(manifest, pages) -> Join:
     if not known:
         raise ValueError(f"{bibkey}: the manifest lists no identifiers")
 
+    # compiled ONCE, not per page
+    known_rx = known_pattern(known)
     first_page, unknown = {}, {}
     hit_pages = 0
     for n, text in enumerate(pages, 1):
-        got = find_identifiers(text, bibkey, known)
+        got = find_identifiers(text, bibkey, known, known_rx)
         if got:
             hit_pages += 1
         for g in got:

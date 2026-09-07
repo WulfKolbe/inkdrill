@@ -62,12 +62,30 @@ class T597_1_Extraction(unittest.TestCase):
                              {"0049_EQ0001", "0049_EQ0002"}),
             ["0049_EQ0001", "0049_EQ0002"])
 
-    def test_g3_the_rejoin_does_not_leap_a_blank_line(self):
-        """A dangling bibkey with an EMPTY line after it is not a wrap;
-        joining across it would invent an identifier from two rows."""
+    def test_g3_a_break_inside_the_bibkey_is_rejoined(self):
+        """`anglemaps_SIGGRAPH_2015_EQ0018` wraps as
+        `anglemaps_SIGGRAPH_` / `2015_EQ0018` -- INSIDE the bibkey. A
+        rule that joins only a line ending with the complete bibkey
+        finds none of them, and found 0 of 144 rows on that report."""
+        self.assertEqual(
+            find_identifiers("anglemaps_SIGGRAPH_\n2015_EQ0018",
+                             "anglemaps_SIGGRAPH_2015",
+                             {"anglemaps_SIGGRAPH_2015_EQ0018"}),
+            ["anglemaps_SIGGRAPH_2015_EQ0018"])
+
+    def test_g3_the_squeeze_can_join_across_a_blank_line(self):
+        """RECORDED AS A COST, not asserted as desirable. An earlier
+        rule refused this, on the ground that joining two rows invents
+        an identifier. It also refused the case above, which is worth
+        144 rows on one document and 6,485 on another.
+
+        What makes the trade acceptable is that the second pass matches
+        only EXACT strings the manifest lists: it cannot invent an
+        identifier, only find one the manifest already named, in a page
+        where nothing but whitespace separates its halves."""
         self.assertEqual(
             find_identifiers("0049_\n\nEQ0001", "0049", {"0049_EQ0001"}),
-            [])
+            ["0049_EQ0001"])
 
 
 class T597_2_Order(unittest.TestCase):

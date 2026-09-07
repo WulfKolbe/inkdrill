@@ -77,9 +77,17 @@ def main() -> int:
         print(f"  table {t}: {len(cols[t])} column rules "
               f"({len(cols[t])-1} columns)")
 
+    # A row with no page cannot be located (488: inline-formula rows
+    # carry none). Counted and reported rather than crashing on a None
+    # page number four frames down.
+    nopage = [r for r in man["rows"] if r.get("page") is None]
+    if nopage:
+        print(f"  {len(nopage)} of {len(man['rows'])} rows carry no page "
+              f"-- not checked")
     per_page = {}
     for r in man["rows"]:
-        per_page.setdefault(r["page"], []).append(r)
+        if r.get("page") is not None:
+            per_page.setdefault(r["page"], []).append(r)
 
     d_all = {k: [] for k in ("x0", "y0", "x1", "y1")}
     per_page_d = {}
