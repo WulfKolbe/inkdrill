@@ -259,6 +259,159 @@ def _lines(mask: InkMask, axis: str) -> Iterator[tuple[int, list[Run]]]:
         yield cur_line, batch
 
 
+# --------------------------------------------------------------------------
+# Reference implementation
+#
+# `_sweep_reference` is the sweep as it stood before the fast-path work,
+# kept verbatim and not exported. It is the ONLY definition of what
+# `sweep` must return: tests/test_sweep_equiv.py holds the two to
+# field-by-field identical output -- same nodes in the same order, same
+# components with the SAME `root`, same events. Equality of counts is
+# not the bar, because `_UF.union` leaves the NEWER node as root when
+# both sides have size 1, so a reordered union renumbers every root
+# while every count stays right, and eight downstream modules key on
+# `Component.root`.
+#
+# Same precedent as `nest._label`: the slow path is retained as the
+# oracle rather than deleted once the fast path passes.
+# --------------------------------------------------------------------------
+
+def _sweep_reference(mask: InkMask, *, axis: str = "row", conn: int = 8,
+          capture: Capture = Capture.NONE) -> SweepResult:
+    """Pre-fast-path sweep, retained as the equivalence oracle.
+
+    See the module contract for G1-G7. `conn` must be 4 or 8; use 4 when
+    sweeping an inverted mask for hole finding.
+    """
+    if axis not in ("row", "col"):
+        raise InvalidAxis(axis)
+    if conn == 8:
+        slack = 1
+    elif conn == 4:
+        slack = 0
+    else:
+        raise InvalidConnectivity(conn)
+
+    keep_graph = capture is Capture.GRAPH
+    keep_events = capture in (Capture.EVENTS, Capture.GRAPH)
+
+    uf = _UF()
+    nodes: list[RunNode] = []
+    events: list[Event] = []
+    # per-root counters; migrated on union
+    edges_of: dict[int, int] = {}
+    cycles_of: dict[int, int] = {}
+
+    prev: list[tuple[int, int, int]] = []   # (lo, hi, node_id), sorted by lo
+    prev_line = None
+    open_roots: set[int] = set()
+
+    for line, runs in _lines(mask, axis):
+        contiguous = prev_line is not None and line == prev_line + 1
+        prevline = prev if contiguous else []
+        kids_of: dict[int, list[int]] = {}     # prev node -> current nodes
+        cur: list[tuple[int, int, int]] = []
+        pi = 0
+        # Hoisted: `prevline` cannot change inside this loop, and
+        # `len()` in the two-pointer conditions is evaluated once per
+        # advance of each pointer -- the innermost code in the package.
+        nprev = len(prevline)
+
+        for r in runs:
+            nid = uf.make()
+            node = RunNode(nid, r.line, r.lo, r.hi)
+            nodes.append(node)
+            edges_of[nid] = 0
+            cycles_of[nid] = 0
+
+            # -- adjacency: two-pointer sweep over the previous line -------
+            adj: list[int] = []
+            while pi < nprev and prevline[pi][1] < r.lo - slack:
+                pi += 1
+            pj = pi
+            while pj < nprev and prevline[pj][0] <= r.hi + slack:
+                adj.append(prevline[pj][2])
+                pj += 1
+
+            # roots BEFORE any union caused by this run -- a merge is
+            # defined by what was distinct on arrival, not after the fact
+            roots_before = tuple(sorted({uf.find(p) for p in adj}))
+
+            if not adj:
+                if keep_events:
+                    events.append(Event(EventKind.BIRTH, line, nid))
+
+            for p in adj:
+                kids_of.setdefault(p, []).append(nid)
+                if keep_graph:
+                    node.up.append(p)
+                    nodes[p].down.append(nid)
+                rn, rp = uf.find(nid), uf.find(p)
+                if rn == rp:
+                    # both endpoints already in one component: a loop
+                    # closes here, i.e. a hole is born
+                    cycles_of[rn] += 1
+                    edges_of[rn] += 1
+                    if keep_events:
+                        events.append(Event(EventKind.CYCLE, line, nid,
+                                            (p,), (rp,), rn))
+                else:
+                    e = edges_of.pop(rn) + edges_of.pop(rp) + 1
+                    c = cycles_of.pop(rn) + cycles_of.pop(rp)
+                    root = uf.union(rn, rp)
+                    edges_of[root] = e
+                    cycles_of[root] = c
+
+            if adj and len(roots_before) >= 2 and keep_events:
+                events.append(Event(EventKind.MERGE, line, nid, tuple(adj),
+                                    roots_before, uf.find(nid)))
+
+            cur.append((r.lo, r.hi, nid))
+
+        # -- splits: a previous-line run with more than one edge down ------
+        if keep_events:
+            for p in sorted(kids_of):
+                kids = kids_of[p]
+                if len(kids) >= 2:
+                    events.append(Event(EventKind.SPLIT, nodes[p].line, p,
+                                        tuple(sorted(kids))))
+
+        # -- closures ------------------------------------------------------
+        touched = {uf.find(n) for (_, _, n) in cur}
+        if keep_events:
+            for r0 in sorted(open_roots):
+                if uf.find(r0) not in touched:
+                    events.append(Event(EventKind.CLOSE, line, r0, (),
+                                        (uf.find(r0),)))
+        open_roots = touched
+
+        prev, prev_line = cur, line
+
+    # -- final closures ----------------------------------------------------
+    if keep_events and open_roots and prev_line is not None:
+        for r0 in sorted(open_roots):
+            events.append(Event(EventKind.CLOSE, prev_line + 1, r0, (),
+                                (uf.find(r0),)))
+
+    # -- assemble components -----------------------------------------------
+    by_root: dict[int, list[int]] = {}
+    for n in nodes:
+        by_root.setdefault(uf.find(n.id), []).append(n.id)
+    comps: list[Component] = []
+    for root, ids in by_root.items():
+        ids.sort()
+        lines_ = [nodes[i].line for i in ids]
+        comps.append(Component(root=root, nodes=ids,
+                               edge_count=edges_of.get(root, 0),
+                               cycle_count=cycles_of.get(root, 0),
+                               first_line=min(lines_), last_line=max(lines_)))
+    comps.sort(key=lambda c: c.nodes[0])
+
+    events.sort(key=lambda e: (e.line, _KIND_ORDER[e.kind], e.node))
+    return SweepResult(axis=axis, conn=conn, capture=capture, nodes=nodes,
+                       components=comps, events=events)
+
+
 def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
           capture: Capture = Capture.NONE) -> SweepResult:
     """Sweep `mask` along `axis`, returning components and scan events.

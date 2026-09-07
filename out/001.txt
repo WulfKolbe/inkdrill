@@ -1,0 +1,50 @@
+STEP 0 -- equivalence harness, no behaviour change
+==================================================
+
+Branch: sweep-fastpath (from f3fc189)
+
+Added
+-----
+inkdrill/sweep.py   : _sweep_reference(), the pre-fast-path sweep copied
+                      VERBATIM, not exported. Precedent: nest._label.
+tests/test_sweep_equiv.py : the contract harness.
+
+Contract asserted by assert_same(mask, axis, conn, capture)
+-----------------------------------------------------------
+nodes      : (id, line, lo, hi, up, down) in order
+components : (root, nodes, edge_count, cycle_count, first_line, last_line)
+             in order
+events     : (kind, line, node, partners, roots_before, root_after) in order
+plus check_cycle_rank(), which is derived independently of the oracle.
+
+Coverage
+--------
+combinations per mask : 2 axes x 2 conn x 3 captures = 12
+fixture masks         : 17 (16 named + empty)          ->  204 checks
+fuzz masks            : 4 densities x 3 sizes x 4 seeds ->  576 checks
+glyph-like masks      : 4                               ->   48 checks
+TOTAL                                                       828 checks
+
+Result
+------
+tests.test_sweep_equiv : 5 tests, ALL PASSED (0.62 s)
+  test_fixtures                ok
+  test_empty_mask              ok
+  test_root_identity_trap      ok
+  test_fuzz                    ok
+  test_glyph_like              ok
+
+This step is required to pass TRIVIALLY -- sweep and _sweep_reference are
+byte-identical code here. It proves the harness works, not the change.
+
+Full-suite baseline (this branch, before any behaviour change)
+--------------------------------------------------------------
+Ran 1194 tests in 37.1 s -- 1 error, 60 skipped
+The 1 error is a pre-existing `import pytest` in one test file (pytest is
+not installed here); it is present on main at f3fc189 too, where the
+count is 1189. The +5 is this file.
+
+Out of scope, not acted on
+--------------------------
+Event.root_after is None for BIRTH/SPLIT/CLOSE; component_of is a linear
+scan; eight modules build a by_id dict that is the identity map.
