@@ -229,7 +229,18 @@ class _UF:
         return i
 
     def union(self, a: int, b: int) -> int:
-        ra, rb = self.find(a), self.find(b)
+        return self.union_roots(self.find(a), self.find(b))
+
+    def union_roots(self, ra: int, rb: int) -> int:
+        """Union two ids that are ALREADY roots.
+
+        The size comparison and its tie-break are those of `union`,
+        copied unchanged and not rewritten: with equal sizes `ra` stays
+        the root, which is what makes a NEW run the root of the
+        component it merges into. `Component.root` is an identity that
+        eight modules key on, so flipping `<` to `<=` here renumbers
+        every root while every count stays right.
+        """
         if ra == rb:
             return ra
         if self.size[ra] < self.size[rb]:
@@ -481,6 +492,13 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                 if keep_events:
                     events.append(Event(EventKind.BIRTH, line, nid))
 
+            # The root of this run's component, TRACKED rather than
+            # re-found: `nid` is its own root at creation and every
+            # union below returns the new one. This removes uf.find(nid)
+            # from the edge loop and from the MERGE event, and
+            # union_roots removes the two finds that uf.union repeated.
+            rn = nid
+
             for p in adj:
                 # kids_of is read only by the SPLIT block below.
                 if keep_events:
@@ -488,7 +506,7 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                 if keep_graph:
                     node.up.append(p)
                     nodes[p].down.append(nid)
-                rn, rp = uf.find(nid), uf.find(p)
+                rp = uf.find(p)
                 if rn == rp:
                     # both endpoints already in one component: a loop
                     # closes here, i.e. a hole is born
@@ -500,13 +518,13 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                 else:
                     e = edges_of.pop(rn) + edges_of.pop(rp) + 1
                     c = cycles_of.pop(rn) + cycles_of.pop(rp)
-                    root = uf.union(rn, rp)
-                    edges_of[root] = e
-                    cycles_of[root] = c
+                    rn = uf.union_roots(rn, rp)
+                    edges_of[rn] = e
+                    cycles_of[rn] = c
 
             if adj and len(roots_before) >= 2 and keep_events:
                 events.append(Event(EventKind.MERGE, line, nid, tuple(adj),
-                                    roots_before, uf.find(nid)))
+                                    roots_before, rn))
 
             cur.append((r.lo, r.hi, nid))
 
