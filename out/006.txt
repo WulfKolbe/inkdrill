@@ -1,0 +1,55 @@
+STEP 5 -- measurement
+=====================
+
+No code change in this step.
+
+Case distribution -- the premise, now measured on REAL pages
+-------------------------------------------------------------
+The audit measured 90.9% "pure continue" on a synthetic page of ring
+glyphs and flagged it as unverified on corpus ink. The two real page
+fixtures in the repo:
+
+                              V       birth   merge   single-parent  pure CONTINUE
+arxiv_1408_0838_p8.png   120,494    5.1%    3.2%    91.7%          86.9%
+heim_bh2_p96.png          35,283    5.4%    3.0%    91.6%          86.6%
+synthetic ring page      176,000    2.3%    2.3%    95.5%          90.9%
+
+"pure continue" = exactly one parent AND that parent has exactly one
+child. The premise holds on real ink, 4 points lower than on the
+synthetic. Scanned German book and born-digital arXiv agree to within
+0.3 points, which is more agreement than I expected.
+
+Result, reference vs new sweep
+-------------------------------
+                          finds/run          wall clock (best of 7)
+arxiv p8   Capture.NONE   6.88 -> 1.98       0.616 -> 0.447   -27.5%
+           Capture.GRAPH  7.66 -> 4.71       0.684 -> 0.671    -1.9%
+heim p96   Capture.NONE   6.87 -> 1.98       0.157 -> 0.108   -31.0%
+           Capture.GRAPH  7.69 -> 4.75       0.180 -> 0.172    -4.5%
+synthetic  Capture.NONE   6.95 -> 2.00       0.840 -> 0.584   -30.5%
+           Capture.GRAPH  7.52 -> 4.57       0.940 -> 0.864    -8.0%
+
+Medians track the bests at NONE (-26.6%, -32.4%, -29.0%). At GRAPH the
+medians move by less than their own spread on all three masks, so the
+honest reading there is NO MEASURED CHANGE, not the best-of figure.
+
+What this did and did not remove
+---------------------------------
+Removed, per run, at Capture.NONE:
+  - 4.9 of 6.9 union-find finds
+  - 2 dict inserts (the (0,0) pair created and immediately popped)
+  - the `adj` list and its appends
+  - the `roots_before` set + sorted + tuple
+  - the `kids_of` setdefault + append per edge
+  - the per-line `touched` set (one find per run)
+  - a root comparison on the first parent of every run
+Unions are unchanged at exactly the previous count, asserted by
+test_union_count_unchanged: they are the real work.
+
+NOT removed, and now the remaining per-run cost at Capture.GRAPH:
+  - the RunNode dataclass allocation and the page-wide `nodes` list
+  - the up/down list appends
+  - the Event objects
+None of these is touchable without the closure stream, which is out of
+scope for this CR. That is why GRAPH barely moves: its cost was never
+in the union-find.
