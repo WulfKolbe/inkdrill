@@ -1,0 +1,122 @@
+630 - CR step 6, and a negative result on the per-pixel route
+====================================================================
+
+Two trees measured, both byte-identical to main in output, and they
+answer opposite questions.
+
+--------------------------------------------------------------------
+PART 1 - CR STEP 6: THE sweep-fastpath BRANCH
+
+42 distinct pages of kolbe2018hubbard/inspect/pages, 649.6 Mpx, best
+of 3, gc.collect() between runs, BOTH ORDERS.
+
+    capture  order          reference     sweep    change
+    none     ref first        10.460s    7.056s    -32.5%
+    none     sweep first      10.502s    7.089s    -32.5%
+    graph    ref first        12.199s   11.035s     -9.5%
+    graph    sweep first      12.190s   11.027s     -9.5%
+
+    none    mean  10.481s -> 7.073s = -32.5%   (1.48x)
+    graph   mean  12.195s -> 11.031s = -9.5%   (1.11x)
+
+THE TWO ORDERS AGREE TO THE DECIMAL, so there is no warm-cache effect
+to discount. Both figures are larger than the CR budgeted: it costed
+step 1 at -8.3% and said not to report the rest as performance work.
+The cumulative branch is -32.5% and -9.5%, so the clarity steps did
+carry weight, concentrated where the sweep does least bookkeeping.
+
+  THE PAGE SET IS 42, NOT 84. The directory holds 84 files because
+  `p1.png` and `page-0001.png` are byte-identical; globbing `*.png`
+  times every page twice.
+
+  MUTATION: 13 of 13 killed, including the two the CR asked for --
+  M11 `attach` fast path does not grow the component size, M12 it
+  returns the new singleton instead of the root.
+
+  tests/test_sweep_equiv.py, 15 tests, all ok:
+    test_fixtures, test_empty_mask, test_fuzz, test_glyph_like,
+    test_root_identity_trap, test_every_component_closes_exactly_once,
+    test_find_budget, test_union_count_unchanged,
+    test_node_ids_are_dense, test_node_ids_are_dense_after_stitching,
+    test_banded_matches_sweep, test_matches_the_scan,
+    test_empty_result, test_unknown_id_raises,
+    test_index_does_not_affect_equality
+
+  ONE TEST FAILS IN THAT TREE AND IT IS NOT THE CR's.
+  `test_the_version_matches_the_checkout` asserts 'unknown' != 'unknown'.
+  A linked worktree's HEAD holds `ref: refs/heads/<branch>`, and
+  `version._head_of` resolves that against the WORKTREE's gitdir, whose
+  `refs/` is empty -- the branch ref lives in the common dir. Proved
+  pre-existing by building a worktree on a branch at f3fc189, before
+  the CR and before the bundle: it fails identically. A detached-HEAD
+  worktree passes, because there HEAD holds the sha directly. The
+  docstring says worktrees were meant to work, so it is half right.
+  The fix is to follow `commondir`; out of the CR's scope, not done.
+
+--------------------------------------------------------------------
+PART 2 - ~/Downloads/inkdrill: blobscan IS CORRECT AND 21-295x SLOWER
+
+A separate tree, no git, replacing the run-adjacency sweep INSIDE
+`nest`/`ink_only` with `blobscan` -- a per-pixel neighbour case table
+with coordinate stacks. Not the CR branch: no `_sweep_reference`, no
+`attach`.
+
+CORRECTNESS: EXACT. Over six real pages, 84.3 Mpx, the digest of every
+ink region, every hole count and every nest region box:
+
+    main (RAG)   8a2bcb3c02313a13b31a1913d886bc5c5669686fb068b26a3a272ff133e66df9
+    blobscan     8a2bcb3c02313a13b31a1913d886bc5c5669686fb068b26a3a272ff133e66df9
+
+That is more than BLOBSCAN.md claims. It says the hole counts agree
+"on the fixtures", and it changes where they come from -- background
+components' parentage instead of RAG cycle rank. On 84 Mpx of real
+page they agree exactly. Its own suite is green, 1,203 tests, 38
+skipped.
+
+COST: THE ROUTE IS A DEAD END IN CPYTHON.
+
+    page                        main (RAG)        blobscan     ratio
+    sparse,  539 ink regions
+      ink_only                  0.100s            29.488s      295x
+      nest                      0.220s            29.453s      134x
+    dense, 4,083 ink regions
+      ink_only                  0.640s            32.531s       51x
+      nest                      1.540s            32.451s       21x
+
+AND THE SHAPE SAYS WHY. blobscan's throughput is 0.59 and 0.53 Mpx/s
+on the two pages -- essentially CONSTANT, because it does the same
+per-pixel work whatever is on the page. Main's is 174 and 27 Mpx/s --
+it varies by 6x with content, because it is per-RUN and a run here
+averages 40 pixels.
+
+So the gap is WORST on sparse pages, which is most pages.
+
+This is the measured form of what CLAUDE.md already records as the
+reason for the mask encoding: `bytes.translate` and `bytes.find` do
+the pixel scan in C. 629 measured that scan at 73 Mpx/s. A Python
+per-pixel loop does 0.55. The factor between them is 130x, and it is
+the whole of this result.
+
+--------------------------------------------------------------------
+WHAT THIS MEANS FOR THE 21x OF out/629
+
+629 measured that everything above the pixel scan costs 21x the pixel
+scan, and named the per-run bookkeeping -- 27.7 M function calls for
+one page -- as the target. blobscan attacks that target by removing
+the runs, and loses by one to two orders of magnitude, because it
+replaces 380,000 per-run operations with 17,000,000 per-pixel ones.
+
+The two results together bound the problem:
+
+  * fewer operations per run (the CR branch)     -32.5% at NONE
+  * no runs, per-pixel instead (blobscan)        21-295x WORSE
+
+A 20x in CPython is not reachable by either. It needs the per-run work
+to move out of the interpreter -- not to be rewritten inside it. The
+one measurement that would say whether that is possible is what the
+run extraction alone costs, and 629 has it: 73 Mpx/s against the
+pipeline's 3.43.
+
+NOTHING WAS COMMITTED IN EITHER TREE. The pdfdrill worktree still
+carries the CR's step 5 as an uncommitted change, which is that
+session's to land.
