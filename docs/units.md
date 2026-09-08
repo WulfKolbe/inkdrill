@@ -632,6 +632,72 @@ overhead — one `RunNode` per run plus dict operations. If that becomes
 the bottleneck, the fix is a struct-of-arrays `RunNode` store, not
 numpy; deferred until U8 shows whether it matters.
 
+### U3 dispatch rewrite — measured 2026-09-08, merged from `sweep-fastpath`
+
+Six clarity steps against a retained `_sweep_reference`, gated on
+field-by-field equality including `Component.root`. Population: the 42
+DISTINCT pages of `kolbe2018hubbard/inspect/pages`, 649.6 Mpx. Split
+rule: none — every page is measured, none held out, because this is a
+timing comparison of two implementations on identical input rather than
+a fit. Best of 3, `gc.collect()` between runs, both implementations
+timed in BOTH orders. Harness: `tools/step6_measure.py`.
+
+| capture | reference | sweep | change |
+|---|---|---|---|
+| `NONE` | 10.481 s | 7.073 s | **−32.5%** (1.48×) |
+| `GRAPH` | 12.195 s | 11.031 s | **−9.5%** (1.11×) |
+
+The two orders agree to the decimal, so there is no warm-cache effect
+to discount. The CR that specified the work costed its one performance
+step at −8.3% at `NONE` and asked that the rest not be reported as
+performance work; the figures above are the whole branch against the
+reference, and they are what to quote.
+
+**Why the two levels differ by 3×.** Nearly all of the gain is not
+moving per-root counters that were not going anywhere. `union_roots(nid,
+rp)` returns `rp` whenever `size[rp] > 1`, so from a component's third
+run onward the old pop/insert pair put them straight back — and that is
+nearly every CONTINUE. At `GRAPH` the retained edge and event
+bookkeeping is paid regardless, so the same absolute saving is a smaller
+fraction.
+
+Mutation: 13/13 killed (`tools/mutate_sweep.py`), including the two
+`attach` mutants the CR asked for.
+
+### U3/U6 — the per-pixel route, refuted 2026-09-08
+
+~~If the per-run bookkeeping is the bottleneck, removing the runs and
+labelling per pixel should be faster.~~ **Refuted.** An independent
+implementation replaced the run-adjacency sweep inside `nest()` and
+`ink_only()` with a per-pixel neighbour case table and coordinate
+stacks. Its output is byte-identical to the RAG route — every ink
+region, every hole count and every `nest` region box, digest-equal over
+six real pages, 84.3 Mpx — which is more than its own notes claimed
+(they claimed agreement on the fixtures only). It is **21× to 295×
+slower**:
+
+| page | main (RAG) | per-pixel | ratio |
+|---|---|---|---|
+| sparse, 539 ink regions, `ink_only` | 0.100 s | 29.49 s | 295× |
+| sparse, `nest` | 0.220 s | 29.45 s | 134× |
+| dense, 4 083 ink regions, `ink_only` | 0.640 s | 32.53 s | 51× |
+| dense, `nest` | 1.540 s | 32.45 s | 21× |
+
+The ratios matter less than their shape. The per-pixel route runs at
+0.59 and 0.53 Mpx/s on those two pages — essentially CONSTANT, because
+it does the same work per pixel whatever is on the page. The sweep runs
+at 174 and 27 Mpx/s, varying 6× with content, because it works per RUN
+and a run here averages 40 px. **So the gap is worst on sparse pages,
+which is most pages.**
+
+This bounds the deferred struct-of-arrays question from both sides.
+Fewer operations per run buys −32.5%; removing the runs entirely loses
+two orders of magnitude. A Python per-pixel loop does 0.55 Mpx/s where
+`bytes.find` does 73 (measured on penev_A, `out/629.txt`). The per-run
+work has to leave the interpreter, not be rewritten inside it — which
+is the same conclusion the mask encoding was chosen for. Recorded in
+`out/630.txt`.
+
 ### U0 decode throughput
 
 Real ghostscript `png16m` pages from `~/pdfdrill-library`, single core, pure

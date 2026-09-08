@@ -1,0 +1,132 @@
+631 - sweep-fastpath merged into main, and re-verified after the merge
+====================================================================
+
+The CR's six steps are on main as of merge commit af40948. Everything
+below was measured ON THE MERGE, not on the branch, because a branch
+that passes and a merge that passes are different claims.
+
+--------------------------------------------------------------------
+WHAT WAS MERGED
+
+18 commits, no fast-forward, so the six steps stay individually
+readable. Two commits were made before merging:
+
+  80b903c  CR step 5 -- G9 on SweepResult and a paragraph on
+           component_of. Documentation only, as the CR specified.
+           It had been left uncommitted in the pdfdrill worktree.
+  (same)   tools/step6_measure.py, the harness behind step 6's
+           numbers. CLAUDE.md's rule: if you quote a number, commit
+           the thing that produces it.
+
+The merge was TEXTUALLY DISJOINT. main had moved four commits ahead
+(627-630) touching rowjoin, the profile tools and out/; the branch
+touched sweep, aggregate, band, nest, reeb, skeleton, trace, the
+equivalence suite and the mutation harness. No file appears on both
+sides, so git could not have conflicted -- which is exactly why the
+verification below was run rather than skipped. Disjoint files say
+nothing about whether nest.py's new indexing still agrees with what
+main built on top of it.
+
+--------------------------------------------------------------------
+VERIFICATION, ALL ON af40948
+
+  full suite (hermetic)          1204 tests, 37 skipped, 34.95 s   OK
+  tests.test_sweep_equiv         15 tests                          OK
+  test_pngio_corpus +
+    test_source_truth_corpus     15 tests, 130.97 s                OK
+  test_type1_corpus              150 fonts sampled                 OK
+  tools/mutate_sweep.py          13 / 13 KILLED
+
+The suite was 1188 on main before the merge and is 1204 after: the
+sixteen are test_sweep_equiv's fifteen plus one. 37 skips, unchanged.
+
+Mutants killed, by name:
+  M1   union_roots size tie-break < -> <=
+  M2   first-parent attach arguments swapped
+  M3   first-parent edge not counted, root-stays branch
+  M3b  first-parent edge not counted, root-moves branch
+  M4   further-parents loop starts at the first parent again
+  M5   root not carried forward after a later merge
+  M6   BIRTH counter pair given the wrong initial value
+  M7   CYCLE does not raise the hole count
+  M8   adjacency predicate loses the endpoint on the NONE scan
+  M9   roots_before / adj guarded on the wrong capture level
+  M10  kids_of not recorded for the first parent
+  M11  attach fast path does not grow the component size
+  M12  attach fast path returns the new singleton instead of the root
+
+--------------------------------------------------------------------
+THE MEASUREMENT REPRODUCES ON THE MERGE
+
+Same harness, same population -- the 42 DISTINCT pages of
+kolbe2018hubbard/inspect/pages, 649.6 Mpx. Best of 3, gc.collect()
+between runs, both implementations timed in both orders.
+
+    capture  order          reference     sweep    change
+    none     ref first        10.626s    7.163s    -32.6%
+    none     sweep first      10.638s    7.191s    -32.4%
+    graph    ref first        12.322s   11.168s     -9.4%
+    graph    sweep first      12.325s   11.158s     -9.5%
+
+    none  mean: 10.632s -> 7.177s = -32.5%  (1.48x)
+    graph mean: 12.323s -> 11.163s = -9.4%  (1.10x)
+
+Against the branch's 630 figures of -32.5% and -9.5%, so the merge
+costs nothing. The orders agree to a decimal within each row, which is
+what says there is no warm-cache effect being reported as a gain.
+
+POPULATION AND SPLIT RULE. 42 pages of one document, one corpus,
+LaTeX-produced. No split: this is two implementations timed on
+identical input, not a fit, so there is nothing to hold out. The
+number that would generalise less well is the RATIO between the two
+capture levels, which depends on how much of a page is ink.
+
+--------------------------------------------------------------------
+DOCS BROUGHT UP TO THE MERGE
+
+  CLAUDE.md      suite count 1188 -> 1204. sweep.py's entry now says
+                 _sweep_reference is the ORACLE and not dead code --
+                 the same shape as nest._label, which the file already
+                 warns not to delete for looking unused. G8 and G9
+                 stated, since seven modules now depend on G8.
+                 The "run adjacency graph is the central object"
+                 section gained both new results: the 1.48x, and the
+                 per-pixel route that lost.
+  docs/units.md  a new "U3 dispatch rewrite" subsection with the table
+                 above and its population; and "U3/U6 -- the per-pixel
+                 route, REFUTED", struck through in the form section 4
+                 uses, with the 21-295x beside it.
+  docs/algorithms.md
+                 section 3.2 now documents `attach` as the third
+                 union-find optimisation, with the reason the root
+                 almost never moves. Section 9 gained a status note
+                 recording both directions.
+
+docs/state.md's "1188 tests green" was left alone: it is a historical
+statement about when the classifier path first ran on a real page, and
+it was true then.
+
+--------------------------------------------------------------------
+WHAT IS STILL OPEN
+
+The CR named three and all three remain open:
+
+  1. Whether the step-1 gain survives at Capture.GRAPH. The -9.4%
+     above is the WHOLE BRANCH against the reference, not step 1, and
+     step 1 was never measured at GRAPH on its own.
+  2. Whether the node-id invariant G8 holds for a future SweepResult
+     producer. The test can only check the two that exist -- sweep and
+     band.sweep_banded -- and G8 is now load bearing at seven sites.
+  3. The memory cost of component_of's index under a corpus run
+     holding many results open. Unmeasured.
+
+And one the CR did not name, found while running it:
+
+  4. version._head_of cannot resolve a linked worktree's symbolic
+     HEAD, because a worktree's gitdir has an empty refs/ and the
+     branch ref lives in the common dir. Pre-existing -- proved by
+     building a worktree on a branch at f3fc189, before the CR and
+     before the bundle. A detached-HEAD worktree passes. The fix is
+     to follow `commondir`; not done, out of the CR's scope. It
+     surfaces as test_the_version_matches_the_checkout asserting
+     'unknown' != 'unknown', which reads like a logic bug and is not.

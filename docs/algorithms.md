@@ -148,6 +148,29 @@ The amortised bound is the usual $O(\alpha(n))$, but at these sizes the
 real behaviour is "almost always one or two steps", because runs are
 unioned to their immediate predecessor as they are created.
 
+**`attach` — the third optimisation, added 2026-09-08.** The commonest
+operation in the package is not a general union; it is a fresh singleton
+joining a component that already exists, and `union_roots(new, root)`
+returns `root` whenever `size[root] > 1`. So from a component's third
+run onward the root does not move, and the caller's pop/insert of the
+per-root edge and cycle counters put them straight back where they
+were. `attach` says that case out loud and skips the move:
+
+```python
+def attach(self, new_id, root):
+    if self.size[root] > 1:
+        self.parent[new_id] = root
+        self.size[root] += 1
+        return root
+    return self.union_roots(new_id, root)
+```
+
+It is exactly `union_roots` in behaviour — the equivalence harness holds
+it to that — and it is most of the 1.48× at `Capture.NONE` (units.md,
+"U3 dispatch rewrite"). The precondition that `new_id` is its own root
+with size 1 is NOT checked: this is the innermost path in the package
+and `sweep` calls it only on the id it just made.
+
 ### 3.3 Events — the Morse structure
 
 A row-down sweep computes the connected components of the sublevel sets of
@@ -562,6 +585,19 @@ is where the time goes.
 ---
 
 ## 9. Concrete improvements, ranked
+
+> **Status note added 2026-09-08 — the sweep's own inner loop.** The
+> dispatch was rewritten against a retained `_sweep_reference` and is
+> **1.48× at `Capture.NONE`, 1.11× at `GRAPH`** over 42 real pages, with
+> byte-identical output. Almost all of it is `attach` (§3.2). The
+> opposite idea was tried and **lost by two orders of magnitude**: an
+> independent per-pixel neighbour-case-table implementation of `nest`
+> produced digest-identical output over 84 Mpx of real page and ran
+> **21–295× slower**, at a throughput flat in ink density (~0.55 Mpx/s)
+> because the work is per pixel rather than per run. That is the
+> measured form of §2.1's argument for the mask encoding, and it closes
+> the "struct-of-arrays `RunNode`" deferral in the direction of *not*
+> rewriting the loop in Python. See `out/630.txt`.
 
 > **Status note added on integration (2026-08-09).** Items 5 and 6 below
 > were reproduced exactly and acted on. **Item 5 was a real bug and is

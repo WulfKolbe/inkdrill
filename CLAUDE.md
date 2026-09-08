@@ -42,7 +42,7 @@ row manifest — see HANDOVER).
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 1188, of which 37 skip
+python3 -m unittest discover -s tests -t .   # full suite: 1204, of which 37 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -134,7 +134,19 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   `SpaceGraph`, `angle_deg_ccw`, `angle_deg_screen`.
 - **`inkdrill/raster.py`** — `InkMask`, `Run`, `Rect`, `binarize`, `iter_runs`.
 - **`inkdrill/sweep.py`** — `sweep()` → `SweepResult` with `nodes`,
-  `components`, `events`.
+  `components`, `events`. **`_sweep_reference` is the equivalence
+  oracle and is NOT dead code** — same shape as `nest._label`: the live
+  `sweep` is the optimised dispatch, and `tests/test_sweep_equiv.py`
+  holds it field-by-field identical to the reference, `root` included,
+  over every (mask, axis, conn, capture). That equality is the gate for
+  any change in here. Two guarantees added by the clarity CR are load
+  bearing elsewhere: **G8** node ids are dense and equal their index in
+  `nodes`, which seven modules index on rather than rebuilding a map;
+  **G9** `nodes` and `components` are immutable once a result is
+  constructed, because `component_of`'s lazy index is never
+  invalidated. `_UF.attach` is the innermost path in the package —
+  it names the case where a fresh singleton joins an existing
+  component, whose root almost never moves.
 - **`inkdrill/reeb.py`** — Reeb contraction. `contract`, `orient`,
   `signature`, `signature_of`. A `ReebNode` is an arc; `signature()` is a
   stable partition, **not** a classifier, and is not rotation invariant.
@@ -259,6 +271,25 @@ A prior code base enumerated those edges, consumed them in `union()`, discarded
 them, then rebuilt the same graph to count holes. This one keeps them. Retaining
 the full graph was measured at +13% over `Capture.NONE` — that question is
 settled, do not re-open it on speculation.
+
+**The dispatch has since been rewritten against that reference and is
+1.48× at `Capture.NONE`, 1.11× at `GRAPH`** (42 pages of
+`kolbe2018hubbard/inspect/pages`, best of 3, gc between runs, both
+orders — `tools/step6_measure.py`). The gain is concentrated where the
+sweep does least bookkeeping, which is why the two levels differ so
+much. Almost all of it comes from not moving per-root counters that
+were not going anywhere: `union_roots(nid, rp)` returns `rp` whenever
+`size[rp] > 1`, so from a component's third run onward the old
+pop/insert pair put them straight back.
+
+**The opposite route was measured and lost.** Replacing the per-run
+graph with a per-pixel neighbour case table produces byte-identical
+output — ink regions, hole counts and `nest` boxes, digest-equal over
+84 Mpx of real page — and runs 21× to 295× slower. Its throughput is
+flat at ~0.55 Mpx/s regardless of ink density, because the work is per
+pixel; the sweep's varies 6× with content, because the work is per run.
+So the gap is worst on sparse pages, which is most pages. See
+`out/630.txt`. Do not re-open this one either.
 
 ### Conventions that later units inherit
 
