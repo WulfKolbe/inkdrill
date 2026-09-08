@@ -257,9 +257,11 @@ def _regions_via_sweeps(padded: InkMask, fgres=None):
     top: dict[int, tuple[int, int]] = {}
 
     for res, is_ink in ((fgres, True), (bgres, False)):
-        by_id = {n.id: n for n in res.nodes}
+        # U3's G8: node ids are dense and equal their index in
+        # `nodes`, so a run is reached by indexing.
+        nodes = res.nodes
         for comp in res.components:
-            runs = [by_id[i] for i in comp.nodes]
+            runs = [nodes[i] for i in comp.nodes]
             y0 = min(r.line for r in runs)
             x0 = min(r.lo for r in runs if r.line == y0)
             a = 0
@@ -377,10 +379,10 @@ def ink_only(mask: InkMask, *, conn: int = 8) -> InkPass:
             f"foreground connectivity must be 8 (background 4); got {conn}")
     padded = _pad(mask)
     res = sweep(padded, axis="row", conn=8, capture=Capture.GRAPH)
-    by_id = {n.id: n for n in res.nodes}
+    nodes = res.nodes                      # U3's G8: id == index
     rows = []
     for comp in res.components:
-        runs = [by_id[i] for i in comp.nodes]
+        runs = [nodes[i] for i in comp.nodes]
         y0 = min(r.line for r in runs)
         rows.append((y0, min(r.lo for r in runs if r.line == y0), comp, runs))
     rows.sort(key=lambda t: (t[0], t[1]))

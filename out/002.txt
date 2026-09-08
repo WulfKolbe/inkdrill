@@ -1,0 +1,42 @@
+STEP 1 -- the three event-only per-run costs moved behind keep_events
+=====================================================================
+
+Change (inkdrill/sweep.py, live sweep only; _sweep_reference untouched)
+-----------------------------------------------------------------------
+1. roots_before  : computed per RUN, read only by the MERGE event.
+                   -> `if keep_events else ()`
+2. kids_of       : written per EDGE, read only by the SPLIT block.
+                   -> `if keep_events:` around the setdefault/append
+3. touched       : one find per run of the line; `open_roots` read only
+                   by the CLOSE blocks. -> whole block inside keep_events
+
+None of the three has any reader at Capture.NONE, which is the level
+every topological caller uses (G4: NONE already yields all counts).
+
+Equivalence
+-----------
+tests.test_sweep_equiv : 5 tests, ALL PASSED -- 828 checks
+  test_fixtures / test_empty_mask / test_root_identity_trap
+  test_fuzz / test_glyph_like
+
+Full suite
+----------
+Ran 1194 tests, 1 error, 60 skipped -- IDENTICAL to the step-0 baseline.
+(The 1 error is the pre-existing `import pytest`.)
+
+Counters, synthetic A4 page: 2480x3508, 4000 ring glyphs, V=176,000 runs
+------------------------------------------------------------------------
+                        finds       finds/run   unions   wall
+Capture.NONE  reference 1,224,000   6.95        172,000  0.796 s
+Capture.NONE  sweep       872,000   4.95        172,000  0.720 s   -9.5%
+Capture.GRAPH reference 1,323,920   7.52        172,000  0.916 s
+Capture.GRAPH sweep     1,323,920   7.52        172,000  0.921 s    0%
+
+GRAPH is unchanged BY CONSTRUCTION: keep_events is true there, so all
+three costs are still paid. That is the correct outcome for this step,
+not a missed optimisation.
+
+Not claimed
+-----------
+Wall clock is best-of-3 on one machine and one synthetic mask; the
+352,000 finds removed are the deterministic number and the 9.5% is not.

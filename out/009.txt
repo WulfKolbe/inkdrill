@@ -1,0 +1,125 @@
+STEP 1 -- name the attach case
+==============================
+
+Baseline for every step in this CR
+----------------------------------
+Full suite at 6f38f49, before any edit:
+    Ran 1200 tests, FAILED (failures=1, skipped=37)
+The one failure is `tests.test_emit.T1_10_ProducerVersion
+.test_the_version_matches_the_checkout`: this is a git WORKTREE, so
+`.git` is a file rather than a directory and `version.resolve()`
+correctly reports "unknown". It is environmental, it is unrelated to
+this CR, and "suite unchanged" below means 1200 / 1 failure / 37 skips.
+
+The change
+----------
+`_UF.attach(new_id, root)` added. It is exactly
+`union_roots(new_id, root)`; the fast path exists because a fresh
+singleton loses the size comparison against any component of two runs or
+more, so from a component's THIRD run onward `union_roots` returns
+`root` and the caller's pop/insert pair put the counters straight back
+where they took them from. That is nearly every CONTINUE -- 90.4% of
+runs on the 42-page corpus of out/007.txt.
+
+The `size[root] == 1` case is delegated, not duplicated, so the
+tie-break that makes a new run the root of a two-singleton component
+(`test_root_identity_trap`) still lives in exactly one place.
+
+Caller:
+    rn = uf.attach(nid, rp)
+    if rn == rp:
+        edges_of[rp] += 1
+    else:
+        edges_of[rn] = edges_of.pop(rp) + 1
+        cycles_of[rn] = cycles_of.pop(rp)
+
+`test_union_count_unchanged`, reworked
+--------------------------------------
+It counted calls at the `_UF` boundary, and would have failed for the
+wrong reason: `attach`'s fast path merges by writing `parent` directly
+and never reaches `union_roots`.
+
+It now counts UNIONS PERFORMED -- one increment per pair of distinct
+roots actually merged -- and asserts
+
+    unions == node_count - component_count
+
+for BOTH implementations, over four masks (glyph page, nested_rings,
+checkerboard, all_blank) at Capture.NONE and Capture.GRAPH. Every union
+merges two components, so V singletons reaching C components took
+exactly V - C of them. That is a property of the partition; an
+instrumentation count is a property of the call graph, and this change
+is precisely the kind that moves the second without moving the first.
+
+`_CountingUF` now overrides the whole `_UF` surface, so a future entry
+point cannot make merges invisible: `union` delegates (its merge is
+counted in the `union_roots` it calls on the same instance), `attach`
+counts only its fast path, `union_roots` counts only when the two roots
+differ.
+
+Mutation gate: 13/13 killed
+---------------------------
+The CR asked for two new mutants. There are three, because the
+first-parent edge count now has two branches and M3 could only anchor
+on one of them:
+
+  M11  attach fast path does not grow the component size      KILLED
+  M12  attach fast path returns the new singleton, not root   KILLED
+  M3b  first-parent edge not counted on the root-MOVES branch KILLED
+
+Two existing mutants were re-anchored onto the new text without
+changing what they break:
+  M2  "first-parent union arguments swapped"
+      -> uf.attach(rp, nid)
+  M3  "first-parent edge not counted"
+      -> the root-STAYS branch, edges_of[rp] += 0
+
+All thirteen killed; M1, M4-M10 unchanged and still killed.
+
+Measured, Capture.NONE, five real pages
+---------------------------------------
+p4, p1, p12, p6, p41 of ~/pdfdrill-library/kolbe2018hubbard/inspect/
+pages (400 dpi, 3307x4677), CPython 3.14.7, single core. Best-of-8 per
+implementation, gc.collect() before each timing, ABBA order within every
+repetition so drift cannot be attributed to one side.
+
+        V          before      after     delta
+  p4     24,097    0.051 s    0.048 s    -7.6%
+  p1     44,817    0.096 s    0.092 s    -5.0%
+  p12    76,477    0.164 s    0.153 s    -7.0%
+  p6    121,735    0.324 s    0.322 s    -0.7%
+  p41   143,965    0.403 s    0.384 s    -4.9%
+  TOTAL            1.039 s    0.997 s    -4.1%
+
+A second protocol-identical run gave 1.044 s -> 1.013 s, -2.9%. So the
+figure for this machine is a 3-4% total, and the honest statement is
+"between 1% and 8% per page, about 3-4% overall on these five pages".
+
+The CR measured 1.333 s -> 1.223 s, -8.3%, on the same five pages. I do
+not reproduce that magnitude: same pages, different machine and CPython
+3.14.7 rather than 3.12. The direction is the same on every page and in
+every run; the size is not.
+
+An EARLIER protocol -- all repetitions of one implementation, then all
+of the other -- reported p6 at +21% and p41 at +28%, i.e. a large
+REGRESSION. Interleaving removed it entirely. That is drift over a
+20-second window on this machine, and it is a caution about every
+number in out/006-008 that was not measured with the two orders.
+
+Tests
+-----
+tests.test_sweep_equiv        12 tests, ALL PASSED (the gate: `sweep`
+                              field-for-field identical to
+                              `_sweep_reference` over every
+                              (mask, axis, conn, capture); the oracle
+                              was not touched)
+Full suite                    Ran 1200 tests, 1 failure, 37 skipped
+                              -- unchanged from the baseline above
+Mutation gate                 13/13 killed
+
+Not claimed
+-----------
+  * Capture.GRAPH was not measured for this change.
+  * One machine, one Python, one document.
+  * This is a clarity change that happens to be worth a few percent. It
+    is not performance work.

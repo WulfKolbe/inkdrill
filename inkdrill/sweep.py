@@ -54,6 +54,14 @@ G5  components, events and nodes are produced in deterministic order:
     components keyed by their lowest node id
 G6  the component partition is identical for axis="row" and axis="col"
 G7  a blank scan line closes every open component
+G8  node ids are DENSE and equal their index in `nodes`, so
+    `result.nodes[i]` is the run with id `i`. Every producer of a
+    `SweepResult` must preserve this -- `sweep` does because `_UF.make`
+    returns the pre-append length and the `nodes.append` follows
+    immediately, and `band.stitch` does because it renumbers into scan
+    order and rebuilds the list from the new ids. It is a guarantee to
+    consumers, not an accident of construction: seven call sites in six
+    modules were rebuilding `{n.id: n for n in result.nodes}` from it.
 
 Non-guarantees (out of scope for U3)
 ------------------------------------
@@ -166,12 +174,36 @@ class Component:
 
 @dataclass(slots=True)
 class SweepResult:
+    """One sweep of one mask: its runs, its components, its events.
+
+    Guarantees carried by the OBJECT, numbered with the module contract
+    at the top of this file:
+
+    G5  `nodes` are in scan order, `events` in (line, kind, node) order,
+        `components` keyed by their lowest node id.
+    G8  node ids are dense and equal their index in `nodes`, so
+        `result.nodes[i]` IS the run with id `i` and no `{n.id: n}` map
+        is needed to look one up. Producers of a `SweepResult` must
+        preserve this; `sweep` and `band.stitch` both do, and
+        `tests/test_sweep_equiv.test_node_ids_are_dense` holds them to
+        it.
+    G9  `nodes` and `components` -- and the `Component.nodes` lists
+        inside them -- are treated as IMMUTABLE once a result is
+        constructed. `component_of` builds an index over them on first
+        call and never invalidates it, so a later edit would be
+        answered from a stale index rather than rejected. Build a new
+        `SweepResult` instead; `band.stitch` is the worked example.
+    """
     axis: str
     conn: int
     capture: Capture
     nodes: list[RunNode]
     components: list[Component]
     events: list[Event]
+    # Lazy node -> component index for `component_of`. Excluded from
+    # equality and repr, so whether it happens to be built cannot make
+    # two otherwise identical results compare unequal.
+    _index: dict | None = field(default=None, compare=False, repr=False)
 
     @property
     def node_count(self) -> int:
@@ -198,10 +230,48 @@ class SweepResult:
         return [e for e in self.events if e.kind is kind]
 
     def component_of(self, node_id: int) -> Component:
-        for c in self.components:
-            if node_id in c.nodes:
-                return c
-        raise KeyError(node_id)
+        """The component holding `node_id`.
+
+        Backed by a node -> component index built on FIRST CALL and kept
+        for the rest of this result's life. Nothing new is computed: the
+        component-assembly loop in `sweep` already calls `uf.find` on
+        every node and groups them, and this is only what that loop
+        threw away.
+
+        It was a linear scan over components with a LIST membership test
+        per component, so a lookup cost O(V) and its price depended on
+        where the node's component sorted -- the last component on a
+        page cost ~80x the first. `emit.component_topology` calls this
+        once per event. Measured on a dense 400-dpi page (p41 of
+        kolbe2018hubbard: V=143,965, C=2,950, 14,640 events) the
+        attribution loop cost 11.8 s against a 0.83 s sweep for the same
+        page.
+
+        The index costs one dict entry per run and is only paid by
+        callers that actually use this method.
+
+        IT IS NEVER INVALIDATED. Mutating `components`, or a
+        `Component.nodes` list, after a call to this method would be
+        answered from the stale index -- silently, with a plausible
+        component. That makes G9 above a rule this method depends on
+        rather than an observation: `nodes` and `components` are
+        immutable once the result is constructed. Nothing in the
+        package edits either today -- `band.stitch` builds a fresh
+        `SweepResult` rather than editing one -- which is precisely why
+        it needs writing down. A rule that holds by accident is the one
+        that stops holding.
+        """
+        idx = self._index
+        if idx is None:
+            idx = {}
+            for c in self.components:
+                for i in c.nodes:
+                    idx[i] = c
+            self._index = idx
+        try:
+            return idx[node_id]
+        except KeyError:
+            raise KeyError(node_id) from None
 
 
 # --------------------------------------------------------------------------
@@ -229,7 +299,18 @@ class _UF:
         return i
 
     def union(self, a: int, b: int) -> int:
-        ra, rb = self.find(a), self.find(b)
+        return self.union_roots(self.find(a), self.find(b))
+
+    def union_roots(self, ra: int, rb: int) -> int:
+        """Union two ids that are ALREADY roots.
+
+        The size comparison and its tie-break are those of `union`,
+        copied unchanged and not rewritten: with equal sizes `ra` stays
+        the root, which is what makes a NEW run the root of the
+        component it merges into. `Component.root` is an identity that
+        eight modules key on, so flipping `<` to `<=` here renumbers
+        every root while every count stays right.
+        """
         if ra == rb:
             return ra
         if self.size[ra] < self.size[rb]:
@@ -237,6 +318,33 @@ class _UF:
         self.parent[rb] = ra
         self.size[ra] += self.size[rb]
         return ra
+
+    def attach(self, new_id: int, root: int) -> int:
+        """Add a freshly made singleton `new_id` to the component rooted
+        at `root`, returning the surviving root.
+
+        Exactly `union_roots(new_id, root)`. It exists because that call
+        is the commonest operation in the sweep and its outcome is
+        almost always `root` itself -- a fresh singleton loses the size
+        comparison against any component of two runs or more, so from a
+        component's third run onward the root does not move. Naming that
+        case lets the caller skip moving counters that are not going
+        anywhere.
+
+        The `size[root] == 1` case is NOT a special case here: it is
+        delegated to `union_roots` precisely so the tie-break that makes
+        a new run the root of a two-singleton component stays in one
+        place (see `test_root_identity_trap`).
+
+        Precondition: `new_id` is its own root with size 1. Not checked
+        -- this is the innermost path in the package, and `sweep` calls
+        it only on the id it just made.
+        """
+        if self.size[root] > 1:
+            self.parent[new_id] = root
+            self.size[root] += 1
+            return root
+        return self.union_roots(new_id, root)
 
 
 # --------------------------------------------------------------------------
@@ -259,9 +367,26 @@ def _lines(mask: InkMask, axis: str) -> Iterator[tuple[int, list[Run]]]:
         yield cur_line, batch
 
 
-def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
+# --------------------------------------------------------------------------
+# Reference implementation
+#
+# `_sweep_reference` is the sweep as it stood before the fast-path work,
+# kept verbatim and not exported. It is the ONLY definition of what
+# `sweep` must return: tests/test_sweep_equiv.py holds the two to
+# field-by-field identical output -- same nodes in the same order, same
+# components with the SAME `root`, same events. Equality of counts is
+# not the bar, because `_UF.union` leaves the NEWER node as root when
+# both sides have size 1, so a reordered union renumbers every root
+# while every count stays right, and eight downstream modules key on
+# `Component.root`.
+#
+# Same precedent as `nest._label`: the slow path is retained as the
+# oracle rather than deleted once the fast path passes.
+# --------------------------------------------------------------------------
+
+def _sweep_reference(mask: InkMask, *, axis: str = "row", conn: int = 8,
           capture: Capture = Capture.NONE) -> SweepResult:
-    """Sweep `mask` along `axis`, returning components and scan events.
+    """Pre-fast-path sweep, retained as the equivalence oracle.
 
     See the module contract for G1-G7. `conn` must be 4 or 8; use 4 when
     sweeping an inverted mask for hole finding.
@@ -367,6 +492,199 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                     events.append(Event(EventKind.CLOSE, line, r0, (),
                                         (uf.find(r0),)))
         open_roots = touched
+
+        prev, prev_line = cur, line
+
+    # -- final closures ----------------------------------------------------
+    if keep_events and open_roots and prev_line is not None:
+        for r0 in sorted(open_roots):
+            events.append(Event(EventKind.CLOSE, prev_line + 1, r0, (),
+                                (uf.find(r0),)))
+
+    # -- assemble components -----------------------------------------------
+    by_root: dict[int, list[int]] = {}
+    for n in nodes:
+        by_root.setdefault(uf.find(n.id), []).append(n.id)
+    comps: list[Component] = []
+    for root, ids in by_root.items():
+        ids.sort()
+        lines_ = [nodes[i].line for i in ids]
+        comps.append(Component(root=root, nodes=ids,
+                               edge_count=edges_of.get(root, 0),
+                               cycle_count=cycles_of.get(root, 0),
+                               first_line=min(lines_), last_line=max(lines_)))
+    comps.sort(key=lambda c: c.nodes[0])
+
+    events.sort(key=lambda e: (e.line, _KIND_ORDER[e.kind], e.node))
+    return SweepResult(axis=axis, conn=conn, capture=capture, nodes=nodes,
+                       components=comps, events=events)
+
+
+def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
+          capture: Capture = Capture.NONE) -> SweepResult:
+    """Sweep `mask` along `axis`, returning components and scan events.
+
+    See the module contract for G1-G7. `conn` must be 4 or 8; use 4 when
+    sweeping an inverted mask for hole finding.
+    """
+    if axis not in ("row", "col"):
+        raise InvalidAxis(axis)
+    if conn == 8:
+        slack = 1
+    elif conn == 4:
+        slack = 0
+    else:
+        raise InvalidConnectivity(conn)
+
+    keep_graph = capture is Capture.GRAPH
+    keep_events = capture in (Capture.EVENTS, Capture.GRAPH)
+
+    uf = _UF()
+    nodes: list[RunNode] = []
+    events: list[Event] = []
+    # per-root counters; migrated on union
+    edges_of: dict[int, int] = {}
+    cycles_of: dict[int, int] = {}
+
+    prev: list[tuple[int, int, int]] = []   # (lo, hi, node_id), sorted by lo
+    prev_line = None
+    open_roots: set[int] = set()
+
+    for line, runs in _lines(mask, axis):
+        contiguous = prev_line is not None and line == prev_line + 1
+        prevline = prev if contiguous else []
+        kids_of: dict[int, list[int]] = {}     # prev node -> current nodes
+        cur: list[tuple[int, int, int]] = []
+        pi = 0
+        # Hoisted: `prevline` cannot change inside this loop, and
+        # `len()` in the two-pointer conditions is evaluated once per
+        # advance of each pointer -- the innermost code in the package.
+        nprev = len(prevline)
+
+        for r in runs:
+            nid = uf.make()
+            node = RunNode(nid, r.line, r.lo, r.hi)
+            nodes.append(node)
+
+            # -- adjacency: two-pointer sweep over the previous line -------
+            # The touching runs are the slice [pi, pj) of `prevline`.
+            # Their ids are read from it by index below, so the common
+            # case builds no list at all.
+            while pi < nprev and prevline[pi][1] < r.lo - slack:
+                pi += 1
+            pj = pi
+            # `adj` and `roots_before` are read ONLY by the MERGE event,
+            # so neither is paid for at Capture.NONE -- the level every
+            # topological caller uses, since G4 says NONE already yields
+            # all counts. The scan is written out twice rather than
+            # branching per step: this is the innermost code in the
+            # package, and the ids are read back by index anyway.
+            if keep_events:
+                adj = []
+                while pj < nprev and prevline[pj][0] <= r.hi + slack:
+                    adj.append(prevline[pj][2])
+                    pj += 1
+                # roots BEFORE any union caused by this run -- a merge is
+                # defined by what was distinct on arrival, not after the
+                # fact.
+                roots_before = tuple(sorted({uf.find(q) for q in adj}))
+            else:
+                adj = ()
+                roots_before = ()
+                while pj < nprev and prevline[pj][0] <= r.hi + slack:
+                    pj += 1
+            nadj = pj - pi
+
+            # -- the case dispatch, on the number of parents ---------------
+            # Measured on a synthetic page of ring glyphs, 176,000 runs:
+            # 2.3% have no parent, 2.3% have more than one, and 95.5%
+            # have exactly one. The middle case is the one worth naming.
+            if nadj == 0:
+                # BIRTH. The only place a counter pair is created: this
+                # run is, and stays, its own root.
+                edges_of[nid] = 0
+                cycles_of[nid] = 0
+                if keep_events:
+                    events.append(Event(EventKind.BIRTH, line, nid))
+            else:
+                # FIRST parent. This edge can NEVER close a cycle: `nid`
+                # was created this iteration and has not been unioned, so
+                # its root cannot already be the parent's. So there is no
+                # root comparison here, and `nid`'s counts are 0 by
+                # definition rather than by lookup.
+                #
+                # `rn` is the root of this run's component, TRACKED from
+                # here on rather than re-found -- only `union_roots` can
+                # change it, and it returns the new one.
+                p = prevline[pi][2]
+                if keep_events:
+                    kids_of.setdefault(p, []).append(nid)
+                if keep_graph:
+                    node.up.append(p)
+                    nodes[p].down.append(nid)
+                rp = uf.find(p)
+                # ATTACH: `nid` joins `rp`'s component. The root stays
+                # `rp` unless that component is a lone run, so the
+                # counter pair usually does not move at all -- which is
+                # the whole reason `attach` is named separately from
+                # `union_roots`.
+                rn = uf.attach(nid, rp)
+                if rn == rp:
+                    edges_of[rp] += 1
+                else:
+                    edges_of[rn] = edges_of.pop(rp) + 1
+                    cycles_of[rn] = cycles_of.pop(rp)
+
+                # FURTHER parents. Only from here can an edge find its
+                # two endpoints already in one component.
+                for k in range(pi + 1, pj):
+                    p = prevline[k][2]
+                    if keep_events:
+                        kids_of.setdefault(p, []).append(nid)
+                    if keep_graph:
+                        node.up.append(p)
+                        nodes[p].down.append(nid)
+                    rp = uf.find(p)
+                    if rn == rp:
+                        # both endpoints already in one component: a loop
+                        # closes here, i.e. a hole is born
+                        cycles_of[rn] += 1
+                        edges_of[rn] += 1
+                        if keep_events:
+                            events.append(Event(EventKind.CYCLE, line, nid,
+                                                (p,), (rp,), rn))
+                    else:
+                        e = edges_of.pop(rn) + edges_of.pop(rp) + 1
+                        c = cycles_of.pop(rn) + cycles_of.pop(rp)
+                        rn = uf.union_roots(rn, rp)
+                        edges_of[rn] = e
+                        cycles_of[rn] = c
+
+                if keep_events and len(roots_before) >= 2:
+                    events.append(Event(EventKind.MERGE, line, nid,
+                                        tuple(adj), roots_before, rn))
+
+            cur.append((r.lo, r.hi, nid))
+
+        # -- splits: a previous-line run with more than one edge down ------
+        if keep_events:
+            for p in sorted(kids_of):
+                kids = kids_of[p]
+                if len(kids) >= 2:
+                    events.append(Event(EventKind.SPLIT, nodes[p].line, p,
+                                        tuple(sorted(kids))))
+
+        # -- closures ------------------------------------------------------
+        # `touched` costs one find per run of the line and `open_roots`
+        # is read only here and in the final-closure block, both of
+        # which are event-only.
+        if keep_events:
+            touched = {uf.find(n) for (_, _, n) in cur}
+            for r0 in sorted(open_roots):
+                if uf.find(r0) not in touched:
+                    events.append(Event(EventKind.CLOSE, line, r0, (),
+                                        (uf.find(r0),)))
+            open_roots = touched
 
         prev, prev_line = cur, line
 

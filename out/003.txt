@@ -1,0 +1,46 @@
+STEP 2 -- the redundant finds
+=============================
+
+Change (inkdrill/sweep.py)
+--------------------------
+1. `_UF.union(a, b)` is now `union_roots(find(a), find(b))`, and
+   `union_roots(ra, rb)` holds the body unchanged. The size comparison
+   and its tie-break were COPIED, not rewritten: with equal sizes `ra`
+   stays the root, which is what makes a new run the root of the
+   component it merges into.
+2. The live sweep tracks `rn`, the root of the current run's component:
+   `rn = nid` at creation, reassigned to the result of each
+   `union_roots`. This removes
+     - `uf.find(nid)` from every iteration of the edge loop
+     - `uf.find(nid)` from the MERGE event
+     - the two finds `uf.union` repeated on arguments already known
+       to be roots
+
+The reasoning that licenses it: a run is its own root at creation and
+only `union_roots` can change that, and it returns the new root.
+
+Equivalence
+-----------
+tests.test_sweep_equiv : 5 tests, ALL PASSED -- 828 checks
+
+Full suite
+----------
+Ran 1194 tests, 1 error, 60 skipped -- identical to the step-0 baseline.
+
+Counters, same synthetic A4 page (V = 176,000 runs, 172,000 unions)
+--------------------------------------------------------------------
+                        finds       finds/run   wall
+Capture.NONE  reference 1,224,000   6.95        0.889 s
+Capture.NONE  sweep       352,000   2.00        0.642 s   -28%
+Capture.GRAPH reference 1,323,920   7.52        0.969 s
+Capture.GRAPH sweep       803,920   4.57        0.957 s    -1%
+
+Union count is unchanged at 172,000 (the counter double-counts the
+reference because its `union` now delegates to `union_roots`).
+
+Cumulative over steps 1-2: finds/run 6.95 -> 2.00 at Capture.NONE
+(-71%), 7.52 -> 4.57 at Capture.GRAPH (-39%).
+
+Worth naming: GRAPH lost 520,000 finds and its wall clock did not move.
+The remaining GRAPH cost is elsewhere -- RunNode allocation, the up/down
+list appends, the event objects -- none of which this CR touches.

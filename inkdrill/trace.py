@@ -165,11 +165,12 @@ def contours(mask: InkMask, *, conn: int = 8) -> list[list[Contour]]:
     # an E-heading top edge borders pixel (x, y); for the other
     # headings the bordering pixel follows from the ink-on-left rule.
     res = sweep(mask, conn=8, capture=Capture.GRAPH)
-    by_node = {n.id: n for n in res.nodes}
+    # U3's G8: node ids are dense and equal their index in `nodes`.
+    nodes = res.nodes
     comp_of_pixel: dict[tuple[int, int], int] = {}
     for ci, comp in enumerate(res.components):
         for nid in comp.nodes:
-            n = by_node[nid]
+            n = nodes[nid]
             for x in range(n.lo, n.hi + 1):
                 comp_of_pixel[(x, n.line)] = ci
 

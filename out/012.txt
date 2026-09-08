@@ -1,0 +1,46 @@
+STEP 3, batch 2 -- the identity maps in reeb, skeleton, trace
+=============================================================
+
+The remaining four of the seven, one commit per module, the full suite
+between each.
+
+  reeb.py:291      by_id    ->  runs = result.nodes
+  skeleton.py:215  node     ->  nodes = res.nodes
+  trace.py:168     by_node  ->  nodes = res.nodes
+
+`reeb` keeps the alias as `runs`, not `nodes`: `nodes` in that function
+is the ReebNode list being built, and shadowing it would be the kind of
+silent off-by-one the CR asked for one module per step to avoid.
+
+All seven sites are now gone. `grep -rn "{n.id: n for n in"` over
+`inkdrill/` returns only the two places in `sweep.py` that DOCUMENT the
+guarantee.
+
+Left alone, checked and confirmed not identity maps
+---------------------------------------------------
+  __main__.py:310   {c.id: c for c in comps}   -- a namedtuple built
+                    from `_page_components`, whose `id` is not a list
+                    index in that list
+  emit.py:746       {r.id: (r, h) for r, h in keep}  -- keys a (run,
+                    hole) PAIR, and `keep` is a filtered list, so id is
+                    not its index
+  mathstruct.py:349 {g.id: g for g in everything}    -- Glyph ids from
+                    the caller, used with an `in by_id` membership test
+                    that a list cannot answer
+
+Tests
+-----
+Full suite after reeb        Ran 1202, 1 failure, 37 skipped
+Full suite after skeleton    Ran 1202, 1 failure, 37 skipped
+Full suite after trace       Ran 1202, 1 failure, 37 skipped
+
+Unchanged from the step-2 baseline in every run. The one failure is the
+pre-existing worktree `version` failure described in out/009.txt.
+
+Not claimed
+-----------
+  * No measurement, in either batch. This is a clarity change.
+  * The maps are gone from the package, not from callers outside it.
+    Anything downstream that builds its own `{n.id: n}` from a
+    `SweepResult` is now redundant rather than wrong, and was not
+    searched for.

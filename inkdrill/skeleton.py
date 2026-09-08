@@ -212,10 +212,11 @@ def parts(mask: InkMask, *, min_ink: int = 1) -> list[Part]:
     from .sweep import sweep as _sweep
 
     res = _sweep(mask, conn=8)
-    node = {n.id: n for n in res.nodes}
+    # U3's G8: node ids are dense and equal their index in `nodes`.
+    nodes = res.nodes
     out = []
     for comp in res.components:
-        ns = [node[i] for i in comp.nodes]
+        ns = [nodes[i] for i in comp.nodes]
         # `image_span` is the sanctioned converter; for the row axis
         # this sweep uses, lo..hi is x and line is y, but going
         # through it is what keeps that true if the axis ever moves.

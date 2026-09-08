@@ -1,0 +1,78 @@
+STEP 4 -- the flush fixtures
+============================
+
+ALL SEVEN PASS. No behaviour was found wrong: `sweep` is
+field-for-field identical to `_sweep_reference` on every one, at both
+axes, both connectivities and all three capture levels. The
+retire/flush machinery handles every case the review named.
+
+The seven, added to FIXTURES
+----------------------------
+  leading_blank_lines                  blank lines before any ink
+  trailing_blank_lines                 blank lines after the last ink
+  two_blank_lines_between_components   two blanks between two
+                                       multi-line components
+  full_width_line_between_regions      a full-width run alone on its
+                                       line, between two ink regions
+  open_at_eof                          a component whose last line is
+                                       the mask's last line
+  single_column                        width 1, five lines tall
+  single_row                           height 1, six columns wide
+
+Coverage
+--------
+The fixture set is 23 masks (16 before), and `test_fixtures` now runs
+
+    23 masks x 2 axes x 2 conns x 3 captures = 276 checks
+
+each check comparing nodes, components AND events field by field, plus
+the G2 cycle-rank identity. The count is asserted rather than left as
+`> 0`, so a fixture deleted or a capture level dropped from the product
+fails here instead of quietly shrinking the run.
+
+Note that `single_column` and `single_row` swap roles under the axis
+loop, so the height-1 mask is also swept as a width-1 mask and back.
+
+The interesting result is what the fixtures could NOT catch
+-----------------------------------------------------------
+Every one of these fixtures is checked by comparing two
+implementations, and BOTH carry their own copy of the final flush.
+A flush lost from both is invisible to the whole gate.
+
+Demonstrated: a throwaway copy of the package with the final-closure
+block disabled in `sweep` AND `_sweep_reference`
+
+    tests.test_sweep_equiv: Ran 15 tests, FAILED (failures=1)
+    FAIL: test_every_component_closes_exactly_once
+
+Fourteen of the fifteen tests pass with every CLOSE-at-EOF event
+missing -- the 276 field-by-field comparisons included, because both
+sides lost the same events, and G2 included, because CLOSE is an event
+and not a count. That is exactly the silent loss the review predicted.
+
+So step 4 also adds `test_every_component_closes_exactly_once`: over
+the whole fixture set at both event-bearing capture levels, the number
+of CLOSE events must equal the component count and no component may
+close twice. Every component closes exactly once -- at a blank line by
+G7, or at EOF -- so this is an invariant of the sweep rather than a
+comparison, and it is the assertion a lost flush actually trips. It
+was verified to hold on a glyph page and on random masks at densities
+0.01-0.8 before it was asserted.
+
+Tests
+-----
+tests.test_sweep_equiv   15 tests, ALL PASSED (14 before, 1 new)
+Full suite               Ran 1203 tests, 1 failure, 37 skipped -- the
+                         pre-existing worktree `version` failure of
+                         out/009.txt; the count grew by the one new test
+Mutation gate            13/13 killed
+
+Not claimed
+-----------
+  * The fixtures are hand-written masks of at most 7 lines. They say
+    the cases are handled, not that they are handled at scale.
+  * `test_every_component_closes_exactly_once` holds the CLOSE count to
+    the component count. It does not check that each CLOSE is on the
+    right LINE; a flush that fired at the wrong line would still pass it
+    and would still be caught by the oracle comparison, which is the
+    other half of the pair.

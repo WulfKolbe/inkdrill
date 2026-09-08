@@ -1,0 +1,74 @@
+STEP 2 -- state and assert the node-id invariant
+================================================
+
+`nodes[i].id == i` held by accident. `_UF.make` returns the pre-append
+length and `nodes.append` follows immediately, so the id IS the index;
+`band.stitch` preserves it because it renumbers into scan order and
+rebuilds the node list from the new ids. Neither said so anywhere, and
+seven call sites in six modules rebuilt `{n.id: n for n in nodes}` from
+it. Step 3 removes those maps, so this step turns the accident into a
+guarantee first.
+
+Written down
+------------
+G8, added to the module contract at the top of `sweep.py` alongside
+G1-G7, and to a new `SweepResult` class docstring (the class had none):
+
+    node ids are DENSE and equal their index in `nodes`, so
+    `result.nodes[i]` is the run with id `i`. Every producer of a
+    `SweepResult` must preserve this.
+
+No production code changed in this step -- docstrings only.
+
+Asserted
+--------
+`test_node_ids_are_dense` -- `sweep` over the whole FIXTURES set (16
+masks) at both axes, both connectivities and all three capture levels,
+96 results, plus the empty mask, a glyph page and three random
+densities.
+
+`test_node_ids_are_dense_after_stitching` -- `band.sweep_banded` over
+five masks at band heights k = 1, 2, 3, 5, 8, 13. `band` is the
+producer that could break G8, because stitching renumbers.
+
+Both assert three things per result, not one: ids equal their index,
+the id SET is exactly range(V) (dense, not merely increasing), and
+every `Component.nodes` entry and every `Component.root` lands inside
+that range -- the last is what would actually blow up in step 3.
+
+The test can fail
+-----------------
+A throwaway copy of the package with `band.stitch` reversing its node
+list after renumbering:
+
+    tests.test_sweep_equiv: Ran 14 tests, FAILED (failures=1)
+    FAIL: test_node_ids_are_dense_after_stitching
+
+Only the new test fails. The whole equivalence gate -- 12 tests over
+every (mask, axis, conn, capture) -- passes with G8 broken in `band`,
+because it compares `sweep` against `_sweep_reference` and neither is
+`band`. That is the gap this test closes and it is worth naming.
+
+Tests
+-----
+tests.test_sweep_equiv   14 tests, ALL PASSED (12 before, 2 new)
+Full suite               Ran 1202 tests, 1 failure, 37 skipped
+                         -- the failure is the pre-existing worktree
+                         `version` failure described in out/009.txt;
+                         the count grew by exactly the two new tests
+Mutation gate            13/13 killed (unchanged; not re-run for a
+                         docstring change -- re-run at the end of
+                         step 3)
+
+Not claimed
+-----------
+  * The test can only hold the two producers that exist. A future
+    `SweepResult` producer inherits the guarantee and not the test.
+  * `stitch`'s SLOW renumber path -- the branch for a band whose own
+    nodes are not in scan order, which U8 reaches by appending band
+    results in completion order -- is not exercised here.
+    `sweep_banded` always hands `stitch` bands whose nodes are already
+    ordered, and `stitch` sorts the band list itself, so no argument to
+    `sweep_banded` reaches that branch. It is checked by inspection
+    only: it renumbers into `range(len(nodes))` and rebuilds every
+    `RunNode` with the new id.

@@ -1,0 +1,61 @@
+STEP 6 -- corpus validation on a real pdfdrill inspect artefact
+===============================================================
+
+No code change. This closes the "two real pages is two real pages"
+caveat from out/006.txt.
+
+Corpus
+------
+kolbe2018hubbard.tar.gz, a pdfdrill 0.4.0 `inspect` artefact:
+  inspect/pages/p1..p42.png   42 pages, 3307 x 4677, PNG colour type 2
+                              (truecolour = png16m), A4 at 400 dpi
+  page-00NN.png are byte-identical duplicates of pN.png (md5 match),
+  a second naming scheme, not a second rendition -- 84 files, 42 pages.
+Provenance read from kolbe2018hubbard.drill.json: model_source mathpix,
+601 pdf geometry lines, 61 equations, latex_source AKolbe-BA.tex.
+
+Everything below is measured on the 42 real pages with the mask the
+package itself produces (pngio.load_mask), not on a synthetic fixture.
+
+The premise, on real ink
+------------------------
+                              runs         birth  merge  single-parent  pure CONTINUE
+42 pages, this corpus     3,070,286        3.6%   2.2%      94.2%          90.4%
+arxiv_1408_0838_p8 (fix)    120,494        5.1%   3.2%      91.7%          86.9%
+heim_bh2_p96 (fixture)       35,283        5.4%   3.0%      91.6%          86.6%
+synthetic ring page         176,000        2.3%   2.3%      95.5%          90.9%
+
+Per page: min 89.5% (p18), median 90.3%, max 94.2% (p1). The spread
+across 42 pages is 4.7 points, so this is a property of document ink and
+not of a page. The synthetic fixture the CR was designed against was
+right to within half a point.
+
+Finds -- the deterministic number
+----------------------------------
+Capture.NONE, over all 42 pages:
+  reference  21,233,566 finds  = 6.92 / run
+  new         6,096,848 finds  = 1.99 / run          -71.3%
+Per page the reference ranges 6.85-6.97 finds/run and the new sweep
+1.97-2.00. Both are flat across page content, which is what a per-run
+constant should look like.
+
+Wall clock, Capture.NONE, best of 3 per page
+---------------------------------------------
+  total      13.41 s -> 9.13 s        -31.9%
+  per page   0.319 s -> 0.217 s
+  per-page delta  min -20.7% (p19)  median -32.9%  max -38.3% (p4)
+  throughput 0.23 -> 0.34 Mruns/s (single core, CPython 3.12)
+
+p19 is the weakest page at -20.7% and its continue fraction is 90.1%,
+i.e. ordinary -- so the variation is not explained by the case mix and I
+am not claiming a cause for it.
+
+What this does NOT establish
+-----------------------------
+  * Capture.GRAPH was not re-timed on this corpus. On the three masks
+    where it was, the median did not move outside its own spread.
+  * One document, one renderer, one dpi, one machine.
+  * Page-level effect is still unmeasured: the U8 premise check put the
+    sweep at 5-15% of per-page work against decode, and 0.217 s/page of
+    sweep against a 400-dpi PNG decode is consistent with that. A 32%
+    cut on the sweep is a few percent of a page.
