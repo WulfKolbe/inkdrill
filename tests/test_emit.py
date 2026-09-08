@@ -2620,3 +2620,158 @@ class T1_22_SkeletonJunctions(unittest.TestCase):
         s2 = skeleton(s1)
         self.assertEqual(s1.data, s2.data)
         self.assertLess(s1.ink_count, m.ink_count)
+
+
+class T1_23_VersionInALinkedWorktree(unittest.TestCase):
+    """G5: a linked worktree reports the commit it is actually on.
+
+    The failure this pins reported `unknown` for a perfectly good
+    checkout, and it hid behind the *other* kind of worktree: a
+    detached `HEAD` holds the hash directly, so it never touches the
+    ref-resolution path at all. Every test here therefore asserts the
+    branch case and the detached case, and the negative -- an ordinary
+    `.git` with no `commondir` -- so the fallback cannot become
+    unconditional without something failing.
+    """
+
+    SHA = "0123456789abcdef0123456789abcdef01234567"
+    REF = "refs/heads/probe"
+
+    def _layout(self, root, *, commondir="../..", packed=False, head=None):
+        """The shape `git worktree add` actually writes: the common dir
+        is `<repo>/.git`, the worktree's own dir is
+        `<repo>/.git/worktrees/<name>` two levels below it, and
+        `commondir` holds the relative path `../..` back up.
+
+        Those two levels are not decoration. Writing this fixture with
+        the common dir somewhere else and a `commondir` invented to
+        match made the first two tests fail against a CORRECT resolver
+        -- the depth is a real value and is taken from real git, per
+        `test_a_real_git_worktree_on_a_branch` below.
+        """
+        import pathlib
+        common = pathlib.Path(root) / ".git"
+        wt = common / "worktrees" / "w"
+        (wt / "refs").mkdir(parents=True)          # present and EMPTY
+        if packed:
+            (common / "packed-refs").write_text(
+                "# pack-refs with: peeled fully-peeled sorted \n"
+                f"{self.SHA} {self.REF}\n", encoding="utf-8")
+        else:
+            (common / "refs" / "heads").mkdir(parents=True)
+            (common / "refs" / "heads" / "probe").write_text(
+                self.SHA + "\n", encoding="utf-8")
+        (wt / "HEAD").write_text(head if head is not None
+                                 else f"ref: {self.REF}\n", encoding="utf-8")
+        if commondir is not None:
+            (wt / "commondir").write_text(commondir + "\n", encoding="utf-8")
+        return wt, common
+
+    def test_a_branch_ref_is_read_from_the_common_dir(self):
+        import tempfile
+        from inkdrill.version import _head_of
+        with tempfile.TemporaryDirectory() as d:
+            wt, _ = self._layout(d)
+            self.assertEqual(_head_of(wt), self.SHA)
+
+    def test_a_packed_branch_ref_is_read_from_the_common_dir(self):
+        """Worktree AND packed: a fresh clone's worktree, where both
+        halves of the lookup have to leave the worktree directory."""
+        import tempfile
+        from inkdrill.version import _head_of
+        with tempfile.TemporaryDirectory() as d:
+            wt, _ = self._layout(d, packed=True)
+            self.assertEqual(_head_of(wt), self.SHA)
+
+    def test_an_absolute_commondir_is_followed_too(self):
+        """`commondir` is normally relative, but is not required to be."""
+        import os
+        import tempfile
+        from inkdrill.version import _head_of
+        with tempfile.TemporaryDirectory() as d:
+            wt, common = self._layout(d, commondir=os.fspath(
+                os.path.join(d, ".git")))
+            self.assertEqual(_head_of(wt), self.SHA)
+
+    def test_without_commondir_the_missing_ref_is_still_unknown(self):
+        """The negative side of the fallback. An ordinary `.git` has no
+        `commondir`, so nothing may be invented for it -- if this passed
+        with the ref absent, the resolver would be guessing."""
+        import tempfile
+        from inkdrill.version import _head_of
+        with tempfile.TemporaryDirectory() as d:
+            wt, _ = self._layout(d, commondir=None)
+            self.assertIsNone(_head_of(wt))
+
+    def test_a_detached_worktree_never_needs_the_common_dir(self):
+        """The case that hid the bug: the hash is in HEAD itself, so it
+        resolves with the shared ref store emptied out. The worktree's
+        own directory lives INSIDE the common dir, so the ref store is
+        what gets removed here, not the directory."""
+        import shutil
+        import tempfile
+        from inkdrill.version import _head_of
+        with tempfile.TemporaryDirectory() as d:
+            wt, common = self._layout(d, head=self.SHA + "\n")
+            shutil.rmtree(common / "refs")
+            self.assertEqual(_head_of(wt), self.SHA)
+
+    def test_a_per_worktree_ref_is_not_answered_from_the_common_dir(self):
+        """`refs/bisect/*` is per-worktree. The worktree's own directory
+        is searched first, so a same-named ref in the shared store does
+        not shadow it."""
+        import tempfile
+        from inkdrill.version import _head_of
+        with tempfile.TemporaryDirectory() as d:
+            wt, common = self._layout(d, head="ref: refs/bisect/bad\n")
+            mine = "ffffffffffffffffffffffffffffffffffffffff"
+            (wt / "refs" / "bisect").mkdir(parents=True)
+            (wt / "refs" / "bisect" / "bad").write_text(
+                mine + "\n", encoding="utf-8")
+            (common / "refs" / "bisect").mkdir(parents=True)
+            (common / "refs" / "bisect" / "bad").write_text(
+                self.SHA + "\n", encoding="utf-8")
+            self.assertEqual(_head_of(wt), mine)
+
+    def test_a_real_git_worktree_on_a_branch(self):
+        """The fixture above is what `git worktree add` writes; this
+        asserts that against git itself, on a throwaway repo so the
+        checkout under test is never touched. It is the test that would
+        have caught the original defect."""
+        import os
+        import pathlib
+        import subprocess
+        import tempfile
+        from inkdrill.version import _head_of
+
+        def git(*a, cwd):
+            return subprocess.run(("git",) + a, cwd=cwd, capture_output=True,
+                                  text=True)
+
+        with tempfile.TemporaryDirectory() as d:
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "gc"),
+                       GIT_CONFIG_SYSTEM=os.path.join(d, "gs"))
+            main = pathlib.Path(d) / "main"
+            main.mkdir()
+            r = subprocess.run(["git", "init", "-q", "-b", "trunk", "."],
+                               cwd=main, capture_output=True, text=True,
+                               env=env)
+            if r.returncode:
+                self.skipTest("git unavailable")
+            (main / "f").write_text("x", encoding="utf-8")
+            for a in (("add", "f"),
+                      ("-c", "user.email=t@t", "-c", "user.name=t",
+                       "commit", "-qm", "c")):
+                subprocess.run(("git",) + a, cwd=main, capture_output=True,
+                               text=True, env=env)
+            for name, extra in (("wtb", ("-b", "probe")), ("wtd", ("--detach",))):
+                w = pathlib.Path(d) / name
+                subprocess.run(("git", "worktree", "add", "-q") + extra
+                               + (str(w), "HEAD"), cwd=main,
+                               capture_output=True, text=True, env=env)
+                want = subprocess.run(["git", "rev-parse", "HEAD"], cwd=w,
+                                      capture_output=True, text=True, env=env)
+                gitdir = (w / ".git").read_text(
+                    encoding="utf-8").strip()[len("gitdir:"):].strip()
+                self.assertEqual(_head_of(pathlib.Path(gitdir)),
+                                 want.stdout.strip(), name)

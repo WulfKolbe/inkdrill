@@ -42,7 +42,7 @@ row manifest — see HANDOVER).
 ## Commands
 
 ```sh
-python3 -m unittest discover -s tests -t .   # full suite: 1204, of which 37 skip
+python3 -m unittest discover -s tests -t .   # full suite: 1211, of which 37 skip
 python3 -m unittest tests.test_sweep          # one module
 python3 -m unittest tests.test_sweep.T3_2_CycleRank.test_ring_has_one_hole
 INKDRILL_CORPUS=~/pdfdrill-library python3 -m unittest tests.test_pngio_corpus
@@ -212,10 +212,15 @@ Built (U0–U14), all independent of each other except `reeb`/`aggregate`/`nest`
   `rule_width_pt`, `free_rules` -> `page["ink"]["rules"]` (booktabs
   rules, which nothing encloses — a consumer must read that page-level
   key AND the per-line `ink.rules`). A `glyph` line is one `group()`
-  CLUSTER, not one component. `ocr.version` is the git commit. The only producer of an interchange format, and it
-  writes no files. Points come from `pHYs` or it raises. Emits measured
-  stroke widths, never `\toprule`/`\midrule` — that call needs the
-  table's context and belongs to the consumer.
+  CLUSTER, not one component. `ocr.version` is the git commit, read
+  from `.git` by `version.py` rather than by running `git`. It
+  follows `commondir`, so a LINKED WORKTREE reports the commit it is
+  actually on — that is the ordinary case for this field, since
+  comparing two builds is what it exists for, and it reported
+  `unknown` until 2026-09-08. The only producer of an interchange
+  format, and it writes no files. Points come from `pHYs` or it raises.
+  Emits measured stroke widths, never `\toprule`/`\midrule` — that call
+  needs the table's context and belongs to the consumer.
 - **`inkdrill/qc.py`** — what a mask says about how it was made.
   `screen_signals`, `runs_per_area`, `px_per_run`, `topology_preserved`.
   Runs-per-area is the halftone channel because a cycle count is blind

@@ -1,0 +1,139 @@
+632 - version.py follows commondir: a worktree on a branch reports its commit
+============================================================================
+
+Reported as open in out/631.txt item 4; now fixed, with the bug itself
+pinned as a mutant.
+
+--------------------------------------------------------------------
+THE DEFECT, REPRODUCED BEFORE IT WAS FIXED
+
+`emit` writes `ocr.version` so a consumer can tell "nothing changed"
+from "the change could not reach this path". It is the git commit,
+read out of `.git` directly rather than by running `git`, because a
+subprocess in the emit path would be a dependency on an external tool
+for a metadata field.
+
+In a linked worktree checked out on a BRANCH it read `unknown`.
+
+    $ git worktree add -b probe .../wt-branch HEAD
+    $ cat .git/worktrees/wt-branch/HEAD
+    ref: refs/heads/probe
+    $ ls -A .git/worktrees/wt-branch/refs
+                                       <- EMPTY
+    $ cat .git/worktrees/wt-branch/commondir
+    ../..
+    resolve() : unknown
+    git HEAD  : ccdd109ce31a
+
+A linked worktree's git directory holds only its OWN refs -- `HEAD`,
+and the bisect/rewritten/worktree namespaces. Branches live in the
+shared directory named by `commondir`. `_head_of` followed the
+symbolic ref against the worktree's own directory only, found nothing
+loose and nothing packed, and returned None -> `unknown`.
+
+WHY IT SURVIVED THIS LONG. The other kind of worktree hides it. A
+detached HEAD holds the hash directly and never reaches the ref
+lookup at all:
+
+    wt-detached  resolve() = ccdd109ce31a   git = ccdd109ce31a   OK
+    wt-branch    resolve() = unknown        git = ccdd109ce31a   BUG
+
+and the module's own docstring said worktrees were followed "because a
+worktree is exactly where a comparison run happens" -- which was half
+true. It followed the `.git` FILE to the real directory, correctly,
+and then stopped one level short.
+
+--------------------------------------------------------------------
+THE FIX
+
+`_head_of` split in two. `_ref_in(git_dir, ref)` resolves a ref within
+ONE directory -- loose file, then `packed-refs` -- and `_head_of`
+tries it in the worktree's own directory first, then in `commondir`:
+
+    for d in (git_dir, _common_dir(git_dir)):
+        if d is None:
+            continue
+        sha = _ref_in(d, ref)
+        if sha:
+            return sha
+
+The order is not arbitrary. `refs/bisect/*` and `refs/worktree/*` are
+PER-WORKTREE and must not be answered from the shared store, so the
+worktree's own directory wins. `_common_dir` returns None for an
+ordinary `.git`, which has no `commondir` file -- so the non-worktree
+path is byte-for-byte the behaviour it had.
+
+G5 added to the contract: a linked worktree reports what
+`git rev-parse HEAD` reports IN THAT WORKTREE, on a branch as well as
+detached.
+
+VERIFIED END TO END, on real worktrees of a real clone, in both ref
+storage forms -- because a fresh clone keeps its branches packed, and
+worktree-plus-packed is the combination where BOTH halves of the
+lookup have to leave the worktree directory:
+
+    loose refs   wt-branch ccdd109ce31a   wt-detached ccdd109ce31a
+    git pack-refs --all
+    packed refs  wt-branch ccdd109ce31a   wt-detached ccdd109ce31a
+
+and the full suite now runs green INSIDE a linked branch worktree
+(1211 tests, 37 skipped), where `test_the_version_matches_the_checkout`
+previously failed asserting 'unknown' != 'unknown'.
+
+--------------------------------------------------------------------
+TESTS -- T1_23_VersionInALinkedWorktree, 7, all ok
+
+  test_a_branch_ref_is_read_from_the_common_dir
+  test_a_packed_branch_ref_is_read_from_the_common_dir
+  test_an_absolute_commondir_is_followed_too
+  test_without_commondir_the_missing_ref_is_still_unknown
+  test_a_detached_worktree_never_needs_the_common_dir
+  test_a_per_worktree_ref_is_not_answered_from_the_common_dir
+  test_a_real_git_worktree_on_a_branch
+
+Six build the directory shape by hand and need no git binary. The
+seventh runs `git init` and `git worktree add` on a throwaway repo in
+a tmpdir -- never the checkout under test -- and asserts `_head_of`
+against `git rev-parse HEAD` for a branch worktree AND a detached one.
+It is the test that would have caught the original defect, and it is
+there because the hand-built fixture is only as good as its
+correspondence to what git actually writes. Which was tested
+immediately:
+
+  THE FIXTURE WAS WRONG FIRST, AND SAID SO. The first version put the
+  common dir beside the worktree dir with `commondir: ../common`. Real
+  git puts the worktree gitdir TWO levels below the common dir
+  (`.git/worktrees/<name>`, `commondir: ../..`), so two tests failed
+  against a CORRECT resolver. Derive fixture dimensions from a
+  measured real value; never choose them. The depth was a real value
+  and it was invented.
+
+  `test_without_commondir_...` is the negative side of the refusal:
+  with no `commondir`, a missing ref must stay `unknown`. Without it
+  the fallback could be made unconditional and nothing would fail.
+
+--------------------------------------------------------------------
+MUTATION -- 5 / 5 KILLED
+
+  V1  _common_dir always returns None                 KILLED  (4 fail)
+  V2  no common fallback -- THE ORIGINAL BUG          KILLED  (4 fail)
+  V3  common dir searched before the worktree         KILLED  (1 fail)
+  V4  relative commondir not joined to git_dir        KILLED  (3 fail)
+  V5  packed-refs ignored in _ref_in                  KILLED  (1 fail)
+
+V2 is the point: the defect this file exists to fix is now a mutant,
+so it cannot come back silently. V3 is killed by exactly one test --
+the per-worktree bisect ref -- which is that test earning its place.
+
+ONE BRANCH WAS REMOVED RATHER THAN TESTED. The first draft of
+`_common_dir` ended `return None if common == git_dir.resolve() else
+common`, guarding against a `commondir` that points at its own
+directory. That is an EQUIVALENT mutant by construction: searching the
+same directory twice returns the same answer, so no test could kill
+it. It was deleted instead of being left as an unkillable branch.
+
+--------------------------------------------------------------------
+SUITE
+
+  1204 -> 1211 tests, 37 skipped, both in the main checkout and inside
+  a linked branch worktree.
