@@ -187,6 +187,12 @@ class SweepResult:
         preserve this; `sweep` and `band.stitch` both do, and
         `tests/test_sweep_equiv.test_node_ids_are_dense` holds them to
         it.
+    G9  `nodes` and `components` -- and the `Component.nodes` lists
+        inside them -- are treated as IMMUTABLE once a result is
+        constructed. `component_of` builds an index over them on first
+        call and never invalidates it, so a later edit would be
+        answered from a stale index rather than rejected. Build a new
+        `SweepResult` instead; `band.stitch` is the worked example.
     """
     axis: str
     conn: int
@@ -243,6 +249,17 @@ class SweepResult:
 
         The index costs one dict entry per run and is only paid by
         callers that actually use this method.
+
+        IT IS NEVER INVALIDATED. Mutating `components`, or a
+        `Component.nodes` list, after a call to this method would be
+        answered from the stale index -- silently, with a plausible
+        component. That makes G9 above a rule this method depends on
+        rather than an observation: `nodes` and `components` are
+        immutable once the result is constructed. Nothing in the
+        package edits either today -- `band.stitch` builds a fresh
+        `SweepResult` rather than editing one -- which is precisely why
+        it needs writing down. A rule that holds by accident is the one
+        that stops holding.
         """
         idx = self._index
         if idx is None:
