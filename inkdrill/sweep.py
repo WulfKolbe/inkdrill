@@ -193,6 +193,16 @@ class SweepResult:
         call and never invalidates it, so a later edit would be
         answered from a stale index rather than rejected. Build a new
         `SweepResult` instead; `band.stitch` is the worked example.
+    G10 `moments` is `None` unless the caller asked, and when it is a
+        dict it equals `aggregate.moments_per_component(result)`
+        EXACTLY -- same keys, same ten integers, no tolerance. All ten
+        are commutative monoids over the run set (integer addition,
+        and min/max), so accumulating them during the sweep and
+        merging them on union cannot change the answer, whatever the
+        order of runs, the axis, or the merge sequence. That is why
+        this is a MOVE of `aggregate._accumulate` rather than a second
+        implementation of it, and why an approximate comparison
+        anywhere in its tests would be a category error.
     """
     axis: str
     conn: int
@@ -209,15 +219,10 @@ class SweepResult:
     # make two otherwise identical sweeps compare unequal, which is what
     # keeps the equivalence gate meaningful at `moments=False`.
     #
-    # STEP 1 OF B1: `area` and the four extents are accumulated and
-    # equal `aggregate.moments_per_component` exactly. THE FIVE MOMENT
-    # SUMS -- sx sy sxx syy sxy -- ARE STILL ZERO and arrive in step 2,
-    # so `moments=True` is not yet a substitute for that call. The
-    # contract is deliberately not written down as a guarantee until
-    # all ten hold; `test_moments_match_the_oracle` checks all ten, is
-    # marked `expectedFailure`, and will report an unexpected success
-    # -- which unittest treats as a suite failure -- the moment step 2
-    # makes it true.
+    # All ten values, exact, per G10 above. `aggregate._accumulate`
+    # remains the oracle and the fallback -- it is a second computation
+    # sharing no code with this one, and deleting it would remove the
+    # only independent check on the accumulator.
     moments: dict | None = field(default=None, compare=False, repr=False)
     # Lazy node -> component index for `component_of`. Excluded from
     # equality and repr, so whether it happens to be built cannot make
@@ -558,11 +563,10 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
     `moments=False` is the default and the output is field-by-field
     what it has always been: a caller that does not ask does not pay.
 
-    STEP 1: `area`, `x0`, `y0`, `x1`, `y1` are accumulated and are
-    exact. `sx`, `sy`, `sxx`, `syy`, `sxy` are STILL ZERO and arrive in
-    step 2, so a caller wanting a centroid must still use
-    `aggregate.moments_per_component`. Nothing in the package passes
-    this keyword.
+    All ten values are exact and equal
+    `aggregate.moments_per_component` (G10). Nothing in the package
+    passes this keyword yet: the capability exists, the callers are
+    unchanged.
     """
     if axis not in ("row", "col"):
         raise InvalidAxis(axis)
@@ -597,6 +601,17 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
     # y-extent. Testing `axis == "row"` per run would put a string
     # comparison in the innermost loop.
     row_axis = axis == "row"
+    if moments:
+        # `aggregate` imports `SweepResult` from this module, so this
+        # cannot be a module-level import. Bound to LOCALS because the
+        # loop calls them once per run and a local beats a global
+        # lookup on the innermost path.
+        #
+        # Imported rather than reimplemented, per the CR: two copies of
+        # a closed-form identity are two chances to get the `(lo-1)*lo`
+        # term wrong, and a wrong second moment is not a crash -- it is
+        # a plausible centroid.
+        from .aggregate import _sum_i, _sum_ii
 
     prev: list[tuple[int, int, int]] = []   # (lo, hi, node_id), sorted by lo
     prev_line = None
@@ -626,10 +641,25 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
             # the CR isolates it.
             if moms_of is not None:
                 rn_area = r.hi - r.lo + 1
+                rs1 = _sum_i(r.lo, r.hi)
+                rs2 = _sum_ii(r.lo, r.hi)
+                k = r.line
                 if row_axis:
-                    rx0, rx1, ry0, ry1 = r.lo, r.hi, r.line, r.line
+                    rx0, rx1, ry0, ry1 = r.lo, r.hi, k, k
+                    # Along the run, the index is `lo..hi`; across it,
+                    # the single line `k`, `rn_area` times over.
+                    rsx = rs1
+                    rsy = rn_area * k
+                    rsxx = rs2
+                    rsyy = rn_area * k * k
+                    rsxy = k * rs1
                 else:
-                    rx0, rx1, ry0, ry1 = r.line, r.line, r.lo, r.hi
+                    rx0, rx1, ry0, ry1 = k, k, r.lo, r.hi
+                    rsx = rn_area * k
+                    rsy = rs1
+                    rsxx = rn_area * k * k
+                    rsyy = rs2
+                    rsxy = k * rs1
 
             # -- adjacency: two-pointer sweep over the previous line -------
             # The touching runs are the slice [pi, pj) of `prevline`.
@@ -670,8 +700,7 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                 edges_of[nid] = 0
                 cycles_of[nid] = 0
                 if moms_of is not None:
-                    # sx sy sxx syy sxy stay 0 until step 2.
-                    moms_of[nid] = [rn_area, 0, 0, 0, 0, 0,
+                    moms_of[nid] = [rn_area, rsx, rsy, rsxx, rsyy, rsxy,
                                     rx0, ry0, rx1, ry1]
                 if keep_events:
                     events.append(Event(EventKind.BIRTH, line, nid))
@@ -711,6 +740,11 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                     # attaches is folded into an existing component
                     # here rather than starting one at BIRTH.
                     v[0] += rn_area
+                    v[1] += rsx
+                    v[2] += rsy
+                    v[3] += rsxx
+                    v[4] += rsyy
+                    v[5] += rsxy
                     if rx0 < v[6]:
                         v[6] = rx0
                     if ry0 < v[7]:
@@ -745,6 +779,11 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                             v = moms_of.pop(rn)
                             w = moms_of.pop(rp)
                             v[0] += w[0]
+                            v[1] += w[1]
+                            v[2] += w[2]
+                            v[3] += w[3]
+                            v[4] += w[4]
+                            v[5] += w[5]
                             if w[6] < v[6]:
                                 v[6] = w[6]
                             if w[7] < v[7]:

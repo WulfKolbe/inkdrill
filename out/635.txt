@@ -1,0 +1,164 @@
+635 - CR B1 step 2: the five moment sums, and G10 becomes true
+===============================================================
+
+All ten values now come out of the sweep and equal
+`aggregate.moments_per_component` exactly. The expected failure that
+steps 0 and 1 shipped is green and its decorator is gone.
+
+--------------------------------------------------------------------
+WHAT WAS ADDED
+
+`_sum_i` and `_sum_ii` IMPORTED, not reimplemented, exactly as the CR
+requires -- two copies of a closed-form identity are two chances to
+get the `(lo-1)*lo` term wrong, and a wrong second moment is not a
+crash, it is a plausible centroid. They are imported INSIDE `sweep`
+(`aggregate` imports `SweepResult` from `sweep`, so module level would
+be circular) and bound to LOCALS, because the loop calls them once per
+run and a local beats a global on the innermost path.
+
+The five contributions sit in the same hoisted axis branch step 1
+built, which is now the whole of the per-run work:
+
+    row:  sx += s1          col:  sx += n*k
+          sy += n*k               sy += s1
+          sxx += s2               sxx += n*k*k
+          syy += n*k*k            syy += s2
+          sxy += k*s1             sxy += k*s1
+
+`k` is the run's line. `sxy` is the ONE line that is the same in both
+branches, which is the tell that it is the cross term.
+
+Merged at the same three sites as the extents. Nothing else changed.
+
+--------------------------------------------------------------------
+G10, NOW THAT IT IS TRUE
+
+Steps 0 and 1 deliberately did NOT write the contract down as a
+guarantee, because it did not hold. It does now, so it is stated:
+
+  G10  `moments` is `None` unless the caller asked, and when it is a
+       dict it equals `aggregate.moments_per_component(result)`
+       EXACTLY -- same keys, same ten integers, no tolerance. All ten
+       are commutative monoids over the run set (integer addition, and
+       min/max), so accumulating them during the sweep and merging
+       them on union cannot change the answer, whatever the order of
+       runs, the axis, or the merge sequence.
+
+That last sentence is the reason this is a MOVE rather than a second
+implementation, and it is why an approximate comparison anywhere in
+its tests would be a category error rather than a loose tolerance.
+
+--------------------------------------------------------------------
+THE EXPECTED FAILURE DID ITS JOB
+
+`test_moments_match_the_oracle` was marked `expectedFailure` in step 0
+against an empty dict and stayed failing through step 1, correctly,
+because it checks all ten fields and five were zero. When the sums
+landed here, unittest reported an UNEXPECTED SUCCESS -- which it
+treats as a suite failure -- and the suite stayed red until the
+decorator came off. Step 2 could not have landed quietly, which is
+exactly what the marker was for and what simply omitting the test
+would not have given.
+
+--------------------------------------------------------------------
+TESTS -- TestMomentsExact, 5, all ok
+
+  test_all_ten_fields_over_the_fixtures
+        108 (mask, axis, conn) combinations, 174 components,
+        1,740 exact integer comparisons.
+
+  test_all_ten_fields_over_the_fuzz_ladder
+        192 combinations, 6,744 components, 67,440 comparisons.
+        THE FIRST TEST TO RUN assert_moments OVER THE LADDER.
+        `assert_same` compares `sweep` against `_sweep_reference`,
+        which has no moments at all, so the 576 fuzz checks already in
+        the equivalence gate said nothing about them. The second
+        moments are where an arithmetic slip hides, because a wrong
+        `sxy` produces a plausible centroid on a plausible box.
+
+  test_the_whole_mask_moments_do_not_depend_on_the_axis
+        `aggregate`'s G2, re-asserted against the IN-LOOP values
+        rather than assumed from the oracle. Moments add, so the
+        whole-mask moments are the sum over components, and that sum
+        must be the same INTEGER from a row sweep and a column sweep.
+
+  test_the_whole_mask_bbox_does_not_depend_on_the_axis
+        The same for the extents, which are max/min rather than sums
+        and so are checked separately.
+
+  test_the_moment_sums_are_not_all_zero
+        GUARDS THE FOUR ABOVE FROM PASSING ON ZEROS. Every one of them
+        is an equality against another computation, and `0 == 0` is an
+        equality. This is not a hypothetical: steps 0 and 1 shipped
+        with these five fields at zero and every extent test passing.
+        It is the state the file was in one commit ago.
+
+--------------------------------------------------------------------
+MUTATION -- 11 OF 11 KILLED
+
+The formal gate is step 3's, in `tools/mutate_sweep.py`. These were
+run here because a step whose tests do not bite is not worth shipping.
+
+  sx and sy swapped in the row branch              KILLED (4 failing)
+  sxy uses n where s1 belongs                      KILLED (4)
+  _sum_ii used where _sum_i belongs                KILLED (4)
+  _sum_i used where _sum_ii belongs                KILLED (4)
+  syy loses one factor of the line                 KILLED (4)
+  sxx in the col branch loses the line factor      KILLED (3)
+  moment vector not merged on union (sx)           KILLED (3)
+  moment vector not merged on union (sxy)          KILLED (3)
+  sums at BIRTH but not on the attach path         KILLED (4)
+  BIRTH vector zeroes the sums (the step-1 state)  KILLED (4)
+  col branch reuses the row mapping for sx         KILLED (3)
+
+The last one is worth naming: it is the shape of the bug this step
+could most plausibly have had, since the two branches differ only in
+which of `s1` and `n*k` goes where.
+
+Step 1's eleven were re-run and still hold, so 22 of 23 across both
+steps, the exception being the migration `pop`, which step 1 proved is
+an equivalent mutant for output and a 2.76x memory leak.
+
+--------------------------------------------------------------------
+REAL PAGES, ALL TEN FIELDS
+
+Five pages of kolbe2018hubbard, both axes:
+
+    p1     421 components   all ten exact; whole-mask axis-invariant
+    p4     473             ditto
+    p6    2383             ditto
+    p12   1551             ditto
+    p41   2950             ditto
+
+    15,556 components x 10 fields = 155,560 exact integer
+    comparisons, all equal.
+
+The axis-invariance identity is checked on real pages as well as
+fixtures, because that is the property G10 rests on and a 15 Mpx page
+exercises reassociation orders a 6x5 fixture cannot.
+
+--------------------------------------------------------------------
+COUNTS
+
+    full suite   1223 tests, 37 skipped, NO expected failures
+    the gate      960 equivalence checks, unchanged
+    moments       300 (mask, axis, conn) combinations in the suite
+                  6,918 components, 69,180 integer comparisons
+
+Was 1218 tests with 1 expected failure at step 1. Nothing removed.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * No measurement. Step 5. The hot-path concern flagged at step 1
+    stands and has grown: at `moments=False` the run loop now
+    evaluates `moms_of is not None` twice per run, and at
+    `moments=True` it makes two Python function calls per run for the
+    closed forms. The second is not new cost -- `_accumulate` pays it
+    too, on the pass this replaces -- but the first is, and it is the
+    2% the CR budgets.
+  * `aggregate.py` still untouched. Step 4 is where
+    `moments_per_component` starts using this, and where the second
+    pass actually disappears for a caller that asks.
+  * Nothing in the package passes `moments=True`. That is the
+    capability-only scope that was chosen, not an oversight.

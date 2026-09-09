@@ -504,21 +504,15 @@ class TestMomentsPlumbing(_SameMixin, unittest.TestCase):
         self.assertEqual(n, len(FIXTURES) * len(AXES) * len(CONNS)
                          * len(CAPTURES))
 
-    @unittest.expectedFailure
     def test_moments_match_the_oracle(self):
-        """STEP 0 SHIPS THIS FAILING, ON PURPOSE.
+        """All ten fields, on a multi-component fixture.
 
-        The accumulation does not exist yet, so `moments=True` yields an
-        empty dict and this cannot pass. Marked `expectedFailure` rather
-        than omitted so that step 1 cannot land quietly: the moment the
-        accumulator is correct, unittest reports an UNEXPECTED SUCCESS
-        and the suite fails until the decorator is removed. A test that
-        is merely absent gives no such signal, and a test written to
-        pass against an empty dict would be a test that asserts nothing.
-
-        The mask is a fixture with several components, not the empty
-        mask -- against an empty mask both sides are `{}` and this would
-        pass for the wrong reason.
+        Shipped as an `expectedFailure` in steps 0 and 1 and turned
+        green here -- which is how step 2 announced itself: the moment
+        the five sums became correct, unittest reported an UNEXPECTED
+        SUCCESS and the suite failed until the decorator came off.
+        `TestMomentsExact` below is the wide version; this one stays as
+        the single named case the earlier steps were measured against.
         """
         self.assert_moments(InkMask.from_rows(FIXTURES["comb"]),
                             "row", 8, label="comb")
@@ -580,6 +574,100 @@ class TestMomentsExtents(_SameMixin, unittest.TestCase):
                 r = sweep(mask, axis=axis, moments=True)
                 self.assertEqual(sum(m.area for m in r.moments.values()),
                                  ink, f"{name} axis={axis}")
+
+
+class TestMomentsExact(_SameMixin, unittest.TestCase):
+    """Step 2: all ten integers, exactly, over fixtures and fuzz."""
+
+    def test_all_ten_fields_over_the_fixtures(self):
+        n = 0
+        for name, rows in FIXTURES.items():
+            n += self.assert_moments_all(InkMask.from_rows(rows), label=name)
+        self.assertEqual(n, len(FIXTURES) * len(AXES) * len(CONNS))
+
+    def test_all_ten_fields_over_the_fuzz_ladder(self):
+        """The fixture set is 27 hand-drawn shapes; the second moments
+        are where an arithmetic slip hides, because a wrong `sxy` is
+        not a crash -- it is a plausible centroid on a plausible
+        bounding box.
+
+        Note this is the FIRST test to run `assert_moments` over the
+        ladder. `assert_same` compares `sweep` against
+        `_sweep_reference`, which has no moments at all, so the 576
+        fuzz checks in the equivalence gate say nothing about them.
+        """
+        checked = 0
+        for density in TestFuzz.DENSITIES:
+            for (w, h) in TestFuzz.SIZES:
+                for seed in TestFuzz.SEEDS:
+                    rng = random.Random((seed, w, h, density).__hash__())
+                    mask = _random_mask(rng, w, h, density)
+                    checked += self.assert_moments_all(
+                        mask, label=f"d={density} {w}x{h} s={seed}")
+        self.assertGreaterEqual(checked, 150)
+
+    def test_the_whole_mask_moments_do_not_depend_on_the_axis(self):
+        """`aggregate`'s G2, re-asserted against the IN-LOOP values.
+
+        Moments add, so the whole-mask moments are the sum over
+        components -- and that sum must be the same INTEGER from a row
+        sweep and from a column sweep. Not almost the same. This is the
+        property that made moving the accumulation legal, so it is
+        checked on the moved code rather than assumed from the oracle.
+
+        `x1`/`y1` are excluded from the sum because extents do not add;
+        they are compared as max, and the whole-mask bbox is asserted
+        equal across axes separately below.
+        """
+        for name, rows in FIXTURES.items():
+            mask = InkMask.from_rows(rows)
+            for conn in CONNS:
+                tot = {}
+                for axis in AXES:
+                    ms = sweep(mask, axis=axis, conn=conn,
+                               moments=True).moments.values()
+                    tot[axis] = (sum(m.area for m in ms),
+                                 sum(m.sx for m in ms),
+                                 sum(m.sy for m in ms),
+                                 sum(m.sxx for m in ms),
+                                 sum(m.syy for m in ms),
+                                 sum(m.sxy for m in ms))
+                self.assertEqual(tot["row"], tot["col"],
+                                 f"{name} conn={conn}: axis invariance")
+
+    def test_the_whole_mask_bbox_does_not_depend_on_the_axis(self):
+        for name, rows in FIXTURES.items():
+            mask = InkMask.from_rows(rows)
+            for conn in CONNS:
+                box = {}
+                for axis in AXES:
+                    ms = list(sweep(mask, axis=axis, conn=conn,
+                                    moments=True).moments.values())
+                    if not ms:
+                        box[axis] = None
+                        continue
+                    box[axis] = (min(m.x0 for m in ms), min(m.y0 for m in ms),
+                                 max(m.x1 for m in ms), max(m.y1 for m in ms))
+                self.assertEqual(box["row"], box["col"],
+                                 f"{name} conn={conn}: bbox across axes")
+
+    def test_the_moment_sums_are_not_all_zero(self):
+        """Guards the three tests above from passing on zeros.
+
+        Every assertion here is an equality against another
+        computation, and `0 == 0` is an equality. Steps 0 and 1 shipped
+        with these five fields at zero and every extent test passing,
+        so this is not a hypothetical failure mode -- it is the state
+        the file was in one commit ago.
+        """
+        seen = {f: 0 for f in ("sx", "sy", "sxx", "syy", "sxy")}
+        for name, rows in FIXTURES.items():
+            for m in sweep(InkMask.from_rows(rows), moments=True).moments.values():
+                for f in seen:
+                    if getattr(m, f) != 0:
+                        seen[f] += 1
+        for f, n in seen.items():
+            self.assertGreater(n, 0, f"{f} is zero on every fixture")
 
 
 if __name__ == "__main__":
