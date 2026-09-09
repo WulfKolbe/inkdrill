@@ -1,0 +1,224 @@
+634 - CR B1 step 1: area and the four extents, accumulated in the loop
+======================================================================
+
+Five of the ten values now come out of the sweep itself and equal
+`aggregate.moments_per_component` exactly. The five moment sums are
+still zero and arrive in step 2.
+
+--------------------------------------------------------------------
+WHAT WAS ADDED
+
+`moms_of: dict[int, list[int]]`, keyed by component ROOT, value a ten
+slot mutable list in `Moments` field order. Same migration discipline
+as the counter pair, at the same three sites:
+
+  BIRTH    create the vector from this run alone
+  ATTACH   add the run in; move the vector only if the root moved
+  MERGE    pop both, combine elementwise, store under the survivor
+
+A LIST, NOT A `Moments`. `Moments` is `frozen=True`, so accumulating
+into it would allocate a new object per run -- roughly three million
+per document. The frozen type is built once per component in the
+assembly loop instead. This is written into the code comment because
+it reads like something to tidy up and is not.
+
+The axis test is HOISTED out of the run loop as `row_axis`. A run is a
+contiguous span on one scan line, so on a row sweep it spans x from
+`lo` to `hi` and occupies a single y, and on a column sweep exactly
+the reverse. That is the only place the two axes differ, which is why
+the CR isolates it in this step.
+
+Assembly indexes `moms_of[c.root]`, NOT `.get(root, default)`. One
+vector per current root is the invariant the migration maintains, and
+a default would hand back a component of area zero -- a plausible
+wrong answer, which is the exact failure mode CLAUDE.md records for
+keying by `nodes[0]` instead of `root`.
+
+`Moments` is imported INSIDE the function. `aggregate` imports
+`SweepResult` from `sweep`, so a module-level import would be
+circular; `aggregate.moments_of_runs` does the same with `raster`.
+
+--------------------------------------------------------------------
+THE ORACLE IS STILL BYTE-IDENTICAL
+
+    _sweep_reference identical to HEAD: True
+
+Checked after every edit, and it caught the same trap twice now. The
+blocks `uf = _UF()`...`cycles_of = {}` and `for r in runs:` appear in
+BOTH functions, so a plain textual replace edits the oracle as well.
+Step 0's report records the first time; this step's edit script now
+refuses any replacement whose offset is not inside `def sweep(`.
+
+--------------------------------------------------------------------
+MUTATION -- 10 OF 11 KILLED, AND THE 11TH IS NOT A GAP
+
+  merge x0 not taken from the loser                    KILLED
+  merge y0 not taken from the loser                    KILLED
+  merge x1 not taken from the loser                    KILLED
+  merge y1 not taken from the loser                    KILLED
+  merge area dropped                                   KILLED
+  attach x0 min -> max                                 KILLED
+  attach y1 max -> min                                 KILLED
+  axis branch swapped (row gets the col mapping)       KILLED
+  BIRTH vector not created with the run's own extents  KILLED
+  attach area not added                                KILLED
+  vector not migrated when the root moves              SURVIVED
+
+THE FIRST RUN KILLED ONLY 5 OF 7, AND THE SURVIVORS WERE THE PAIR THE
+CR PREDICTED -- "wrong only for components that merge, so a fixture
+set of isolated glyphs will not catch them". It was right, and the
+reason is sharper than "isolated glyphs":
+
+    only THREE (fixture, axis) pairs in the whole set contained a
+    merge at all -- root_identity_trap/row, checkerboard/row,
+    checkerboard/col
+
+and in none of those did the LOSING component reach past the
+survivor. That is not an accident of the fixtures, it is the usual
+case: the first parent is the leftmost run on the previous line, and
+the joining run has already been folded into the survivor, so the
+survivor normally holds the extreme already. The merge min/max is
+DEAD CODE on ordinary shapes and only fires on one specific geometry.
+
+Two fixtures were designed for it. Both are the same idea -- a
+component that is wide at the top, narrows to a single column, and is
+met lower down by a second component nearer the joining run:
+
+    merge_loser_reaches_left     merge_loser_reaches_right
+        .####.                       ..####
+        ....#.                       ..#...
+        ..#.#.                       #.#...
+        ..#.#.                       #.#...
+        ..####                       ###...
+
+    left:  the loser's x0 is 1, the survivor's is 2
+    right: the loser's x1 is 5, the survivor's is 2
+
+That killed three of the four merge branches. `y1` still survived, and
+the reason is worth recording because it is a property of the sweep
+rather than of the fixtures:
+
+  ON A ROW SWEEP, `w[9] > v[9]` CANNOT FIRE. y1 is the maximum line,
+  the survivor has just taken the CURRENT line, and every other run
+  seen so far is on an earlier one. The branch is unreachable on that
+  axis by construction. It fires on a COLUMN sweep, where y comes from
+  the run's `lo..hi` instead.
+
+The fixture set is row-shaped by history -- which is one of the CR's
+own listed open assumptions -- so both merge fixtures were also added
+TRANSPOSED, generated by `_transposed()` rather than hand-drawn, so
+the correspondence is by construction and cannot drift. That killed
+the fourth.
+
+THE ONE SURVIVOR IS AN EQUIVALENT MUTANT, PROVEN NOT ARGUED.
+`moms_of[rn] = moms_of.pop(rp)` -> `moms_of[rn] = moms_of[rp]` leaves
+a stale entry behind. `rp` has just become a child and union-find
+roots never become roots again, so nothing ever reads it. Verified by
+digest rather than by reasoning -- 27 fixtures x 2 axes x 2 conns,
+40 random masks, and a real 15.5 Mpx page:
+
+    clean    27e2b40afc0fc5374d0dad0031d19f09cd996b1fa3bfab6215748ceb55d41c54
+    mutated  27e2b40afc0fc5374d0dad0031d19f09cd996b1fa3bfab6215748ceb55d41c54
+
+So no test can kill it and none should be written. IT IS NOT FREE,
+THOUGH -- it is a memory leak, and the CR's step 5 measures memory.
+Measured on p1:
+
+    44,817 runs, 421 components
+    attach root-moves: 739
+    dict at the end: 421 live vs 1,160 with the leak = 2.76x
+
+The root moves only when a component's second run attaches, so the
+leak is bounded by root-moves rather than by run count. `pop` stays,
+and step 5's memory number is where this becomes observable.
+
+--------------------------------------------------------------------
+TESTS -- TestMomentsExtents, 3, all ok
+
+  test_extents_match_the_oracle_over_the_fixtures
+        108 (mask, axis, conn) combinations, 174 components,
+        870 exact integer comparisons. Five fields only; the other
+        five are step 2's and would fail here for a reason this step
+        is not responsible for.
+
+  test_the_extents_are_asymmetric_somewhere_in_the_fixtures
+        Guards the test above from passing vacuously. Swapping x for y
+        is INVISIBLE on a component whose bbox is square, so a fixture
+        set of squares would assert the axis branch without being able
+        to fail on it. Asserts at least five fixtures have a
+        non-square bbox. Same discipline as "a fixture built to
+        exercise a rule must contain the thing the rule discriminates
+        against".
+
+  test_area_is_the_ink_count
+        A third oracle, sharing no code with either implementation:
+        the areas must sum to the mask's ink pixel count, at both
+        axes.
+
+`test_moments_match_the_oracle` REMAINS AN EXPECTED FAILURE, correctly
+-- it checks all ten fields and five are still zero. It flips to an
+unexpected success, and therefore a suite failure, when step 2 lands.
+
+--------------------------------------------------------------------
+REAL PAGES, BOTH ORACLES
+
+The fixture set is 27 small hand-drawn masks. Five real pages of
+kolbe2018hubbard, both axes, checking two things at once:
+
+  (a) the UNTOUCHED path -- `sweep` at moments=False against
+      `_sweep_reference`, nodes and components including `root`
+  (b) the NEW path -- `sweep(moments=True)` extents against
+      `aggregate.moments_per_component`, plus areas summing to the
+      mask's ink count
+
+    p1     421 components   OK both axes
+    p4     473             OK both axes
+    p6    2383             OK both axes
+    p12   1551             OK both axes
+    p41   2950             OK both axes
+
+    15,556 components, 5 fields each = 77,780 exact integer
+    comparisons, all equal.
+
+That is 90x the fixture set's 174 components, and it is the check that
+matters most: the merge geometry that needed two designed fixtures
+occurs by the thousand on a real page.
+
+A NOTE ON test_pngio_corpus, WHICH IS NOT ABOUT THIS STEP. It was run
+as extra diligence and took over 30 minutes where the same command
+took 131 s this morning. The cause is in the test, not in B1: `_pages()`
+runs in `setUp`, so EVERY test method re-globs the library and fully
+decodes up to `_SCAN_CAP = 200` pages to find one neutral and one
+non-neutral. The library is now 53,700 PNGs and is being rewritten by
+pdfdrill as this runs. Nothing in `_pages()` touches the sweep, and
+the hermetic suite's runtime is unchanged at 38.5 s, which a
+regression in the sweep could not leave untouched. The run was killed
+and replaced by the real-page check above, which exercises the same
+code on the same pages and says more. The `setUp` scan is worth
+hoisting to a module-level cache, but that is not this CR's file.
+
+--------------------------------------------------------------------
+COUNTS
+
+    FIXTURES            27  (23 + 2 merge + 2 transposed)
+    test_fixtures      324  equivalence checks, pinned
+    the whole gate     960  checks (324 + 576 fuzz + 48 glyph + 12 empty)
+    full suite        1218  tests, 37 skipped, 1 expected failure
+
+Was 912 checks and 1215 tests at step 0. Nothing was removed.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * No measurement. Step 5's business. But the shape of the cost is
+    already visible and worth flagging early: the attach path now
+    evaluates `moms_of is not None` TWICE per run at moments=False --
+    once in the conditional expression that binds `v`, once in the
+    guard that follows. That is the exact hot-path branch the CR
+    budgets at 2%, and if step 5 comes in over it, that pair is the
+    first thing to look at.
+  * The fuzz ladder does NOT check moments. `assert_same` compares
+    `sweep` against `_sweep_reference`, which has no moments at all,
+    so 576 of the 960 checks say nothing about this step. Step 2 adds
+    the fuzz ladder to `assert_moments`, per the CR.
+  * `aggregate.py` untouched, as the CR requires until step 4.

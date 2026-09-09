@@ -140,6 +140,36 @@ class _SameMixin:
 # --------------------------------------------------------------------------
 
 FIXTURES = {
+    # -- B1 step 1: the merge branch of the extent accumulator ---------
+    # A merge only exercises `min`/`max` if the LOSING component reaches
+    # PAST the survivor. It usually does not: the first parent is the
+    # leftmost run on the previous line, and the joining run itself has
+    # already been folded into the survivor, so the survivor normally
+    # holds the extreme already. Measured on the fixture set as it stood
+    # before these two: only three (fixture, axis) pairs contained a
+    # merge AT ALL, and in none of them did the loser extend past the
+    # survivor -- so both merge mutants the CR names survived.
+    #
+    # Both shapes are the same idea: a component that reaches wide up
+    # top, narrows to a single column, and is met lower down by a second
+    # component that is nearer the joining run.
+    #
+    #   left:  the loser's x0 (1) is left of the survivor's (2)
+    "merge_loser_reaches_left": [
+        ".####.",
+        "....#.",
+        "..#.#.",
+        "..#.#.",
+        "..####",
+    ],
+    #   right: the loser's x1 (5) is right of the survivor's (2)
+    "merge_loser_reaches_right": [
+        "..####",
+        "..#...",
+        "#.#...",
+        "#.#...",
+        "###...",
+    ],
     # Two singleton components joined from below. Both sides have size 1
     # at the union, so the tie-break decides the root. Every count is
     # right whichever way it goes; only the root distinguishes them.
@@ -276,6 +306,23 @@ FIXTURES = {
 }
 
 
+def _transposed(rows):
+    """Swap the two axes of a fixture."""
+    return ["".join(r[i] for r in rows) for i in range(len(rows[0]))]
+
+
+# The fixture set is row-shaped by history, and three of the four merge
+# min/max branches are axis-asymmetric: on a ROW sweep the survivor's
+# y1 is always the current line, which is the largest line seen, so
+# `w[9] > v[9]` cannot fire there at all. It fires on a COLUMN sweep,
+# where y comes from the run's `lo..hi` instead. Transposing the two
+# merge fixtures reaches those branches without hand-designing a second
+# shape, and by construction rather than by inspection.
+for _name in ("merge_loser_reaches_left", "merge_loser_reaches_right"):
+    FIXTURES[_name + "_transposed"] = _transposed(FIXTURES[_name])
+del _name
+
+
 class TestFixtures(_SameMixin, unittest.TestCase):
 
     def test_fixtures(self):
@@ -288,7 +335,7 @@ class TestFixtures(_SameMixin, unittest.TestCase):
         # rather than as a quietly smaller run.
         self.assertEqual(n, len(FIXTURES) * len(AXES) * len(CONNS)
                          * len(CAPTURES))
-        self.assertEqual(n, 276)
+        self.assertEqual(n, 324)
 
     def test_empty_mask(self):
         self.assert_same_all(InkMask(b"", 0, 0), label="empty")
@@ -475,6 +522,64 @@ class TestMomentsPlumbing(_SameMixin, unittest.TestCase):
         """
         self.assert_moments(InkMask.from_rows(FIXTURES["comb"]),
                             "row", 8, label="comb")
+
+
+class TestMomentsExtents(_SameMixin, unittest.TestCase):
+    """Step 1: area and the four extents, exact, at both axes.
+
+    Only five of the ten fields. The other five are asserted in step 2;
+    checking them here would fail for a reason this step is not
+    responsible for.
+    """
+
+    def test_extents_match_the_oracle_over_the_fixtures(self):
+        """Both axes and both connectivities over the whole fixture set.
+
+        THE AXIS LOOP IS THE POINT OF THIS TEST. A run spans x on a row
+        sweep and y on a column sweep, and that swap is the only place
+        the two axes differ in the accumulator. Asserting one axis
+        would leave the branch half-tested.
+        """
+        n = 0
+        for name, rows in FIXTURES.items():
+            n += self.assert_moments_all(InkMask.from_rows(rows),
+                                         fields=self.EXTENT_FIELDS,
+                                         label=name)
+        self.assertEqual(n, len(FIXTURES) * len(AXES) * len(CONNS))
+
+    def test_the_extents_are_asymmetric_somewhere_in_the_fixtures(self):
+        """Guards the test above from passing vacuously.
+
+        Swapping x for y is invisible on a mask whose bounding box is
+        square, so a fixture set of squares would assert the axis
+        branch without being able to fail on it. This asserts that at
+        least one fixture has a component whose bbox is NOT square --
+        the same discipline as "a fixture built to exercise a rule must
+        contain the thing the rule discriminates against".
+        """
+        found = []
+        for name, rows in FIXTURES.items():
+            r = sweep(InkMask.from_rows(rows), moments=True)
+            for m in r.moments.values():
+                if (m.x1 - m.x0) != (m.y1 - m.y0):
+                    found.append(name)
+                    break
+        self.assertTrue(found, "every fixture bbox is square: the axis "
+                               "swap could not be detected")
+        # Reported so a later fixture edit that flattens the set is
+        # visible rather than silent.
+        self.assertGreaterEqual(len(found), 5, f"only {found} are asymmetric")
+
+    def test_area_is_the_ink_count(self):
+        """An oracle that shares no code with either implementation:
+        the areas must sum to the number of ink pixels in the mask."""
+        for name, rows in FIXTURES.items():
+            mask = InkMask.from_rows(rows)
+            ink = mask.data.count(0xFF)
+            for axis in AXES:
+                r = sweep(mask, axis=axis, moments=True)
+                self.assertEqual(sum(m.area for m in r.moments.values()),
+                                 ink, f"{name} axis={axis}")
 
 
 if __name__ == "__main__":

@@ -209,14 +209,15 @@ class SweepResult:
     # make two otherwise identical sweeps compare unequal, which is what
     # keeps the equivalence gate meaningful at `moments=False`.
     #
-    # STEP 0 OF B1: this is PLUMBING ONLY. `moments=True` currently
-    # yields an EMPTY dict on every mask, not the accumulators. Nothing
-    # in the package asks for it. The contract it is being built toward
-    # -- exact integer equality with `aggregate.moments_per_component`
-    # -- is not held yet and is deliberately not written down as a
-    # guarantee until it is; `test_moments_match_the_oracle` is marked
-    # `expectedFailure` and will report an unexpected success the moment
-    # step 1 makes it true.
+    # STEP 1 OF B1: `area` and the four extents are accumulated and
+    # equal `aggregate.moments_per_component` exactly. THE FIVE MOMENT
+    # SUMS -- sx sy sxx syy sxy -- ARE STILL ZERO and arrive in step 2,
+    # so `moments=True` is not yet a substitute for that call. The
+    # contract is deliberately not written down as a guarantee until
+    # all ten hold; `test_moments_match_the_oracle` checks all ten, is
+    # marked `expectedFailure`, and will report an unexpected success
+    # -- which unittest treats as a suite failure -- the moment step 2
+    # makes it true.
     moments: dict | None = field(default=None, compare=False, repr=False)
     # Lazy node -> component index for `component_of`. Excluded from
     # equality and repr, so whether it happens to be built cannot make
@@ -557,10 +558,11 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
     `moments=False` is the default and the output is field-by-field
     what it has always been: a caller that does not ask does not pay.
 
-    STEP 0: the keyword is plumbed and `moments=True` returns an EMPTY
-    dict. The accumulation itself arrives in steps 1 and 2, and until
-    then `moments=True` is not usable -- it is not merely slower, it is
-    empty. Nothing in the package passes it.
+    STEP 1: `area`, `x0`, `y0`, `x1`, `y1` are accumulated and are
+    exact. `sx`, `sy`, `sxx`, `syy`, `sxy` are STILL ZERO and arrive in
+    step 2, so a caller wanting a centroid must still use
+    `aggregate.moments_per_component`. Nothing in the package passes
+    this keyword.
     """
     if axis not in ("row", "col"):
         raise InvalidAxis(axis)
@@ -581,8 +583,20 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
     edges_of: dict[int, int] = {}
     cycles_of: dict[int, int] = {}
     # per-root moment vectors, same migration discipline as the counter
-    # pair. Step 0 creates the dict and never writes to it.
+    # pair: created at BIRTH, migrated when a root moves, merged
+    # elementwise when two roots union. Ten slots in `Moments` field
+    # order -- area sx sy sxx syy sxy x0 y0 x1 y1 -- as ONE mutable
+    # list rather than a `Moments`, which is frozen: accumulating into
+    # the frozen type would allocate a new object per run, three
+    # million per document. `Moments` is built once per component in
+    # the assembly loop. A reviewer who "cleans this up" to the frozen
+    # type makes it slower than the pass it replaces.
     moms_of: dict[int, list[int]] | None = {} if moments else None
+    # Hoisted: the axis cannot change inside the sweep, and this is the
+    # branch that decides whether a run's (lo, hi) is an x-extent or a
+    # y-extent. Testing `axis == "row"` per run would put a string
+    # comparison in the innermost loop.
+    row_axis = axis == "row"
 
     prev: list[tuple[int, int, int]] = []   # (lo, hi, node_id), sorted by lo
     prev_line = None
@@ -603,6 +617,19 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
             nid = uf.make()
             node = RunNode(nid, r.line, r.lo, r.hi)
             nodes.append(node)
+
+            # -- B1: this run's contribution, computed once ---------------
+            # A run is a contiguous span on ONE scan line, so on a row
+            # sweep it spans x from lo to hi and occupies a single y,
+            # and on a column sweep exactly the reverse. This is the
+            # only place the two axes differ, which is why step 1 of
+            # the CR isolates it.
+            if moms_of is not None:
+                rn_area = r.hi - r.lo + 1
+                if row_axis:
+                    rx0, rx1, ry0, ry1 = r.lo, r.hi, r.line, r.line
+                else:
+                    rx0, rx1, ry0, ry1 = r.line, r.line, r.lo, r.hi
 
             # -- adjacency: two-pointer sweep over the previous line -------
             # The touching runs are the slice [pi, pj) of `prevline`.
@@ -642,6 +669,10 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                 # run is, and stays, its own root.
                 edges_of[nid] = 0
                 cycles_of[nid] = 0
+                if moms_of is not None:
+                    # sx sy sxx syy sxy stay 0 until step 2.
+                    moms_of[nid] = [rn_area, 0, 0, 0, 0, 0,
+                                    rx0, ry0, rx1, ry1]
                 if keep_events:
                     events.append(Event(EventKind.BIRTH, line, nid))
             else:
@@ -669,9 +700,25 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                 rn = uf.attach(nid, rp)
                 if rn == rp:
                     edges_of[rp] += 1
+                    v = moms_of[rp] if moms_of is not None else None
                 else:
                     edges_of[rn] = edges_of.pop(rp) + 1
                     cycles_of[rn] = cycles_of.pop(rp)
+                    if moms_of is not None:
+                        v = moms_of[rn] = moms_of.pop(rp)
+                if moms_of is not None:
+                    # `nid` brought no vector of its own -- a run that
+                    # attaches is folded into an existing component
+                    # here rather than starting one at BIRTH.
+                    v[0] += rn_area
+                    if rx0 < v[6]:
+                        v[6] = rx0
+                    if ry0 < v[7]:
+                        v[7] = ry0
+                    if rx1 > v[8]:
+                        v[8] = rx1
+                    if ry1 > v[9]:
+                        v[9] = ry1
 
                 # FURTHER parents. Only from here can an edge find its
                 # two endpoints already in one component.
@@ -694,9 +741,23 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
                     else:
                         e = edges_of.pop(rn) + edges_of.pop(rp) + 1
                         c = cycles_of.pop(rn) + cycles_of.pop(rp)
+                        if moms_of is not None:
+                            v = moms_of.pop(rn)
+                            w = moms_of.pop(rp)
+                            v[0] += w[0]
+                            if w[6] < v[6]:
+                                v[6] = w[6]
+                            if w[7] < v[7]:
+                                v[7] = w[7]
+                            if w[8] > v[8]:
+                                v[8] = w[8]
+                            if w[9] > v[9]:
+                                v[9] = w[9]
                         rn = uf.union_roots(rn, rp)
                         edges_of[rn] = e
                         cycles_of[rn] = c
+                        if moms_of is not None:
+                            moms_of[rn] = v
 
                 if keep_events and len(roots_before) >= 2:
                     events.append(Event(EventKind.MERGE, line, nid,
@@ -747,9 +808,23 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
     comps.sort(key=lambda c: c.nodes[0])
 
     events.sort(key=lambda e: (e.line, _KIND_ORDER[e.kind], e.node))
+
+    moments_out = None
+    if moms_of is not None:
+        # Imported here, not at module scope: `aggregate` imports
+        # `SweepResult` from this module, so a top-level import would
+        # be circular. `moments_of_runs` does the same with `raster`.
+        from .aggregate import Moments
+        # Indexed, NOT `.get(root, ...)`. One vector per current root is
+        # the invariant the migration maintains, and a default would
+        # hand back a component of area zero -- a plausible wrong
+        # answer, which is the failure mode CLAUDE.md records for
+        # keying by `nodes[0]` instead of `root`.
+        moments_out = {c.root: Moments(*moms_of[c.root]) for c in comps}
+
     return SweepResult(axis=axis, conn=conn, capture=capture, nodes=nodes,
                        components=comps, events=events,
-                       moments=None if moms_of is None else {})
+                       moments=moments_out)
 
 
 def termini(result: SweepResult) -> tuple[int, int]:
