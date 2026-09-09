@@ -1,0 +1,168 @@
+633 - CR B1 step 0: the moments keyword, plumbed and asserted empty
+===================================================================
+
+The CR (~/Downloads/CRxy.md) makes itself conditional on the OpenCV
+decision. ANSWERED: stdlib-only stands, so it proceeds. Three further
+answers shape what follows -- B1 now and the row classifier next; the
+gain is a CAPABILITY only, no in-package caller is rewired; and if
+step 5 finds the `moments=False` branch costs more than ~2%, report
+and stop rather than start an unspecced loop specialisation.
+
+--------------------------------------------------------------------
+THE PREMISE, RE-MEASURED BEFORE ANY CODE
+
+The CR rests on `aggregate.moments_per_component` being a second full
+pass worth 47-64% of a `Capture.NONE` sweep. Confirmed, and the range
+has MOVED UP. Five named pages of kolbe2018hubbard/inspect/pages,
+best of 5, gc between runs:
+
+    page   Mpx   comps     runs   sweep NONE   moments   ratio
+    p1    15.5     421    44817      0.1057s   0.0675s   63.9%
+    p4    15.5     473    24097      0.0560s   0.0350s   62.4%
+    p6    15.5    2383   120311      0.3116s   0.1808s   58.0%
+    p12   15.5    1551    76477      0.1778s   0.1179s   66.3%
+    p41   15.5    2950   143965      0.3918s   0.2212s   56.4%
+
+    total  sweep 1.0430s   moments 0.6223s  =  59.7%
+
+The CR's own p41 reads 47%; mine reads 56%. I believe the difference
+is the clarity CR, not the machine: it made the sweep 1.48x faster at
+`Capture.NONE`, and the second pass did not get faster with it, so the
+same absolute cost is now a larger fraction. The premise is stronger
+after the last merge than it was when the CR was written.
+
+POPULATION: five pages of one LaTeX-produced document. Component
+counts span 421 to 2950 and the ratio moves only between 56% and 66%
+across that 7x, which is the reason to believe it is a property of the
+pass rather than of the page. It is NOT measured on the Infineon
+counterexample, and a page of pasted raster has a very different run
+population.
+
+--------------------------------------------------------------------
+TWO NUMBERS IN THE CR ARE STALE, CORRECTED HERE
+
+  "the existing 828-check harness"   ->   912
+
+828 was the count BEFORE the clarity CR's step 4 added seven flush
+fixtures. Measured now, per test:
+
+    test_fixtures      276      23 masks x 2 axes x 2 conns x 3 captures
+    test_fuzz          576      48 masks x 12
+    test_glyph_like     48       4 masks x 12
+    test_empty_mask     12       1 mask  x 12
+    ------------------------
+                       912      equivalence checks
+
+  `out/009.txt .. out/013.txt`  ->  this file is out/633.txt
+
+The CR says "or the next free number if the clarity CR ran first". It
+did; 001-013 are its. B1's steps use this repo's task numbering from
+633 so the two schemes cannot be confused in one directory.
+
+--------------------------------------------------------------------
+WHAT STEP 0 CHANGED
+
+`inkdrill/sweep.py`, 41 insertions, 2 deletions.
+
+  * `sweep(..., moments: bool = False)`.
+  * `SweepResult.moments: dict | None`, `compare=False, repr=False` --
+    the same treatment as `_index`, and for the same reason: the flag
+    must not be able to make two otherwise identical sweeps compare
+    unequal, or the equivalence gate stops meaning anything at
+    `moments=False`.
+  * `moms_of` created in the loop and never written to.
+
+`None` AND `{}` ARE DIFFERENT ANSWERS and step 0 pins both. `{}` is a
+mask with no components -- complete and correct. `None` is "nobody
+accumulated anything", which is the predicate step 4's fallback needs.
+Collapsing them would make a blank page indistinguishable from an
+unasked question, and `if result.moments:` is exactly the test that
+would do it. Step 4 must use `is not None`.
+
+`_sweep_reference` IS NOT TOUCHED. Verified mechanically rather than
+by eye -- its function body is byte-identical to HEAD's:
+
+    _sweep_reference identical to HEAD: True
+
+That check exists because the first attempt at this edit FAILED it.
+The block `uf = _UF()` ... `cycles_of = {}` appears in both functions,
+so a plain textual replace hit the oracle as well and it raised
+NameError on a keyword it does not have. Seven tests errored. This is
+the same trap `tools/mutate_sweep.py` documents in its own docstring
+-- "edits are applied to the last occurrence in the file, which is the
+live sweep" -- and it caught me on the first edit of the CR. The
+oracle-identity check is now part of how this step is verified.
+
+--------------------------------------------------------------------
+THE HARNESS
+
+`assert_moments(mask, axis, conn, *, fields=...)` compares
+`sweep(moments=True).moments` against `moments_per_component`, root by
+root and field by field, by NAME so a failure says which of the ten
+integers is wrong. `assert_moments_all` runs both axes and both conns.
+Step 1 will pass `fields=EXTENT_FIELDS`, step 2 the full ten.
+
+EXACT INTEGER EQUALITY, stated in the docstring as a rule rather than
+left to the reader. Every one of the ten is an integer by construction
+-- `aggregate`'s G2 -- and that exactness is the whole reason this is
+a move rather than a rewrite. An `assertAlmostEqual` in here would
+hide precisely the reassociation bug the move could introduce.
+
+--------------------------------------------------------------------
+TESTS -- TestMomentsPlumbing, 4
+
+  test_not_asking_yields_None_not_an_empty_dict          ok
+  test_an_empty_mask_asked_for_moments_gives_an_empty_dict  ok
+  test_the_flag_changes_nothing_else                     ok
+  test_moments_match_the_oracle                          expected failure
+
+The first three hold at EVERY step of B1 and will not be rewritten as
+the accumulation lands. That is deliberate: asserting `moments == {}`
+would pin a step-0 detail and have to be deleted in step 1, which is
+churn masquerading as coverage.
+
+`test_the_flag_changes_nothing_else` is the CR's central promise -- "a
+caller that does not ask does not pay and does not notice" -- over the
+whole fixture set, 276 comparisons. It compares nodes, components and
+events FIELD BY FIELD rather than with `==`, because `moments` is
+`compare=False` and `==` would pass even if the flag corrupted the
+node list.
+
+`test_moments_match_the_oracle` SHIPS FAILING, ON PURPOSE. The CR
+offered "expected-to-fail, or simply do not call it", and warned
+against a passing test that asserts nothing. `expectedFailure` is the
+stronger of the two: an absent test gives no signal when step 1 lands,
+whereas this one turns into an UNEXPECTED SUCCESS -- which unittest
+reports as a suite failure -- the moment the accumulator is correct.
+Step 1 cannot land quietly.
+
+It runs on `comb`, a fixture with several components, NOT on the empty
+mask: against an empty mask both sides are `{}` and it would pass for
+the wrong reason.
+
+--------------------------------------------------------------------
+BASELINE, so that "unchanged" means something in steps 1-5
+
+    full suite            1215 tests, 37 skipped, 1 expected failure
+    equivalence checks     912, all green at moments=False
+    tests/test_sweep_equiv  19 tests, OK (expected failures=1)
+
+Before this step the suite was 1211/37/0. The four added are the class
+above.
+
+--------------------------------------------------------------------
+NOT CLAIMED, AND ONE RISK
+
+  * No measurement. Step 0 adds a branch-free `{} if moments else
+    None` outside the loop; the per-run cost the CR is worried about
+    does not exist yet because there is no per-run code. Step 5
+    measures it.
+  * `moments=True` IS CURRENTLY A FOOTGUN: it returns an empty dict
+    rather than raising. Anything that called it between now and step
+    2 would silently see no components. Nothing does -- the keyword is
+    new, and per the answers above no in-package caller will be
+    rewired at all -- and the module docstring says so in capitals.
+    The alternative, raising NotImplementedError, would have to be
+    removed in step 1 and would make the expectedFailure test an
+    error rather than a failure.
+  * `aggregate.py` is untouched, as the CR requires until step 4.

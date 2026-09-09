@@ -200,6 +200,24 @@ class SweepResult:
     nodes: list[RunNode]
     components: list[Component]
     events: list[Event]
+    # Per-component moment/extent accumulators, keyed by component ROOT,
+    # or None when the caller did not ask for them (B1). `None` and `{}`
+    # are different answers: `{}` is a mask with no components, which is
+    # a correct and complete result, whereas `None` means nothing was
+    # accumulated and a consumer must fall back. Excluded from equality
+    # for the same reason as `_index` -- the flag must not be able to
+    # make two otherwise identical sweeps compare unequal, which is what
+    # keeps the equivalence gate meaningful at `moments=False`.
+    #
+    # STEP 0 OF B1: this is PLUMBING ONLY. `moments=True` currently
+    # yields an EMPTY dict on every mask, not the accumulators. Nothing
+    # in the package asks for it. The contract it is being built toward
+    # -- exact integer equality with `aggregate.moments_per_component`
+    # -- is not held yet and is deliberately not written down as a
+    # guarantee until it is; `test_moments_match_the_oracle` is marked
+    # `expectedFailure` and will report an unexpected success the moment
+    # step 1 makes it true.
+    moments: dict | None = field(default=None, compare=False, repr=False)
     # Lazy node -> component index for `component_of`. Excluded from
     # equality and repr, so whether it happens to be built cannot make
     # two otherwise identical results compare unequal.
@@ -521,11 +539,28 @@ def _sweep_reference(mask: InkMask, *, axis: str = "row", conn: int = 8,
 
 
 def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
-          capture: Capture = Capture.NONE) -> SweepResult:
+          capture: Capture = Capture.NONE,
+          moments: bool = False) -> SweepResult:
     """Sweep `mask` along `axis`, returning components and scan events.
 
     See the module contract for G1-G7. `conn` must be 4 or 8; use 4 when
     sweeping an inverted mask for hole finding.
+
+    `moments` (B1) asks for per-component area, moment sums and extents
+    to be accumulated DURING the sweep, in `result.moments`, instead of
+    by a second pass over every run. It is legal because all ten values
+    are commutative monoids over the run set -- integer addition and
+    min/max, associative and exact -- which is the same property
+    `edges_of` and `cycles_of` already rely on. Order of runs, axis and
+    merge sequence cannot change the answer.
+
+    `moments=False` is the default and the output is field-by-field
+    what it has always been: a caller that does not ask does not pay.
+
+    STEP 0: the keyword is plumbed and `moments=True` returns an EMPTY
+    dict. The accumulation itself arrives in steps 1 and 2, and until
+    then `moments=True` is not usable -- it is not merely slower, it is
+    empty. Nothing in the package passes it.
     """
     if axis not in ("row", "col"):
         raise InvalidAxis(axis)
@@ -545,6 +580,9 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
     # per-root counters; migrated on union
     edges_of: dict[int, int] = {}
     cycles_of: dict[int, int] = {}
+    # per-root moment vectors, same migration discipline as the counter
+    # pair. Step 0 creates the dict and never writes to it.
+    moms_of: dict[int, list[int]] | None = {} if moments else None
 
     prev: list[tuple[int, int, int]] = []   # (lo, hi, node_id), sorted by lo
     prev_line = None
@@ -710,7 +748,8 @@ def sweep(mask: InkMask, *, axis: str = "row", conn: int = 8,
 
     events.sort(key=lambda e: (e.line, _KIND_ORDER[e.kind], e.node))
     return SweepResult(axis=axis, conn=conn, capture=capture, nodes=nodes,
-                       components=comps, events=events)
+                       components=comps, events=events,
+                       moments=None if moms_of is None else {})
 
 
 def termini(result: SweepResult) -> tuple[int, int]:

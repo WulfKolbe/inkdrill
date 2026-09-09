@@ -27,6 +27,7 @@ import random
 import unittest
 
 from inkdrill import sweep as sweepmod
+from inkdrill.aggregate import moments_per_component
 from inkdrill.raster import InkMask
 from inkdrill.sweep import (Capture, EventKind, sweep,
                             _sweep_reference)
@@ -81,6 +82,56 @@ class _SameMixin:
                 for capture in CAPTURES:
                     self.assert_same(mask, axis, conn, capture, label)
                     n += 1
+        return n
+
+    # ---- B1: in-loop moments against the second-pass oracle ----------
+
+    #: The ten fields of `Moments`, in the order `_accumulate` builds
+    #: them. Step 1 asserts the first six (area and the four extents,
+    #: plus area's position here); step 2 asserts all ten. Named rather
+    #: than positional so a failure says WHICH integer is wrong.
+    MOMENT_FIELDS = ("area", "sx", "sy", "sxx", "syy", "sxy",
+                     "x0", "y0", "x1", "y1")
+    EXTENT_FIELDS = ("area", "x0", "y0", "x1", "y1")
+
+    def assert_moments(self, mask, axis, conn, *, fields=None, label=""):
+        """`sweep(moments=True).moments` against `moments_per_component`.
+
+        `aggregate._accumulate` is the oracle here, exactly as
+        `_sweep_reference` is the oracle for the sweep itself: a second,
+        independent computation that is not being changed.
+
+        EXACT INTEGER EQUALITY, never a tolerance. Every one of these
+        ten values is an integer by construction -- that is
+        `aggregate`'s own G2, and it is the property that makes moving
+        the accumulation into the loop a MOVE rather than a rewrite.
+        An `assertAlmostEqual` anywhere in here would be a category
+        error and would hide precisely the reassociation bug the move
+        could introduce.
+        """
+        fields = self.MOMENT_FIELDS if fields is None else fields
+        got = sweep(mask, axis=axis, conn=conn, moments=True)
+        want = moments_per_component(
+            sweep(mask, axis=axis, conn=conn, capture=Capture.GRAPH))
+        where = f"{label} axis={axis} conn={conn}"
+
+        self.assertIsNotNone(got.moments, f"moments not populated: {where}")
+        self.assertEqual(sorted(got.moments), sorted(want),
+                         f"component roots differ: {where}")
+        for root in sorted(want):
+            g, w = got.moments[root], want[root]
+            for f in fields:
+                self.assertEqual(getattr(g, f), getattr(w, f),
+                                 f"{f} for root {root}: {where}")
+        return len(want)
+
+    def assert_moments_all(self, mask, *, fields=None, label=""):
+        n = 0
+        for axis in AXES:
+            for conn in CONNS:
+                self.assert_moments(mask, axis, conn, fields=fields,
+                                    label=label)
+                n += 1
         return n
 
 
@@ -344,6 +395,86 @@ class TestStructuredRandom(_SameMixin, unittest.TestCase):
                                 buf[y * w + x] = 0xFF
             self.assert_same_all(InkMask(bytes(buf), w, h),
                                  label=f"glyphlike{trial}")
+
+
+# --------------------------------------------------------------------------
+# B1 -- in-loop moment and extent accumulators
+# --------------------------------------------------------------------------
+
+class TestMomentsPlumbing(_SameMixin, unittest.TestCase):
+    """Step 0: the keyword exists and costs the default caller nothing.
+
+    These three hold at every step of B1 and are not rewritten as the
+    accumulation lands -- which is the point of asserting them here
+    rather than asserting `moments == {}`, a step-0 detail that would
+    have to be deleted in step 1.
+    """
+
+    def test_not_asking_yields_None_not_an_empty_dict(self):
+        """`None` and `{}` are different answers. `{}` is a mask with no
+        components, which is complete and correct; `None` is "nobody
+        accumulated anything", which is what step 4's fallback keys on.
+        Collapsing them would make a blank page indistinguishable from
+        an unasked question."""
+        for name, rows in list(FIXTURES.items())[:4]:
+            m = InkMask.from_rows(rows)
+            self.assertIsNone(sweep(m).moments, name)
+            self.assertIsNotNone(sweep(m, moments=True).moments, name)
+
+    def test_an_empty_mask_asked_for_moments_gives_an_empty_dict(self):
+        """The `{}` side of the distinction above, so both are pinned."""
+        got = sweep(InkMask(b"", 0, 0), moments=True)
+        self.assertEqual(got.moments, {})
+        self.assertIsNone(sweep(InkMask(b"", 0, 0)).moments)
+
+    def test_the_flag_changes_nothing_else(self):
+        """The CR's central promise: a caller that does not ask does not
+        pay AND does not notice. Asserted field by field over the whole
+        fixture set rather than by `==`, because `moments` is
+        `compare=False` and `==` would pass even if the flag corrupted
+        the node list."""
+        n = 0
+        for name, rows in FIXTURES.items():
+            mask = InkMask.from_rows(rows)
+            for axis in AXES:
+                for conn in CONNS:
+                    for capture in CAPTURES:
+                        a = sweep(mask, axis=axis, conn=conn, capture=capture)
+                        b = sweep(mask, axis=axis, conn=conn, capture=capture,
+                                  moments=True)
+                        where = (f"{name} axis={axis} conn={conn} "
+                                 f"capture={capture.value}")
+                        self.assertEqual([_node_tuple(x) for x in a.nodes],
+                                         [_node_tuple(x) for x in b.nodes],
+                                         f"nodes: {where}")
+                        self.assertEqual([_comp_tuple(c) for c in a.components],
+                                         [_comp_tuple(c) for c in b.components],
+                                         f"components: {where}")
+                        self.assertEqual([_event_tuple(e) for e in a.events],
+                                         [_event_tuple(e) for e in b.events],
+                                         f"events: {where}")
+                        n += 1
+        self.assertEqual(n, len(FIXTURES) * len(AXES) * len(CONNS)
+                         * len(CAPTURES))
+
+    @unittest.expectedFailure
+    def test_moments_match_the_oracle(self):
+        """STEP 0 SHIPS THIS FAILING, ON PURPOSE.
+
+        The accumulation does not exist yet, so `moments=True` yields an
+        empty dict and this cannot pass. Marked `expectedFailure` rather
+        than omitted so that step 1 cannot land quietly: the moment the
+        accumulator is correct, unittest reports an UNEXPECTED SUCCESS
+        and the suite fails until the decorator is removed. A test that
+        is merely absent gives no such signal, and a test written to
+        pass against an empty dict would be a test that asserts nothing.
+
+        The mask is a fixture with several components, not the empty
+        mask -- against an empty mask both sides are `{}` and this would
+        pass for the wrong reason.
+        """
+        self.assert_moments(InkMask.from_rows(FIXTURES["comb"]),
+                            "row", 8, label="comb")
 
 
 if __name__ == "__main__":
