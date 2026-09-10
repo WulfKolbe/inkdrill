@@ -1,0 +1,126 @@
+646 - the \mid spacing hypothesis: supported for a third of its rows
+=====================================================================
+
+out/645 offered a lead: set-builder rows were 3.8x enriched among the
+red rows, and `\mid` is a `\mathrel`, so TeX puts a thickmuskip
+(0.2778em) on EACH side. If the page sets a tighter bar, everything
+after it sits ~0.55em too far right in our render -- a displacement
+INSIDE the expression, which is exactly "placed uniquely, shape
+disagrees".
+
+`tools/midtest.py` re-renders each row with three bars and refits:
+
+    mid    \mid     as MathPix emits it, relation space both sides
+    bar    |        \mathord, no relation space at all
+    wide   \;|\;    wider than \mid, to check the DIRECTION
+
+THE CONTROL IS THE POINT OF THE DESIGN. Thirteen placed rows contain
+`\mid`: six are red and SEVEN ARE NOT. A change that also "improves"
+rows which already fit is not a cause, it is a fitting artefact.
+
+--------------------------------------------------------------------
+P1 -- DOES A TIGHTER BAR FIT BETTER? PARTLY, AND SPECIFICALLY
+
+    id       grp         mid     bar    wide    best     gain
+    FO0081   RED       0.782   0.756   0.782     mid   +0.000
+    FO0093   RED       0.872   0.814   0.872     mid   +0.000
+    FO0112   RED       0.762   0.919   0.739     bar   +0.157
+    FO0114   RED       0.666   0.724   0.666     bar   +0.058
+    FO0115   RED       0.767   0.930   0.744     bar   +0.163
+    FO0172   RED       0.772   0.823   0.772     bar   +0.051
+    FO0089   control   0.840   0.749   0.840     mid   +0.000
+    FO0096   control   0.829   0.747   0.829     mid   +0.000
+    FO0116   control   0.823   0.788   0.823     mid   +0.000
+    FO0167   control   0.805   0.751   0.805     mid   +0.000
+    FO0179   control   0.850   0.870   0.850     bar   +0.020
+    FO0194   control   0.863   0.780   0.863     mid   +0.000
+    FO0203   control   0.806   0.761   0.806     mid   +0.000
+
+    RED      n=6   tight bar wins 4, median gain +0.054
+    control  n=7   tight bar wins 1, median gain +0.000
+
+THE CONTROL BARELY MOVES AND THE RED ROWS DO. That asymmetry is the
+result. A tighter bar is not a universal improvement -- it makes six
+of the seven control rows WORSE, by up to 0.083 -- so the two rows it
+lifts by 0.16 are not being flattered by a looser template.
+
+TWO ROWS ARE DECISIVE. FO0112 goes 0.762 -> 0.919 and FO0115
+0.767 -> 0.930. Both clear the 0.785 floor comfortably, so on this
+evidence they are not document errors at all: they are our `\mid`
+against the page's tighter bar.
+
+`wide` never wins, on any row. The direction is one-way, which is what
+the mechanism predicts.
+
+--------------------------------------------------------------------
+P2 -- DOES THE RESIDUAL SIT AFTER THE BAR? NO, AND THE TEST IS WEAK
+
+Median over the rows where the bar could be located: 0.105 before,
+0.121 after. Near enough equal. No general one-sided concentration.
+
+AND THE TEST ONLY REACHED 6 OF 13 ROWS. The bar is found as the one
+tall thin stroke, and in `\{A \in O(n) \mid ...\}` the braces are tall
+thin strokes too, so several blobs qualify and the detector returns
+nothing rather than guess. A split in the wrong place would make the
+comparison meaningless, so it refuses -- but that leaves P2 tested on
+half the rows and it should not be leaned on either way.
+
+Two rows do show a strong split, both of the same shape
+(`\left\{X_{i j} \mid 0 \leq i<j \leq 7\right\}`): FO0172 at 0.44
+before / 0.05 after, FO0179 at 0.33 / 0.02. Both are rows the tight
+bar helps. That is suggestive and it is three rows short of a finding.
+
+--------------------------------------------------------------------
+THE PLACEMENT, DRAWN
+
+`<id>-fit-mid.png` and `<id>-fit-bar.png` composite the RENDERED
+template in red over the ink in black, at the fitted scale and offset.
+Where they agree the red sits on the black; where they drift, the red
+walks off.
+
+  FO0112 WITH `\mid`: the doubling is spread across the WHOLE
+  expression, and the bar itself renders as a visible `||` -- our bar
+  and the page's bar in two different places. The fit has compromised
+  the scale to average the error out, so nothing lines up exactly.
+
+  FO0112 WITH `|`: the left half lands crisply on the ink, single
+  glyphs all the way to `O(n)`, and the entire remaining error is a
+  local smear at the bar and just after it. That is the mechanism made
+  visible: a wide bar does not shift one part of the expression, it
+  forces a global scale compromise.
+
+  FO0081 WITH `\mid`: the counter-example. The red is offset from the
+  black more or less uniformly and the bar is single, not doubled. Its
+  misfit is not the bar, which is what the +0.000 says.
+
+--------------------------------------------------------------------
+WHAT THIS MEANS, AND ONE THING DELIBERATELY NOT DONE
+
+  * `\mid` SPACING EXPLAINS A THIRD OF ITS OWN CLASS: 2 of 6 red rows
+    decisively, 2 marginally, 2 not at all. It does not explain the
+    other twelve red rows, which contain no bar.
+  * THE FINDING IS ABOUT THE LATEX, NOT THE MATHS. The paper is
+    LaTeX-produced; an author who wrote a tight bar and a
+    reconstruction that writes `\mid` differ typographically and agree
+    semantically. So POOR_FIT is a TRUE positive on these rows and a
+    LOW-VALUE one, and a consumer wants it separated from a wrong
+    subscript rather than listed beside it. That is a reason to split
+    the class, not to widen the tolerance.
+  * FORMULAFIND WAS NOT CHANGED TO RENDER `|`. Swapping the token
+    because it scores better is tuning the instrument to the data --
+    it would raise the scores of exactly the rows the instrument is
+    supposed to flag, and it would do so by making our render less
+    faithful to the LaTeX we were given. The whole point is to render
+    what MathPix said and see whether it matches.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * SIX RED ROWS AND SEVEN CONTROLS, one document. The control is what
+    makes the asymmetry meaningful and it is seven rows.
+  * P2 is tested on 6 of 13 rows because the bar detector refuses
+    ambiguity. It is neither supported nor refuted.
+  * Whether the page really carries a tighter bar was NOT read off the
+    page directly -- it is inferred from the fit improving. Reading
+    the author's source from `0902.0431.tex.zip` would settle it and
+    was not done.
