@@ -1,0 +1,107 @@
+653 - the first labelled data, and EDGE_CUT was right all along
+================================================================
+
+The 75 open cases of out/652 were reviewed by eye. THIS IS THE FIRST
+LABELLED DATA IN THE WHOLE CHAIN. Everything before it was calibrated
+on "rows that agree", which is a population, not a ground truth.
+
+Labels committed at `tools/labels/0902.0431-open.json`.
+
+--------------------------------------------------------------------
+THE VERDICT ON MY FLOOR: 9% PRECISION
+
+    correct         68   90.7%
+    slightly off     2    2.7%
+    WRONG            5    6.7%
+
+The per-length floor flags 75 rows to find 7. As a defect detector it
+is 9% precise, and out/652 should be read with that number against it.
+
+AND THE SCORE IS NOT MERELY WEAK, IT POINTS THE WRONG WAY. The rows
+that are actually wrong have a HIGHER median score (0.857) than the
+rows that are right (0.825). The margin does not separate them either
+-- 0.144 against 0.139. Neither of the two quantities the residual
+report is built on carries information about correctness in this
+range.
+
+--------------------------------------------------------------------
+WHAT DOES SEPARATE THEM, AND IT IS ALREADY IN THE RULE SET
+
+    edge cuts   correct   off/wrong
+        0          37         0
+        1          21         4
+        2          10         2
+       3+           0         1
+
+EVERY ONE OF THE SEVEN HAS AT LEAST ONE EDGE CUT. Thirty-seven rows
+have none and every one of those is correct. A rectangle boundary
+falling INSIDE a glyph is a perfect negative predictor here.
+
+That is R1 from out/640, and it was written for exactly this reason: a
+placement that is right ends in a gap, because that is what a gap is.
+It has been in the rule set the whole time.
+
+    rule                            flags  precision  recall
+    the floor alone                    75       9.3%   100%
+    edge_cuts >= 1                     38      18.4%   100%
+    edge_cuts >= 1 and gaps <= 7       17      41.2%   100%
+    edge_cuts > 2  (AS CALIBRATED)      1     100.0%    14%
+
+FOUR AND A HALF TIMES THE PRECISION AT NO COST IN RECALL, from a rule
+that is already implemented.
+
+--------------------------------------------------------------------
+WHY IT WAS CALIBRATED INTO UNIVERSAL SILENCE
+
+`edge_cut_max` is set at the 90th percentile of the AGREEING
+population, which puts it at 2. One edge cut is common among correct
+rows -- 21 of 68 here -- so the p90 rule places the threshold above
+the informative value by construction.
+
+THAT IS A PROPERTY OF THE CALIBRATION METHOD, NOT OF THIS DATA. Any
+signal that is common-but-not-universal among correct rows gets its
+threshold pushed past the point where it discriminates. Calibrating on
+the agreeing population can only ever say "unusual"; it cannot say
+"wrong", because it has never been shown a wrong row.
+
+Seventy-five labels change that for one rule on one document.
+
+--------------------------------------------------------------------
+THE SEVEN, AND THEY ARE NOT ONE FAILURE
+
+    FO0017  the centre of the line taken instead of z(G_2)
+    FO2593  expression at the start of the line, found at the end
+    FO0512  the shorter word before it taken instead
+    FO1316  placed one term early
+    FO0651  placed too far left
+    FO1432  1-2 character widths too far right
+    FO1364  right edge ends early, on an expression ending in a
+            right delimiter
+
+The first four are GROSS -- a different part of the line entirely --
+and all four have between 3 and 5 gaps. The last three are EDGE
+errors of one or two characters. A rule tuned for one will not catch
+the other, and `gaps <= 7` is doing the work for the gross ones
+because a short expression can fit in more places.
+
+ONE ROW IS NEITHER. FO1180 is placed correctly and the finding is that
+the expression belongs to a listing or algorithm section -- a
+segmentation question for the producer, not a placement one. It is
+labelled `correct` with that note, because folding it into either
+bucket would be wrong.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * SEVEN POSITIVES. The precision figures rest on seven labelled
+    errors and 68 labelled non-errors, on one document. 41.2% is
+    7 of 17.
+  * THE LABELS COVER ONLY ROWS THE FLOOR ALREADY FLAGGED. Nothing here
+    says what the floor MISSES -- there is no false-negative estimate,
+    because the 3,021 unflagged rows were not reviewed.
+  * `edge_cuts >= 1 and gaps <= 7` IS NOT ADOPTED. It is a rule fitted
+    on seven positives and would need holding out against a second
+    labelled set before it goes into `formularesidual`.
+  * The per-length floor is still not adopted either, and this review
+    is an argument against adopting it alone: 9% precision is a
+    residual report that is 91% noise.

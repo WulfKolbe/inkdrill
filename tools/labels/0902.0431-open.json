@@ -1,0 +1,242 @@
+{
+ "document": "0902.0431",
+ "source": "evidence-formula.tex",
+ "reviewed": "2026-09-10, by the corpus author, by eye, against lossless 400 dpi crops",
+ "population": "the 75 rows flagged by the per-length floor of out/652 that the single floor missed",
+ "labels": {
+  "FO0017": {
+   "verdict": "WRONG",
+   "note": "did not fit at all -- the centre of the line was taken instead of z(G_2)"
+  },
+  "FO0089": {
+   "verdict": "correct"
+  },
+  "FO0091": {
+   "verdict": "correct"
+  },
+  "FO0100": {
+   "verdict": "correct"
+  },
+  "FO0107": {
+   "verdict": "correct"
+  },
+  "FO0134": {
+   "verdict": "correct"
+  },
+  "FO0166": {
+   "verdict": "correct"
+  },
+  "FO0208": {
+   "verdict": "correct"
+  },
+  "FO0235": {
+   "verdict": "correct"
+  },
+  "FO0243": {
+   "verdict": "correct"
+  },
+  "FO0255": {
+   "verdict": "correct"
+  },
+  "FO0339": {
+   "verdict": "correct",
+   "note": "correct, whatever MathPix made of the expression"
+  },
+  "FO0486": {
+   "verdict": "correct"
+  },
+  "FO0501": {
+   "verdict": "correct"
+  },
+  "FO0512": {
+   "verdict": "WRONG",
+   "note": "the shorter word before the expression was taken"
+  },
+  "FO0526": {
+   "verdict": "correct"
+  },
+  "FO0527": {
+   "verdict": "correct"
+  },
+  "FO0529": {
+   "verdict": "correct"
+  },
+  "FO0651": {
+   "verdict": "WRONG",
+   "note": "placed too far left"
+  },
+  "FO0737": {
+   "verdict": "correct"
+  },
+  "FO0744": {
+   "verdict": "correct"
+  },
+  "FO0762": {
+   "verdict": "correct"
+  },
+  "FO0784": {
+   "verdict": "correct"
+  },
+  "FO0912": {
+   "verdict": "correct"
+  },
+  "FO0928": {
+   "verdict": "correct"
+  },
+  "FO0945": {
+   "verdict": "correct"
+  },
+  "FO0996": {
+   "verdict": "correct"
+  },
+  "FO1004": {
+   "verdict": "correct"
+  },
+  "FO1051": {
+   "verdict": "correct"
+  },
+  "FO1093": {
+   "verdict": "correct"
+  },
+  "FO1152": {
+   "verdict": "correct"
+  },
+  "FO1180": {
+   "verdict": "correct",
+   "note": "correct placement; the expression belongs to a listing or algorithm section, which is a segmentation question for the producer rather than a placement one"
+  },
+  "FO1216": {
+   "verdict": "correct"
+  },
+  "FO1233": {
+   "verdict": "correct"
+  },
+  "FO1244": {
+   "verdict": "correct"
+  },
+  "FO1248": {
+   "verdict": "correct"
+  },
+  "FO1269": {
+   "verdict": "correct"
+  },
+  "FO1289": {
+   "verdict": "correct"
+  },
+  "FO1306": {
+   "verdict": "correct"
+  },
+  "FO1316": {
+   "verdict": "WRONG",
+   "note": "placed one term before the true position"
+  },
+  "FO1318": {
+   "verdict": "correct"
+  },
+  "FO1364": {
+   "verdict": "slightly off",
+   "note": "right edge ends slightly early; the expression ends in a right-delimiter symbol"
+  },
+  "FO1393": {
+   "verdict": "correct"
+  },
+  "FO1420": {
+   "verdict": "correct"
+  },
+  "FO1432": {
+   "verdict": "slightly off",
+   "note": "1-2 character widths too far right"
+  },
+  "FO1508": {
+   "verdict": "correct"
+  },
+  "FO1535": {
+   "verdict": "correct"
+  },
+  "FO1553": {
+   "verdict": "correct"
+  },
+  "FO1557": {
+   "verdict": "correct"
+  },
+  "FO1649": {
+   "verdict": "correct"
+  },
+  "FO1650": {
+   "verdict": "correct"
+  },
+  "FO1684": {
+   "verdict": "correct"
+  },
+  "FO1742": {
+   "verdict": "correct"
+  },
+  "FO1757": {
+   "verdict": "correct"
+  },
+  "FO1771": {
+   "verdict": "correct"
+  },
+  "FO1877": {
+   "verdict": "correct"
+  },
+  "FO1881": {
+   "verdict": "correct"
+  },
+  "FO2194": {
+   "verdict": "correct"
+  },
+  "FO2241": {
+   "verdict": "correct"
+  },
+  "FO2290": {
+   "verdict": "correct"
+  },
+  "FO2297": {
+   "verdict": "correct"
+  },
+  "FO2444": {
+   "verdict": "correct"
+  },
+  "FO2490": {
+   "verdict": "correct"
+  },
+  "FO2593": {
+   "verdict": "WRONG",
+   "note": "the expression is at the start of the line and was found at the end"
+  },
+  "FO2796": {
+   "verdict": "correct"
+  },
+  "FO2810": {
+   "verdict": "correct"
+  },
+  "FO2813": {
+   "verdict": "correct"
+  },
+  "FO2825": {
+   "verdict": "correct"
+  },
+  "FO2844": {
+   "verdict": "correct"
+  },
+  "FO2849": {
+   "verdict": "correct"
+  },
+  "FO2850": {
+   "verdict": "correct"
+  },
+  "FO2854": {
+   "verdict": "correct"
+  },
+  "FO3131": {
+   "verdict": "correct"
+  },
+  "FO3150": {
+   "verdict": "correct"
+  },
+  "FO3162": {
+   "verdict": "correct"
+  }
+ }
+}
