@@ -1,0 +1,120 @@
+647 - the author's own source settles it, and inverts out/646
+==============================================================
+
+CORRECTION FIRST. out/646 closed by proposing that
+`0902.0431.tex.zip` would settle whether the page carries `\mid`.
+IT WOULD NOT HAVE. That archive holds
+`1deb350a-8d75-4da5-b1ec-153e0bfd7145.tex` and an images folder --
+IT IS MATHPIX'S OWN OUTPUT. Checking MathPix against MathPix would
+have confirmed the substitution and proved nothing, and the CR this
+work started from says the same thing about OpenCV in one line: an
+oracle that shares a dependency with the thing it checks is not an
+oracle. I proposed a contaminated one and it was caught for me.
+
+THE REAL SOURCE WAS IN THE SAME DIRECTORY. `0902.0431.tgz` is not a
+tarball: it is a gzip of a single file, `SpEcxp.tex`, last modified
+2009-02-03. That is the arXiv e-print -- the AUTHOR'S OWN LATEX,
+607,943 bytes, written before MathPix existed as an input to anything
+here.
+
+--------------------------------------------------------------------
+READ DIRECTLY, NOT INFERRED FROM A FIT
+
+    \mid     in the author's source        0
+    \vert    in the author's source        0
+    \, | \,  in the author's source      329
+
+    $\{u + iv \, | \, u, v \in V\}$
+    $\{v \in V \,| \, f(v) = v \}$
+    $\{g \in G \, | \, \sigma(g) = g\}$
+    $SO(n) = \{A \in O(n) \, | \, \det A = 1 \}$
+
+THE AUTHOR NEVER WRITES `\mid`. Not once in 608 kB. The idiom is a
+bare `|` -- a `\mathord`, no relation space -- between two thin
+spaces: 3mu each side against `\mid`'s 5mu. So MathPix substitutes a
+wider bar on every set-builder in the document, and the hypothesis
+out/645 raised as a lead is confirmed from outside the instrument.
+
+  AND THE FIRST TEST BRACKETED THE TRUE VALUE WITHOUT CONTAINING IT.
+  out/646 tried 0mu (`|`), 10mu (`\mid`) and 10mu (`\;|\;`). The
+  answer is 6mu, and it was not among them. The test was built out of
+  guesses about what the page might do when the page's own source was
+  one directory away.
+
+--------------------------------------------------------------------
+RE-RUN WITH THE AUTHOR'S EXACT FORM -- AND out/646 INVERTS
+
+    id       grp          mid    thin     bar    wide   best    gain
+    FO0081   RED        0.782   0.939   0.756   0.782   thin  +0.157
+    FO0093   RED        0.872   0.991   0.814   0.872   thin  +0.119
+    FO0112   RED        0.762   0.775   0.919   0.739    bar  +0.157
+    FO0114   RED        0.666   0.662   0.724   0.666    bar  +0.058
+    FO0115   RED        0.767   0.777   0.930   0.744    bar  +0.163
+    FO0172   RED        0.772   0.864   0.823   0.772   thin  +0.092
+    FO0089   control    0.840   0.989   0.749   0.840   thin  +0.149
+    FO0096   control    0.829   0.961   0.747   0.829   thin  +0.132
+    FO0116   control    0.823   0.964   0.788   0.823   thin  +0.141
+    FO0167   control    0.805   0.968   0.751   0.805   thin  +0.163
+    FO0179   control    0.850   0.969   0.870   0.850   thin  +0.120
+    FO0194   control    0.863   0.952   0.780   0.863   thin  +0.089
+    FO0203   control    0.806   0.853   0.761   0.806   thin  +0.047
+
+`\mid` WINS ON NOTHING. `thin` wins on 10 of 13, and the scores it
+reaches are 0.94 to 0.99 where `\mid` gave 0.78 to 0.87.
+
+out/646 CONCLUDED THE OPPOSITE OF THIS AND WAS WRONG. It reported that
+the control rows "barely move" and made that asymmetry the whole
+result -- the effect looked specific to the flagged rows. With the
+author's actual token, ALL SEVEN CONTROLS improve, by a median of
++0.132, which is as much as the red rows get.
+
+So `\mid` DEGRADES EVERY SET-BUILDER ROW IN THE DOCUMENT, not the
+flagged ones. The rows that got flagged are simply the ones the same
+error pushed below the floor. out/646's asymmetry was an artefact of
+comparing against a variant that was wrong in the other direction.
+
+--------------------------------------------------------------------
+THREE ROWS ARE STILL UNEXPLAINED, AND I AM NOT EXPLAINING THEM AWAY
+
+FO0112, FO0114 and FO0115 prefer the over-tight `bar` (0.919, 0.724,
+0.930) to the author's own form (0.775, 0.662, 0.777). A template
+tighter than what the page actually contains should not beat it.
+
+The obvious second substitution was tested and is NOT the answer.
+MathPix writes `S O(n)` where the author writes `SO(n)`; correcting
+that as well changes the score by 0.000. `\operatorname{det}` against
+`\det` renders identically, so it is not that either.
+
+The line match is right -- the author's own typos "spcecial" and
+"speccial" appear in the overlay images, which is a cleaner check on
+the matching than anything I built.
+
+--------------------------------------------------------------------
+WHAT THIS IS WORTH
+
+A REAL, SYSTEMATIC, LOW-VALUE OCR DIFFERENCE. 329 places where the
+reconstruction sets a wider bar than the source. The maths is
+identical; only the typography differs. That is exactly the finding a
+consumer wants SEPARATED from a wrong subscript, which is the argument
+out/646 already made for splitting POOR_FIT, now with a measured cause
+behind it rather than a lead.
+
+AND A BETTER ORACLE THAN THE ONE I HAD. Every measurement in 639-646
+compared our render of MathPix's LaTeX against the ink. The author's
+source allows the third comparison -- MathPix's LaTeX against the
+author's LaTeX, directly, with no rasteriser in between. That is
+available for this document and was never used.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * ONE DOCUMENT, and one whose arXiv source happens to be present.
+    How many corpus documents carry a `.tgz` e-print is unmeasured.
+  * The three `bar`-preferring rows are unexplained. Two substitutions
+    were tested and neither accounts for them.
+  * NOTHING WAS CHANGED. `formulafind` still renders exactly the
+    LaTeX MathPix produced, which is the only way the comparison means
+    anything.
+  * THE 329 IS A COUNT OF THE AUTHOR'S USAGE, not of rows affected.
+    How many of the 3,163 evidence rows contain a substituted bar was
+    not counted.

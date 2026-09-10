@@ -45,10 +45,17 @@ DOC_SCALE, DPI, CROP_DPI = 0.665, 600, 400.0
 RED = ("EDGE_CUT", "BLOB_COUNT", "POOR_FIT", "OVERLAP", "ORDER")
 GREY = ("UNPLACEABLE", "AMBIGUOUS")
 
+#: `thin` is not a guess. The author's own arXiv source -- `SpEcxp.tex`
+#: inside `0902.0431.tgz`, dated February 2009 -- writes `\, | \,` 329
+#: times and `\mid` NOT ONCE. So the true spacing is 3mu each side
+#: against MathPix's 5mu, and the first version of this test bracketed
+#: that value without containing it: `bar` removes ALL space where the
+#: author used thin ones.
 VARIANTS = {
-    "mid": r"\mid",       # as MathPix emits it: \mathrel, space both sides
-    "bar": r"|",          # \mathord: no relation space at all
-    "wide": r"\;|\;",     # wider than \mid, to check the DIRECTION
+    "mid": r"\mid",       # as MathPix emits it: \mathrel, 5mu each side
+    "thin": r"\, | \,",   # THE AUTHOR'S OWN FORM: \mathord, 3mu each side
+    "bar": r"|",          # \mathord, no space at all -- tighter than either
+    "wide": r"\;|\;",     # 5mu each side, to check the DIRECTION
 }
 
 
