@@ -1,0 +1,121 @@
+657 - the large expressions aligned, and the whitespace rate is FLAT
+=====================================================================
+
+out/656 measured whitespace on 2,048 exactly-aligned rows and closed
+by saying those are the short ones, while the described defect lives
+in large open expressions. This aligns the large ones and measures
+there.
+
+--------------------------------------------------------------------
+THE ALIGNMENT, AND ITS SELF-CHECK
+
+Exact matching cannot reach them and more rules will not help --
+out/650 measured the marginal return collapsing, because a row aligns
+only if EVERY difference in it is normalised at once.
+`tools/fuzzyalign.py` matches on SIMILARITY instead: `difflib` over the
+normalised strings, with a character-4-gram index to keep it out of
+quadratic time.
+
+WHITESPACE IS STRIPPED FOR THE MATCH AND MEASURED ON THE RAW FORMS.
+If whitespace took part in the alignment, rows with unusual whitespace
+would fail to align and the measurement would be taken on precisely
+the rows that do not have the defect.
+
+THE THRESHOLD IS CHECKED, NOT CHOSEN. Run against rows that ALREADY
+align exactly, the fuzzy matcher recovers the same partner:
+
+    0707.4470     92/92    1510.06699  204/204   2106.07890  152/152
+    0902.0431   779/780    1605.05775   56/56    2501.06662  125/125
+    2010.14265    66/66
+    TOTAL      1474/1475   99.9%
+
+    alignment rate by length      exact (out/650)   fuzzy
+        50-99 characters                  ~10%      24.5%
+       100-199                             ~7%      15.0%
+       160+                                1.5%       ~14%
+
+--------------------------------------------------------------------
+PER ROW, THE DEFECT LOOKS LIKE IT GROWS WITH LENGTH
+
+    length     rows  aligned   more space  less space  explicit differs
+     0-24      2656     1060       26.0%        4.5%        0.8%
+    25-49      1614      617       37.1%       17.2%        4.1%
+    50-99      1024      251       43.0%       23.1%       11.2%
+   100-199      334       50       54.0%       18.0%       16.0%
+
+Twenty-six per cent to fifty-four. The explicit class -- the one the
+ink can see -- goes 0.8% to 16.0%, twenty-fold.
+
+--------------------------------------------------------------------
+AND CONTROLLED FOR LENGTH IT DOES NOT
+
+A longer expression has more places to differ, so "% of rows with at
+least one difference" rises with length BY CONSTRUCTION. Per 100
+characters of expression:
+
+    length      n    expl MP  expl AU  ratio     tok MP  tok AU  ratio
+     0-24    1057      0.01     0.11   0.12x       7.46    5.42  1.38x
+    25-49     617      0.04     0.17   0.22x       5.36    4.01  1.34x
+    50-99     251      0.10     0.16   0.63x       4.53    3.59  1.26x
+   100-199     50      0.13     0.18   0.73x       4.16    3.15  1.32x
+
+THE TOKEN-BOUNDARY RATIO IS FLAT: 1.38, 1.34, 1.26, 1.32. MathPix
+inserts about 30% more intra-token spaces than the author at EVERY
+length. The defect is real and it is constant per unit of content; it
+does not concentrate in large expressions.
+
+So the table above was measuring length, and my reading of it -- that
+the defect grows -- was wrong for the same reason out/651's red-flag
+enrichment was wrong. Third time in this file series.
+
+WHAT IS TRUE PRACTICALLY: a long expression is much more likely to
+carry AT LEAST ONE whitespace difference, 54% against 26%, and that is
+what a reader sees. The per-token rate behind it is unchanged.
+
+--------------------------------------------------------------------
+THE REPAIRABLE CLASS RUNS THE OTHER WAY, AND IS WORST WHERE IT WAS
+LEAST EXPECTED
+
+Explicit spacing -- `\quad`, `\,`, `\;` -- is the part that RENDERS
+and the only part the ink can adjudicate (out/656). MathPix does not
+add it; it DROPS it:
+
+    0-24 characters   0.12x the author's rate
+    25-49             0.22x
+    50-99             0.63x
+    100-199           0.73x
+
+WORST ON SHORT EXPRESSIONS. On a short inline expression MathPix emits
+about an eighth of the explicit spacing the author wrote; by 100
+characters it is at three quarters. That is the opposite of "problems
+in large open expressions", and it is the class inkdrill can actually
+repair, because a dropped `\quad` is 83 px of missing gap that the
+page still shows.
+
+--------------------------------------------------------------------
+WHAT THIS MEANS FOR A REPAIR
+
+  REPAIRABLE, and worth doing: explicit spacing MathPix dropped. The
+  ink carries the gap; the LaTeX does not. Short expressions are where
+  the deficit is largest in ratio, long ones where it is largest in
+  count.
+
+  NOT REPAIRABLE from the raster: the 1.3x token-boundary excess, at
+  any length. `xy` and `x y` are the same picture (out/656) and the
+  page cannot be asked.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * ALIGNMENT IS STILL PARTIAL -- 15% at 100-199 characters, up from
+    about 7%, and 1,980 of 5,643 rows overall. What the unaligned 65%
+    do is unmeasured, and they are unaligned because they differ MORE,
+    so they are not a random remainder.
+  * The 0-24 band is not comparable with out/650's exact figures: the
+    index skips keys under 6 characters, so the shortest expressions
+    are absent here.
+  * ratio >= 0.90 is one threshold. The self-check says it recovers
+    known answers; it does not say what it accepts wrongly.
+  * n=50 in the 100-199 band and 2 rows past 200, which is why the
+    200+ row is dropped from the tables above rather than reported.
+  * Seven documents, all arXiv, all LaTeX-produced.
