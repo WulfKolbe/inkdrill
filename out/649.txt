@@ -1,0 +1,131 @@
+649 - the aligned comparison, and two predictions of mine refuted
+==================================================================
+
+out/648 counted constructs over whole documents. This matches each
+MathPix expression to the author's own, on the 7 documents that have
+both a source and an evidence table: 5,643 expressions.
+
+`tools/alignlatex.py`.
+
+--------------------------------------------------------------------
+THE METHOD IS A LEAVE-ONE-OUT, WHICH IS THE POINT
+
+Both sides are normalised and matched on the result, and normalisation
+is what decides the answer -- so it is not applied as one lump. Each
+MathPix habit is a separate rule, and the match rate is measured with
+ALL rules on and then again with each one LEFT OUT. The rows that stop
+matching when rule C is removed are exactly the rows where C was
+substituted. An aligned count, obtained without ever asserting that a
+particular row was changed.
+
+`\cdots` IS IN THE LIST AS A CONTROL. out/648 measured it at 1.1x, so
+it should contribute nothing, and a large share for it would mean the
+ladder was measuring itself. IT SCORES EXACTLY 0 ON ALL SEVEN
+DOCUMENTS.
+
+    document       rows     raw    full   l/r  oper  {}   sp  mid  cd  brace
+    0707.4470       212      97     150     5     0   0    5    0   0     46
+    0902.0431      3163     417     930   183     1   3   20   15   0    491
+    1510.06699     1059     129     210    12     0   0    0    0   0     78
+    1605.05775      138      55     101    12     0   2    4    0   0     45
+    2010.14265      368      68      82     4     0   1    0    0   0     12
+    2106.07890      318     130     170    14     2   0    0    1   0     39
+    2501.06662      385     110     171    15     5   0    0    7   0     53
+
+    TOTAL          5643    1006    1814   245     8   6   29   23   0    764
+
+    matched verbatim 17.8%  ->  after normalisation 32.1%
+
+--------------------------------------------------------------------
+REFUTED PREDICTION 1: THE AUTHOR'S MACROS
+
+I expected macro expansion to move the number a lot. 0902.0431 defines
+149 `\def` macros -- `\ga` for alpha and so on -- and it is 56% of the
+sample; MathPix reads the PAGE and emits the expansion, while the
+author's file holds the shorthand, so comparing them unexpanded should
+have been measuring the author's typing habits.
+
+Expansion was implemented and the total moved 32.5% -> 32.1%. DOWN.
+
+It matters locally -- `\operatorname` drops from 84 to 8, because the
+rows it was explaining were matching for the wrong reason -- but it
+does not explain the unmatched majority. My reason for expecting it
+was sound and the effect is not there.
+
+--------------------------------------------------------------------
+REFUTED PREDICTION 2: SEGMENTATION EXPLAINS THE REST
+
+The other candidate was that MathPix cuts expressions at different
+boundaries from the author's `$...$`. Of the 3,829 unmatched:
+
+     13.2%   appear VERBATIM inside an author expression
+             -- MathPix split what the author wrote as one
+     25.4%   CONTAIN a whole author expression
+             -- MathPix merged what the author separated
+     61.5%   neither
+
+SEGMENTATION IS REAL AND IT IS NOT THE MAJORITY. It accounts for 38.6%
+of the unmatched, and MERGING is twice SPLITTING. A row of an evidence
+table is not reliably one author formula, which is worth knowing on
+its own.
+
+Full accounting of the 5,643:
+
+    32.1%  matched, verbatim or after the seven rules
+     8.9%  a sub-expression of an author expression
+    17.2%  spanning several author expressions
+    41.7%  unaccounted
+
+THE 41.7% IS NOT AN ERROR RATE AND MUST NOT BE QUOTED AS ONE. It is
+the residual of a SEVEN-RULE normaliser. Font commands, `\text{}`,
+array environments and `\left.` are all untreated, and each would move
+it. What fraction is real OCR error is unmeasured.
+
+--------------------------------------------------------------------
+THE FINDING THAT SURVIVES: COMMON AND VISIBLE ARE DIFFERENT AXES
+
+Every aligned class was rendered both ways and the ink compared:
+
+    class            aligned rows    renders
+    braces {X}->X            764     IDENTICAL ink
+    left/right               245     GEOMETRIC, +4.9%
+    spacing                   29     GEOMETRIC, +14.6%
+    mid                       23     GEOMETRIC, +2.7%
+    operatorname               8     IDENTICAL ink
+    empty group                6     GEOMETRIC, +8.9%
+    cdots                      0     IDENTICAL ink
+
+THE LARGEST CLASS PRODUCES NO VISIBLE RESIDUAL AT ALL. `a_{1}` for
+`a_1` is 764 of the 1,075 aligned substitutions and renders to
+identical ink, blob for blob. Together with `\operatorname` and
+`\cdots` that is 772 cosmetic against 303 geometric.
+
+So a table that reports "MathPix changed this expression" would be
+72% noise from a reader's point of view, and the geometric filter is
+what separates a difference from a residual.
+
+--------------------------------------------------------------------
+AND THE LIMITATION THAT BOUNDS ALL OF IT
+
+THE LEAVE-ONE-OUT ONLY SEES ROWS THAT MATCH. A substitution severe
+enough to push a row out of matching entirely is invisible to its own
+column. That is why `empty group` scores 6 here while out/648 counted
+7,557 prescript occurrences across 333 documents: the rows carrying
+them are mostly in the 41.7%, not in the matched 32%.
+
+The aligned counts are therefore a floor for the cosmetic classes and
+a SEVERE UNDERCOUNT for the disruptive ones -- which is the opposite
+of the ranking a reader would take from the table if it were quoted
+without this paragraph.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * SEVEN DOCUMENTS, and 0902.0431 is 56% of the rows. The totals are
+    close to that one document's behaviour.
+  * Author math extraction covers `$..$`, `$$..$$`, `\[..\]` and four
+    environments. Arrays, matrices and custom environments are missed
+    and would appear as unmatched.
+  * The geometry deltas are one minimal expression per class, measured
+    in out/648, and depend on content.
+  * Nothing in the pipeline was changed.
