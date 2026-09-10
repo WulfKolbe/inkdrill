@@ -1,0 +1,102 @@
+654 - the hold-out: the rule is a screen, the conjunction is the detector
+=========================================================================
+
+60 rows drawn at random from the 481 that `edge cuts >= 1 and gaps <= 7`
+flags and the per-length floor does not. Reviewed by eye.
+
+    ONE WRONG IN SIXTY.
+
+    FO2157  matched half the WORD BEFORE the target; the true target
+            is further left.
+
+    precision 1.7%, exact 95% CI [0.0%, 8.9%]
+
+Same failure mode as FO0512 in the previous set -- a shorter piece of
+text just before the expression taken instead of it. That class has
+now appeared twice in two independent samples.
+
+--------------------------------------------------------------------
+WHY THE SAMPLE WAS RANDOM AND NOT RANKED
+
+The 481 could have been sorted by edge cuts and the top reviewed. That
+would have measured the RANKING. The question was the rule, so the
+draw is seeded and unbiased, and the answer is a rate rather than a
+list.
+
+--------------------------------------------------------------------
+NEITHER SIGNAL WORKS ALONE. THE CONJUNCTION DOES
+
+    region                             rows   errors   precision
+    per-length floor AND the rule        17        7       41.2%
+    floor only (no cuts, or >7 gaps)     58        0        0.0%
+    rule only (not floor-flagged)       481       ~8         1.7%
+
+    the floor alone                      75        7        9.3%
+    the rule alone                      498      ~15        3.0%
+
+    placed rows                        2225
+    estimated placement errors          ~15        0.7%
+
+THE BASE RATE IS 0.7% AND THE CONJUNCTION IS 41%. That is a lift of
+about 24x, and it is the first thing in this chain that would make a
+residual report worth opening: SEVENTEEN ROWS out of 3,163.
+
+Each signal on its own is useless. The floor flags 75 to find 7; the
+rule flags 498 to find 15. Together they flag 17 to find 7. They are
+measuring different things -- "fits worse than its length predicts"
+and "the boundary lands inside a glyph" -- and a wrong placement
+usually does both.
+
+--------------------------------------------------------------------
+AND THE 41.2% IS NOT VALIDATED. THIS MATTERS
+
+The seven errors in the conjunction region are THE SAME SEVEN the rule
+was chosen to capture. `edge_cuts >= 1 and gaps <= 7` was picked in
+out/653 because it caught all of them, so 41.2% is an IN-SAMPLE figure
+and is optimistic by an unknown amount.
+
+The only OUT-OF-SAMPLE number here is the 1.7%, and it is out of
+sample precisely because those 481 rows had nothing to do with
+choosing the rule.
+
+The conjunction region holds 17 rows and all 17 are now labelled, so
+it CANNOT be validated further on this document. It needs a second
+document with an author source and an evidence table -- there are six
+others -- and that is the next measurement, not another sample here.
+
+--------------------------------------------------------------------
+THE NUMBER THE INSTRUMENT ACTUALLY EARNED
+
+    ~15 wrong placements among 2,225 placed rows.
+    99.3% of placements are correct.
+
+That is the honest headline, and it took two labelled samples and 135
+eye verdicts to get. It also means every red count reported before
+this file -- 318, 355, 222 -- was an order of magnitude too large,
+because none of them was measured against a label.
+
+--------------------------------------------------------------------
+RECOMMENDATION, AND IT IS NOT MINE TO TAKE
+
+Report the CONJUNCTION: per-length floor AND edge cuts >= 1 AND
+gaps <= 7. Seventeen rows, seven of them real, on this document.
+
+  RECALL IS ABOUT HALF. Roughly 8 of the estimated 15 errors sit in
+  the rule-only region and the conjunction misses every one. A
+  residual report on this rule is a high-precision, half-blind one,
+  and that trade should be stated in the report itself rather than
+  discovered by a reader.
+
+Not adopted. `formularesidual` still runs the single floor and
+`edge_cut_max` at p90.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * ONE DOCUMENT. 135 labels: 75 from out/653, 60 here.
+  * The ~8 errors in the rule-only region are an extrapolation from
+    one observation. The CI runs from 0 to 43.
+  * NOTHING SAYS WHAT BOTH SIGNALS MISS TOGETHER. The region where
+    neither fires -- most of the 2,225 -- has never been sampled, so
+    the 0.7% error rate is a floor and not an estimate.
+  * The conjunction's precision is in-sample. See above.

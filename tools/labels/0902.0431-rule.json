@@ -1,0 +1,188 @@
+{
+ "document": "0902.0431",
+ "reviewed": "2026-09-10, by the corpus author, by eye, lossless 400 dpi crops",
+ "population": "seeded random sample (seed 20260910) of 60 of the 481 rows flagged by 'edge cuts >= 1 and gaps <= 7' that were NOT already flagged by the per-length floor",
+ "labels": {
+  "FO0103": {
+   "verdict": "correct"
+  },
+  "FO0104": {
+   "verdict": "correct"
+  },
+  "FO0128": {
+   "verdict": "correct"
+  },
+  "FO0130": {
+   "verdict": "correct"
+  },
+  "FO0157": {
+   "verdict": "correct"
+  },
+  "FO0181": {
+   "verdict": "correct"
+  },
+  "FO0259": {
+   "verdict": "correct"
+  },
+  "FO0356": {
+   "verdict": "correct"
+  },
+  "FO0388": {
+   "verdict": "correct"
+  },
+  "FO0440": {
+   "verdict": "correct"
+  },
+  "FO0493": {
+   "verdict": "correct"
+  },
+  "FO0577": {
+   "verdict": "correct"
+  },
+  "FO0631": {
+   "verdict": "correct"
+  },
+  "FO0632": {
+   "verdict": "correct"
+  },
+  "FO0678": {
+   "verdict": "correct"
+  },
+  "FO0699": {
+   "verdict": "correct"
+  },
+  "FO0722": {
+   "verdict": "correct"
+  },
+  "FO0823": {
+   "verdict": "correct"
+  },
+  "FO0931": {
+   "verdict": "correct"
+  },
+  "FO0949": {
+   "verdict": "correct"
+  },
+  "FO1040": {
+   "verdict": "correct"
+  },
+  "FO1071": {
+   "verdict": "correct"
+  },
+  "FO1154": {
+   "verdict": "correct"
+  },
+  "FO1211": {
+   "verdict": "correct"
+  },
+  "FO1225": {
+   "verdict": "correct"
+  },
+  "FO1350": {
+   "verdict": "correct"
+  },
+  "FO1365": {
+   "verdict": "correct"
+  },
+  "FO1369": {
+   "verdict": "correct"
+  },
+  "FO1415": {
+   "verdict": "correct"
+  },
+  "FO1426": {
+   "verdict": "correct"
+  },
+  "FO1462": {
+   "verdict": "correct"
+  },
+  "FO1503": {
+   "verdict": "correct"
+  },
+  "FO1565": {
+   "verdict": "correct"
+  },
+  "FO1708": {
+   "verdict": "correct"
+  },
+  "FO1782": {
+   "verdict": "correct"
+  },
+  "FO1802": {
+   "verdict": "correct"
+  },
+  "FO1840": {
+   "verdict": "correct"
+  },
+  "FO1854": {
+   "verdict": "correct"
+  },
+  "FO1876": {
+   "verdict": "correct"
+  },
+  "FO1988": {
+   "verdict": "correct"
+  },
+  "FO2089": {
+   "verdict": "correct"
+  },
+  "FO2157": {
+   "verdict": "WRONG",
+   "note": "matched half the word BEFORE the target; the true target is further left"
+  },
+  "FO2283": {
+   "verdict": "correct"
+  },
+  "FO2296": {
+   "verdict": "correct"
+  },
+  "FO2362": {
+   "verdict": "correct"
+  },
+  "FO2377": {
+   "verdict": "correct"
+  },
+  "FO2410": {
+   "verdict": "correct"
+  },
+  "FO2461": {
+   "verdict": "correct"
+  },
+  "FO2463": {
+   "verdict": "correct"
+  },
+  "FO2518": {
+   "verdict": "correct"
+  },
+  "FO2641": {
+   "verdict": "correct"
+  },
+  "FO2719": {
+   "verdict": "correct"
+  },
+  "FO2779": {
+   "verdict": "correct"
+  },
+  "FO2807": {
+   "verdict": "correct"
+  },
+  "FO2846": {
+   "verdict": "correct"
+  },
+  "FO2914": {
+   "verdict": "correct"
+  },
+  "FO2946": {
+   "verdict": "correct"
+  },
+  "FO3035": {
+   "verdict": "correct"
+  },
+  "FO3074": {
+   "verdict": "correct"
+  },
+  "FO3147": {
+   "verdict": "correct"
+  }
+ }
+}
