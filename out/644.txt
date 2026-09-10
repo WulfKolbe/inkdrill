@@ -1,0 +1,122 @@
+644 - the reviewer's five, diagnosed. Two causes, not one
+==========================================================
+
+Five rows were named with what was wrong with them. Every one was a
+statement about MY RECTANGLE, not about the document:
+
+  FO0150  a right bracket outside the range; the left "11" missing
+  FO0200  the rightmost Fraktur glyph missed
+  FO0207  large miss in size and position
+  FO0237  position wrong -- the expression is several characters right
+
+So the flags fired correctly as alarms and I attributed them wrongly.
+out/643 said "the same number of things being different things"; for
+three of these five the truth is simply that the rectangle was in the
+wrong place.
+
+--------------------------------------------------------------------
+THE TEST out/639 NAMED AND NEVER RAN
+
+out/639 closed with: "A single document scale leaves a residual that
+accumulates across a long expression... allowing +/- 2% per row is the
+obvious next measurement and was not run." It is run here,
+`tools/refinefit.py`: the scale is refitted PER ROW over +/-12% around
+the document's 0.665, offset searched over the whole line.
+
+CONSTRAINED, and the constraint is checked. A free search is what
+collapsed to the floor of its range in out/640, and the tell is a
+refined scale sitting ON the boundary. NONE of the fifteen does. The
+refits land between 0.960 and 1.060 of the document scale, so per-row
+variation is real and about +/-5%.
+
+    id      flags                blobs  score  ->  blobs  score  scale   dx0   dx1
+    FO0096  POOR_FIT            14->14  0.714     14->14  0.829  0.960   +13    -6
+    FO0111  POOR_FIT            23->23  0.709     23->23  0.743  0.992    +5    -2
+    FO0112  POOR_FIT            23->23  0.713     23->23  0.762  0.962    +9   -20
+    FO0144  EDGE_CUT            45->45  0.915     45->45  0.938  1.002    -1    +1
+    FO0150  BLOB_COUNT          53->50  0.820     53->50  0.837  1.002    -2    +2
+    FO0154  POOR_FIT            17->17  0.714     17->17  0.830  0.968    +9    -6
+    FO0156  BLOB+POOR_FIT       46->44  0.565     46->44  0.736  0.964   +11   -28
+    FO0170  POOR_FIT            33->33  0.650     33->33  0.688  1.004    -2    +2
+    FO0173  POOR_FIT            33->33  0.715     33->33  0.732  1.010    -5    +3
+    FO0174  POOR_FIT            22->21  0.612     22->21  0.619  1.004    -1    +1
+    FO0200  POOR_FIT            39->38  0.629     39->39  0.831  1.060   -18   +52  EXACT
+    FO0207  BLOB+POOR_FIT       50->44  0.589     50->49  0.684  1.060  -369  -297
+    FO0228  POOR_FIT            31->31  0.681     31->31  0.691  0.988    +8    -5
+    FO0236  OVERLAP               5->5  0.984       5->5  0.992  0.990    +1    -1
+    FO0237  POOR+OVERLAP        37->38  0.581     37->37  0.709  0.964  +260  +219  EXACT
+
+--------------------------------------------------------------------
+THE REVIEWER'S DIAGNOSES, CONFIRMED NUMERICALLY
+
+  FO0237 "several characters to the right"  -- the refit moves it
+         +260 px right and the blob count becomes EXACT, 37 against
+         37, score 0.581 -> 0.709. Confirmed precisely.
+
+  FO0200 "the rightmost Fraktur glyph was missed" -- the right edge
+         extends by 52 px and picks it up: 39 against 39, score
+         0.629 -> 0.831. Confirmed precisely.
+
+  FO0207 "large miss in size and position" -- the refit moves the
+         rect 369 px, which is the largest correction in the set, and
+         recovers 5 of the 6 missing blobs. Confirmed as misplacement;
+         not fully resolved.
+
+  FO0236/FO0237 OVERLAP was RIGHT and it identified the right one.
+         The pair overlapped because FO0237 sat 260 px too far left,
+         inside FO0236's rectangle. FO0236 barely moves. A rule with
+         one observation behind it got that observation correct.
+
+--------------------------------------------------------------------
+AND ONE DIAGNOSIS OF MINE THAT WAS WRONG
+
+I read FO0150's image as an under-scaled rectangle -- `11` missing on
+the left, `)` on the right, 3 blobs, exactly the 53->50 gap. A scale
+error explains that shape, so I expected the refit to close it.
+
+IT DOES NOT. FO0150 moves 2 px and stays at 53->50.
+
+The reason is structural, and it is a better finding than the one I
+guessed. The expression is `11 R(x y)=...`: MathPix has folded the
+EQUATION NUMBER into the formula. On the page that number is set flush
+left with a wide gap before the maths; in `$11 R(x y)$` it is one thin
+math space. No scale reconciles the two, because the difference is not
+a scale -- the rendered expression is a different SHAPE from the ink.
+
+FO0144 (`7 \quad a(\bar{a} x)...`) and FO0154 (`12.2 \quad a_{i}...`)
+have the same form. That is a class worth naming, and it accuses the
+SOURCE: an equation number pulled into the expression it labels.
+
+--------------------------------------------------------------------
+WHAT THE FIFTEEN ACTUALLY ARE
+
+At least three causes, where out/643 implied one:
+
+  A. MISPLACEMENT, curable by a per-row refit.
+     FO0200, FO0237 outright; FO0207 substantially.
+  B. AN EQUATION NUMBER ABSORBED INTO THE EXPRESSION, which no
+     placement can fix because the shapes differ.
+     FO0150, and by inspection FO0144 and FO0154 share the form.
+  C. STILL OPEN. Seven rows have an EXACT blob count and improve only
+     modestly under the refit -- FO0096 0.71->0.83, FO0111
+     0.71->0.74, FO0170 0.65->0.69, FO0228 0.68->0.69. Neither
+     misplacement nor a count difference explains those.
+
+--------------------------------------------------------------------
+NOT CLAIMED, AND ONE THING DELIBERATELY NOT DONE
+
+  * THE CLASS COUNTS ARE NOT RE-REPORTED. Six of the fifteen would
+    clear the current score floor after refitting, but that floor is
+    CALIBRATED from the reference population, and refitting moves the
+    whole population. Quoting new class counts against an old
+    calibration would be exactly the mistake CLAUDE.md records as "a
+    filter holding a guarantee". The refit has to be run over all 260
+    rows and the calibration retaken before any count is quoted.
+  * `tools/refinefit.py` IS COMMITTED BUT NOT WIRED IN. The harness
+    exists before the decision, per the standing rule. `formulafind`
+    still imposes one scale per document.
+  * FO0207 is not resolved -- 50 against 49 after a 369 px correction
+    means something else is also wrong there.
+  * The reviewer named five rows. The other ten were confirmed as
+    poor fits in out/643 but not individually diagnosed, and cause C
+    covers seven of them with no explanation at all.
