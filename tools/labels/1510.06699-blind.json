@@ -1,0 +1,90 @@
+{
+ "document": "1510.06699",
+ "reviewed": "2026-09-10, by the corpus author, BLIND -- 11 rule-flagged and 9 random controls shuffled, assignment hidden until after review",
+ "labels": {
+  "FO0048": {
+   "verdict": "correct",
+   "flagged": false
+  },
+  "FO0080": {
+   "verdict": "WRONG",
+   "flagged": true,
+   "note": "marked the wrong expression to the left; it looks totally different"
+  },
+  "FO0158": {
+   "verdict": "correct",
+   "flagged": true
+  },
+  "FO0163": {
+   "verdict": "correct",
+   "flagged": true
+  },
+  "FO0187": {
+   "verdict": "correct",
+   "flagged": false
+  },
+  "FO0239": {
+   "verdict": "correct",
+   "flagged": true
+  },
+  "FO0375": {
+   "verdict": "correct",
+   "flagged": true
+  },
+  "FO0424": {
+   "verdict": "correct",
+   "flagged": false
+  },
+  "FO0551": {
+   "verdict": "WRONG",
+   "flagged": true,
+   "note": "not correctly matched; moved left, covering only half the expression"
+  },
+  "FO0554": {
+   "verdict": "correct",
+   "flagged": false
+  },
+  "FO0636": {
+   "verdict": "correct",
+   "flagged": false
+  },
+  "FO0657": {
+   "verdict": "correct",
+   "flagged": true
+  },
+  "FO0718": {
+   "verdict": "WRONG",
+   "flagged": true,
+   "note": "wrong -- the expression is not covered at all; the covered range looks different"
+  },
+  "FO0786": {
+   "verdict": "correct",
+   "flagged": true
+  },
+  "FO0794": {
+   "verdict": "correct",
+   "flagged": false
+  },
+  "FO0812": {
+   "verdict": "correct",
+   "flagged": true
+  },
+  "FO0913": {
+   "verdict": "WRONG",
+   "flagged": true,
+   "note": "range moved left, covering half the expression"
+  },
+  "FO0957": {
+   "verdict": "correct",
+   "flagged": false
+  },
+  "FO0980": {
+   "verdict": "correct",
+   "flagged": false
+  },
+  "FO1060": {
+   "verdict": "correct",
+   "flagged": false
+  }
+ }
+}

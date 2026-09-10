@@ -1,0 +1,133 @@
+655 - the conjunction validates on a second document, blind
+============================================================
+
+1510.06699, 1,062 evidence rows, 485 placed. Reviewed BLIND: eleven
+rule-flagged rows and nine controls drawn at random from placed rows
+the rule did NOT flag, shuffled together, the assignment hidden until
+after the verdicts were given.
+
+  FOUR WRONG OF TWENTY, AND ALL FOUR WERE FLAGGED.
+
+    flagged   11 rows   4 wrong   precision 36.4%
+                                  Wilson 95% CI [15%, 65%]
+    controls   9 rows   0 wrong   no false negative in the sample
+
+    in-sample on 0902.0431 was 41.2%, which is inside that interval.
+
+THE CONJUNCTION HOLDS OUT OF SAMPLE. That was the open question of
+out/654 -- 41.2% was measured on the same seven errors the rule was
+chosen to capture, and could not be checked further on that document
+because all seventeen of its rows were already labelled.
+
+--------------------------------------------------------------------
+WHY THE CONTROLS WERE THERE, AND WHAT THEY BOUGHT
+
+Knowing a row is flagged makes it easier to find fault with it. More
+importantly, without controls a false negative costs the rule nothing:
+every previous review here looked only at rows something had already
+flagged, so recall has never been measured, only extrapolated.
+
+Nine controls is a thin instrument -- it would miss an error rate
+below about 10% -- but it is the first direct evidence that the
+conjunction is not simply blind. Zero of nine.
+
+--------------------------------------------------------------------
+THE METHOD TRANSFERS. THE CONSTANTS DO NOT, AND SHOULD NOT
+
+The floor was REFITTED on this document's own author-matched rows:
+
+    1510.06699   floor(L) = 1.0146 - 0.1097*log10(L)
+    0902.0431    floor(L) = 1.0806 - 0.1685*log10(L)
+
+Shallower -- this document's rendering diverges less with length.
+Reusing the first document's constants would have tested nothing. The
+scale was voted for rather than assumed too, and returned 0.67 against
+a predicted 0.6667.
+
+What each signal flags, of 485 placed rows:
+
+    per-length floor            99   20.4%
+    edge cuts >= 1, gaps <= 7  137   28.2%
+    CONJUNCTION                 11    2.3%
+
+Same shape as the first document, where the figures were 75, 498 and
+17 of 2,225. Each signal alone flags a fifth to a quarter of the
+document; together they collapse to a page.
+
+--------------------------------------------------------------------
+A SUB-PATTERN, CHECKED ON BOTH DOCUMENTS BEFORE BEING WRITTEN DOWN
+
+    cuts >= 2 AND gaps <= 2
+
+    1510.06699   3 rows, 3 wrong   (FO0080, FO0551, FO0913)
+    0902.0431    1 row,  1 wrong   (FO1432)
+    both         4 of 4 wrong
+
+The remaining eight flagged rows of document 2 hold one error between
+them. So within the conjunction there is a hard core: two or more edge
+cuts on an expression with two gaps or fewer has been wrong every time
+it has been seen.
+
+FOUR ROWS IS FOUR ROWS, and the pattern was noticed on document 2
+before being checked on document 1 rather than after -- which is why
+it is here as a lead with its provenance stated, and not as a rule.
+
+--------------------------------------------------------------------
+THE FAILURE MODE IS DIRECTIONAL, AND THAT IS THE REAL FINDING
+
+Twelve labelled errors across both documents. SEVEN of them place the
+expression to the LEFT of the truth, or take the thing immediately
+before it:
+
+    FO0512  the shorter word before the expression was taken
+    FO0651  placed too far left
+    FO1316  placed one term before the true position
+    FO2157  matched half the word BEFORE the target
+    FO0080  the wrong expression to the left
+    FO0551  moved left, covering only half the expression
+    FO0913  range moved left, covering half the expression
+
+Against five that are anything else -- one placed slightly right, one
+right edge short, one at the centre of the line, one at the end
+instead of the start, one simply elsewhere.
+
+THIS IS A BIAS, NOT NOISE. A matcher that failed at random would
+scatter both ways. Seven-one on the directional errors says the
+profile match prefers a position slightly left of the true one, which
+is a mechanism that can be found and fixed rather than a threshold
+that can only be tuned.
+
+The likely cause, NOT TESTED: the trimmed template starts at its first
+ink column, so its leading edge aligns naturally with the trailing
+edge of whatever precedes the expression, and the inter-word gap on
+the left is available to absorb error while the right side has to fit
+real glyphs.
+
+--------------------------------------------------------------------
+WHERE THIS LEAVES THE RESIDUAL REPORT
+
+Two documents, 155 eye verdicts, 12 labelled errors.
+
+  ADOPT: the conjunction. 36-41% precision, 11-17 rows per document,
+  against a base rate under 1%. Recall is unmeasured beyond "nine
+  controls were clean".
+
+  DO NOT ADOPT: either signal alone. The floor alone is 9%, the rule
+  alone 1.7%, and both flag a fifth of the document.
+
+  FIX FIRST: the left bias. Seven of twelve errors share one
+  direction, and no threshold change will address that.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * TWO DOCUMENTS, both arXiv, both LaTeX-produced.
+  * ELEVEN FLAGGED ROWS is a small denominator; the interval runs
+    from 15% to 65%.
+  * NINE CONTROLS cannot see a false-negative rate below ~10%.
+  * The sub-pattern rests on four rows.
+  * The left-bias mechanism is a hypothesis. It predicts that
+    trimming the template symmetrically, or scoring the two edges
+    separately, would move those seven rows -- neither was tried.
+  * Nothing was adopted in code. `formularesidual` still runs the
+    single floor and `edge_cut_max` at p90.
