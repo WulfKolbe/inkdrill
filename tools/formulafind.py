@@ -54,6 +54,81 @@ STANDALONE = r"""\documentclass[border=0pt]{standalone}
 \begin{document}$\displaystyle %s$\end{document}
 """
 
+def line_index(library, bibkey):
+    """page -> [(region, text)] from `lines.json`, in reading order.
+
+    The regions are in MathPix page pixels. For 0902.0431 that raster
+    is 2125 x 2750 for a 612 x 792 pt page -- exactly 250 dpi -- and
+    the locally rendered page is 3400 x 4400, exactly 400 dpi, so the
+    two differ by 1.6 with no rounding.
+    """
+    import json
+    d = json.loads((library / bibkey / f"{bibkey}.lines.json").read_text())
+    out = {}
+    for pg in d["pages"]:
+        out[pg["page"]] = [(l["region"], l.get("text") or "")
+                           for l in pg.get("lines", [])]
+    return out, d["pages"][0]["page_width"], d["pages"][0]["page_height"]
+
+
+def fullres_crop(library, bibkey, page, region, ratio, out):
+    """The line, cut from the LOCALLY RENDERED page. No resample, no JPEG.
+
+    `report-crops-b` is a PUBLISHING artefact: the line region scaled to
+    0.5998 and saved at JPEG q92. out/641 measured what that costs --
+    the component count moves on 2 of 20 crops and the hole count on 4
+    of 20, by as much as 4 -- so a residual report of sixteen rows must
+    never be measured on it. There is no reason to measure on it
+    either: the same line is available lossless.
+
+    Cropped with `magick` rather than decoded in Python, so the 3400 x
+    4400 page is never held in memory, and written straight to PGM,
+    which is what `pnmio` reads.
+    """
+    src = library / bibkey / "inspect" / "pages" / f"p{page}.png"
+    if not src.exists():
+        return None
+    x = int(round(region["top_left_x"] * ratio))
+    y = int(round(region["top_left_y"] * ratio))
+    w = int(round(region["width"] * ratio))
+    h = int(round(region["height"] * ratio))
+    subprocess.run(["magick", str(src), "-crop", f"{w}x{h}+{x}+{y}",
+                    "+repage", "-colorspace", "Gray", "-depth", "8", str(out)],
+                   capture_output=True, check=True)
+    return out
+
+
+def match_rows_to_lines(picked, index):
+    """Row -> the line whose text contains it, assigned in reading order.
+
+    The line text carries the maths delimited as `\\(...\\)`, so the row's
+    own expression is a literal substring. Assignment walks each page
+    FORWARD and never re-uses an earlier line, because an expression
+    like `G` occurs on many lines of a page and the first match would
+    put every one of them on line 1.
+    """
+    out, cursor = {}, {}
+    for row in picked:
+        pg = int(row["page"])
+        lines = index.get(pg, [])
+        start = cursor.get(pg, 0)
+        needle = "\\(" + row["math"] + "\\)"
+        hit = None
+        for i in range(start, len(lines)):
+            if needle in lines[i][1]:
+                hit = i
+                break
+        if hit is None:                      # fall back to anywhere on the page
+            for i in range(0, len(lines)):
+                if needle in lines[i][1]:
+                    hit = i
+                    break
+        if hit is not None:
+            out[row["id"]] = lines[hit][0]
+            cursor[pg] = hit
+    return out
+
+
 ROW_RX = re.compile(
     r"\\ident\{(?P<id>.*?)\}\s*&\s*(?P<page>\d+)\s*&\s*"
     r"\\confcell\{\w+\}\{(?P<conf>[\d.]+)\}\s*&.*?&\s*"
@@ -219,8 +294,15 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--dpi", type=int, default=600)
     ap.add_argument("--smin", type=float, default=0.10)
-    ap.add_argument("--smax", type=float, default=0.60)
+    ap.add_argument("--smax", type=float, default=1.60)
     ap.add_argument("--sstep", type=float, default=0.005)
+    ap.add_argument("--crops", choices=("report", "fullres"),
+                    default="fullres",
+                    help="report = the downsampled q92 JPEGs (a PUBLISHING "
+                         "artefact, see out/641); fullres = the line cut "
+                         "losslessly from inspect/pages at 400 dpi")
+    ap.add_argument("--crop-dpi", type=float, default=0.0,
+                    help="0 = infer: 400 for fullres, 150 for report")
     ap.add_argument("--min-gaps", type=int, default=2)
     ap.add_argument("--scale-min-gaps", type=int, default=6)
     ap.add_argument("--min-score", type=float, default=0.80)
@@ -244,17 +326,50 @@ def main() -> int:
         if args.limit and len(picked) >= args.limit:
             break
 
+    fullres = args.crops == "fullres"
+    crop_dpi = args.crop_dpi or (400.0 if fullres else 150.0)
+    regions = ratio = None
+    if fullres:
+        index, raster_w, _ = line_index(args.library, args.bibkey)
+        probe = doc / "inspect" / "pages" / "p1.png"
+        pw = int(subprocess.run(["magick", "identify", "-format", "%w",
+                                 str(probe)], capture_output=True,
+                                text=True, check=True).stdout)
+        ratio = pw / raster_w
+        regions = match_rows_to_lines(picked, index)
+        print(f"crops: LOSSLESS, cut from inspect/pages at {crop_dpi:g} dpi")
+        print(f"  page raster {raster_w} px (MathPix) -> {pw} px (local), "
+              f"ratio {ratio:g}")
+        print(f"  {len(regions)} of {len(picked)} rows matched to a line\n")
+    else:
+        print(f"crops: report-crops-b, DOWNSAMPLED q92 "
+              f"(a publishing artefact -- see out/641)\n")
+
+    # The scale is PREDICTED from the two dpi, then checked against the
+    # vote rather than assumed. Searching a wide range invites the
+    # collapse to the floor that out/640 had to retract a rule over.
+    expect = crop_dpi / args.dpi
+    scales = [s for s in scales if 0.6 * expect <= s <= 1.5 * expect] or scales
+
     prepared, out = [], []
     with tempfile.TemporaryDirectory() as td:
         t = pathlib.Path(td)
         for row in picked:
+            if fullres:
+                reg = regions.get(row["id"])
+                if reg is None or not fullres_crop(args.library, args.bibkey,
+                                                   int(row["page"]), reg,
+                                                   ratio, t / "c.pgm"):
+                    print(f"{row['id'].split('_')[-1]:<8} NO LINE MATCH")
+                    continue
+            else:
+                to_pgm(doc / row["crop"], t / "c.pgm")
             if not render(row["math"], t / "f.pgm", args.dpi):
                 print(f"{row['id'].split('_')[-1]:<8} RENDER FAILED  "
                       f"{row['math'][:50]}")
                 continue
-            to_pgm(doc / row["crop"], t / "c.pgm")
             fm, fb = blobs(t / "f.pgm", float(args.dpi))
-            cm, cb = blobs(t / "c.pgm", 150.0)
+            cm, cb = blobs(t / "c.pgm", crop_dpi)
             prepared.append((row, fm.width, fb, cm, cb))
 
         # ---- PASS 1: the document's scale, from the rows that can
@@ -283,6 +398,7 @@ def main() -> int:
             scale = None
         import collections
         spread = collections.Counter(votes)
+        print(f"predicted scale {expect:.4g} = {crop_dpi:g}/{args.dpi} dpi")
         print(f"document scale: {scale}  (median of {len(votes)} rows with "
               f">= {args.scale_min_gaps} gaps and score >= {args.min_score})")
         print(f"  vote spread: "

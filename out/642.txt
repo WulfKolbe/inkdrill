@@ -1,0 +1,150 @@
+642 - measure on lossless crops. RETRACTS most of out/640's residuals
+======================================================================
+
+You were right, and the cost was higher than out/641 predicted.
+
+`formulafind` now cuts the line from `inspect/pages/p<N>.png` -- 3400 x
+4400 for a 612 x 792 pt page, exactly 400 dpi, locally rendered,
+lossless PNG -- instead of from `report-crops-b`, which is a PUBLISHING
+artefact: the line region scaled to 0.5998 and saved at JPEG q92. The
+MathPix raster is 2125 px wide and the local page 3400, so the regions
+in `lines.json` map across at exactly 1.6 with no rounding.
+
+`--crops fullres` is now the DEFAULT. `--crops report` is kept only so
+the old numbers can be reproduced.
+
+--------------------------------------------------------------------
+WHAT CHANGED, 260 ROWS MEASURED BOTH WAYS
+
+                        downsampled   lossless
+    rows placed              44          95
+    SILENT                   81         105
+    GREY                    163         140
+    RED                      16          15
+    reading-order premise   9/9        12/12
+    OVERLAP fires             0           2
+
+    CLASS TRANSITION, downsampled -> lossless
+
+                    SILENT    GREY     RED
+        SILENT          70       4       7
+        GREY            26     135       2
+        RED              9       1       6
+
+    49 of 260 rows change class. 18.8%.
+
+--------------------------------------------------------------------
+TEN OF THE SIXTEEN RED ROWS WERE NOT DOCUMENT ERRORS
+
+Nine become SILENT and one becomes GREY:
+
+  id       blob count           score        expression
+  FO0012   3->6  becomes 3->3   0.72 -> 0.97  \mathfrak{g}_{2}{ }^{C}
+  FO0036   4->2  becomes 4->3   0.65 -> 1.00  \mathfrak{e}_{6}{ }^{C}
+  FO0039   5->7  becomes 5->5   0.63 -> 0.80  z\left(E_{6}\right)   [GREY]
+  FO0045   9->4  becomes 9->9   0.40 -> 0.95  S U(3)) / \boldsymbol{Z}_{3}
+  FO0057  20->17 becomes 20->20 0.72 -> 0.94  (S U(2) \times S p i n(12))
+  FO0059  16->3  becomes 16->16 0.10 -> 0.96  (S U(3) \times S U(6)) / Z_3
+  FO0067  13->20 becomes 13->13 0.71 -> 0.89  \left(S U(2) \times E_{7}\right)
+  FO0078  27->24 becomes 27->27 0.82 -> 0.83  \boldsymbol{R}, \boldsymbol{C}
+  FO0120  28->31 becomes 28->28 0.90 -> 0.93  \left\{e_{0}=1, e_{1}, ...
+  FO0208  28->28 becomes 28->28 0.77 -> 0.77  F_{i j}, i, j=0,1, \cdots, 7
+
+BOTH OF out/640's HEADLINE FINDINGS ARE RETRACTED.
+
+  I wrote of FO0045: "the crop is 159x22 and shows `= {a`. THE
+  EXPRESSION IS NOT IN IT AT ALL." At full resolution it places at
+  x 6-265 with 9 blobs against 9, score 0.954 and a margin of 0.954 --
+  the runner-up scores zero. It is a clean row.
+
+  I wrote of FO0059: "the crop is essentially BLANK -- a row whose
+  evidence contains no evidence." The line is
+
+      "4.13. Automorphism w of order 3 and subgroup (SU(3) x SU(6))/Z_3"
+
+  and the rectangle sits exactly on the expression, 16 blobs against
+  16, score 0.960.
+
+Both statements were TRUE OF THE REPORT CROP AND FALSE OF THE
+DOCUMENT. I checked them by eye, which confirmed what the crop
+contained and told me nothing about what the page contained. Looking
+at the artefact is not looking at the evidence.
+
+--------------------------------------------------------------------
+AND NINE ROWS THE DOWNSAMPLE WAS HIDING
+
+  FO0096  was GREY    POOR_FIT     \left\{g \in G \mid s g s^{-1}=g\right\}
+  FO0111  was SILENT  POOR_FIT     O(n)=\left\{A \in M(n, ...
+  FO0112  was SILENT  POOR_FIT     S O(n)=\{A \in O(n) \mid ...
+  FO0144  was SILENT  EDGE_CUT     7 \quad a(\bar{a} x)=(a \bar{a}...
+  FO0150  was SILENT  BLOB_COUNT   11 R(x y)=R(y x), \quad ...
+  FO0154  was SILENT  POOR_FIT     12.2 \quad a_{i}\left(a_{i} x\right)
+  FO0170  was SILENT  POOR_FIT     G_{i j}: \mathfrak{C} \rightarrow
+  FO0173  was SILENT  POOR_FIT     F_{i j}: \mathfrak{C} \rightarrow
+  FO0236  was GREY    OVERLAP      D 1=p
+
+Six were RED in both runs: FO0156, FO0174, FO0200, FO0207, FO0228,
+FO0237. Those are the ones that survive.
+
+So the downsampled residual report was wrong in BOTH directions:
+ten false accusations and nine misses, on a report of sixteen rows.
+
+--------------------------------------------------------------------
+out/641's NULL TEST WAS SOUND AND ANSWERED A NARROWER QUESTION
+
+641 applied LANCZOS 62.5% and JPEG q92 to a CORRECTLY CUT crop and
+measured the five-tuple: components moved by -1 on 2 of 20, holes on 4
+of 20. Scattered, about one crop in ten. Everything in it stands.
+
+But `report-crops-b` differs from the source line by more than a
+resample. FO0059's report crop is 635 x 24 and BLANK where the line
+carries sixteen components; FO0045's is 159 x 22 and shows different
+text entirely. No downsample does that. The real confound is CROP
+SELECTION, and 641 could not see it because it never compared a report
+crop against its own source line -- it resampled a crop we cut
+ourselves and compared that against itself.
+
+The lesson is the one this project keeps re-learning in new clothes: a
+null test bounds the effect it models, and says nothing about the
+effect it did not. I measured the resample because the resample was
+the thing I had thought of.
+
+--------------------------------------------------------------------
+THE INSTRUMENT IS ALSO BETTER, WHICH IS A SEPARATE FACT
+
+    blob-count difference in the reference population
+      downsampled  {0:63, 1:17, 2:9, 3:5, 5:1, 7:1, 13:1}
+      lossless     {0:98, 1:19, 2:1, 3:1, 6:1}
+
+    rows placed 44 -> 95, AMBIGUOUS 102 -> 79, and OVERLAP fires for
+    the first time (2 rows), because at 400 dpi enough rows can be
+    placed for two on one line to be compared. The reading-order
+    premise now holds on 12 pairs rather than 9.
+
+The scale was PREDICTED before it was measured: 400 dpi crop against a
+600 dpi render is 0.6667, and the vote of 94 rows returned 0.665. The
+search range is now centred on the prediction rather than swept from
+0.10, which is what let a template collapse to the floor in out/640.
+
+--------------------------------------------------------------------
+STANDING RULE FROM THIS
+
+  MEASURE ON THE LOSSLESS SOURCE. A residuals report is a handful of
+  rows and can afford any resolution it likes; there is no argument
+  for measuring it on a publishing artefact. If the published page
+  needs a small JPEG, that is a SECOND pass over the same rows, after
+  the measurement, and it never feeds back into it.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * out/639 and out/640's METHOD stands -- the profile match, the
+    margin as figure of merit, the three-way SILENT/GREY/RED split,
+    the calibration from the agreeing population. What is retracted is
+    the row list those produced, and the two examples I published.
+  * The 15 red rows of the lossless run have NOT been checked by eye.
+    Given what checking by eye did last time, they should be checked
+    against the PAGE and not against any crop.
+  * One document, 260 of 3,163 rows. Whether `report-crops-b` is
+    mis-cut for other documents is unmeasured, and is pdfdrill's
+    question rather than this one's.
