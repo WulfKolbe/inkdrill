@@ -363,6 +363,14 @@ def main() -> int:
                          "losslessly from inspect/pages at 400 dpi")
     ap.add_argument("--crop-dpi", type=float, default=0.0,
                     help="0 = infer: 400 for fullres, 150 for report")
+    ap.add_argument("--scale", type=float, default=0.0,
+                    help="impose this document scale instead of voting for "
+                         "it; required when sharding, so every shard uses "
+                         "the SAME scale and the results stay comparable")
+    ap.add_argument("--shard", default="",
+                    help="I/N -- take contiguous block I of N. Contiguous, "
+                         "not modulo, so rows sharing a line stay in one "
+                         "shard and the crop cache still hits.")
     ap.add_argument("--refit", action=argparse.BooleanOptionalAction,
                     default=True,
                     help="refit the scale per row within a band around the "
@@ -392,6 +400,15 @@ def main() -> int:
         if args.limit and len(picked) >= args.limit:
             break
 
+    if args.shard:
+        i, n = (int(x) for x in args.shard.split("/"))
+        per = (len(picked) + n - 1) // n
+        picked = picked[i * per:(i + 1) * per]
+        print(f"shard {i}/{n}: rows {i*per}..{i*per+len(picked)-1}")
+        if not args.scale:
+            raise SystemExit("--shard needs --scale: a per-shard vote would "
+                             "give each shard a different document scale")
+
     fullres = args.crops == "fullres"
     crop_dpi = args.crop_dpi or (400.0 if fullres else 150.0)
     regions = ratio = None
@@ -417,25 +434,35 @@ def main() -> int:
     expect = crop_dpi / args.dpi
     scales = [s for s in scales if 0.6 * expect <= s <= 1.5 * expect] or scales
 
-    prepared, out = [], []
+    prepared, out, crop_cache = [], [], {}
     with tempfile.TemporaryDirectory() as td:
         t = pathlib.Path(td)
         for row in picked:
             if fullres:
                 reg = regions.get(row["id"])
-                if reg is None or not fullres_crop(args.library, args.bibkey,
-                                                   int(row["page"]), reg,
-                                                   ratio, t / "c.pgm"):
+                if reg is None:
                     print(f"{row['id'].split('_')[-1]:<8} NO LINE MATCH")
                     continue
+                # 2,067 distinct lines carry 3,163 rows, so a third of
+                # the crops are re-cutting a line already cut.
+                key = (row["page"], tuple(sorted(reg.items())))
+                if key not in crop_cache:
+                    if not fullres_crop(args.library, args.bibkey,
+                                        int(row["page"]), reg, ratio,
+                                        t / f"c{len(crop_cache)}.pgm"):
+                        print(f"{row['id'].split('_')[-1]:<8} NO LINE MATCH")
+                        continue
+                    crop_cache[key] = t / f"c{len(crop_cache)}.pgm"
+                crop_path = crop_cache[key]
             else:
                 to_pgm(doc / row["crop"], t / "c.pgm")
+                crop_path = t / "c.pgm"
             if not render(row["math"], t / "f.pgm", args.dpi):
                 print(f"{row['id'].split('_')[-1]:<8} RENDER FAILED  "
                       f"{row['math'][:50]}")
                 continue
             fm, fb = blobs(t / "f.pgm", float(args.dpi))
-            cm, cb = blobs(t / "c.pgm", crop_dpi)
+            cm, cb = blobs(crop_path, crop_dpi)
             prepared.append((row, fm.width, fb, cm, cb))
 
         # ---- PASS 1: the document's scale, from the rows that can
@@ -445,7 +472,7 @@ def main() -> int:
         # gaps to place unambiguously, and then imposed on all of them.
         # Estimating it per row is what let `G` pick 0.100.
         votes = []
-        for row, fw, fb, cm, cb in prepared:
+        for row, fw, fb, cm, cb in ([] if args.scale else prepared):
             # A HIGHER BAR THAN THE ACCEPTANCE ONE, ON PURPOSE. The
             # first version of this voted with `--min-gaps`, and the
             # vote landed on 0.165 instead of 0.250 because expressions
@@ -457,7 +484,9 @@ def main() -> int:
                 sc, s, _, _ = locate(fb, fw, cb, cm.width, scales)
                 if s and sc >= args.min_score:
                     votes.append(round(s, 4))
-        if votes:
+        if args.scale:
+            scale = args.scale
+        elif votes:
             votes.sort()
             scale = votes[len(votes) // 2]
         else:

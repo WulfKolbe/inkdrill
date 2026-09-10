@@ -1,0 +1,124 @@
+651 - the full 3,163 run, and the flags do not survive a length control
+========================================================================
+
+RAN. 3,163 rows, 4 shards, 13 minutes wall clock (17:47:37 -> 18:00:41)
+against a predicted 9. `--shard I/N` and `--scale` were added so every
+shard imposes the SAME document scale, since a per-shard vote would
+have given four different ones.
+
+The cost prediction held in shape: 0.63-0.70 s per row, FLAT with
+expression length across a 10x range, because `pdflatex` + `gs` is
+0.40 s of it and the bigint refit only 0.10-0.14 s. I had expected the
+refit to dominate and scale. It does neither.
+
+--------------------------------------------------------------------
+FIRST, A DEFECT OF MINE THAT THE SCALE EXPOSED
+
+The calibration came back with a blob-difference spread containing
+`736: 24` and an edge-cut spread containing `24: 24`. Both had to be
+chased before anything was reported.
+
+    FO2741  crop 1632x3131  blobs 32->768  score 0.94
+    FO2736  crop 1053x786   blobs 12->72   score 0.90
+
+A LINE CROP IS 2059x72. Those are page-sized regions. `lines.json`
+carries regions that are not lines -- display blocks, figure areas --
+and `match_rows_to_lines` accepted them, after which a small template
+found a comfortable spot inside a page and scored 0.94 for it.
+
+67 rows (2.1%) sit on a region taller than 3x the median line, and 35
+of them were ACCEPTED. Excluding them removes 71 red flags -- a FIFTH
+of the red set -- and cleans the calibration to
+`{0:1942, 1:201, 2:54, 3:20, 4:4, 5:2, 6:1, 7:1}`.
+
+A high score inside a page-sized search space means nothing, and
+nothing in the scoring noticed. Everything below is on the 3,096 rows
+with a line-like crop.
+
+    SILENT      1907
+    GREY         871   (220 unplaceable, 651 ambiguous)
+    RED          318   10.3%
+      POOR_FIT   222   EDGE_CUT 40   BLOB_COUNT 82
+      OVERLAP     14   ORDER    10
+
+    reading-order premise: 509 of 514 placed pairs, 99.0%
+
+--------------------------------------------------------------------
+THE CROSS-CHECK. THE n=4 RESULT DOES NOT SURVIVE
+
+out/650 found all four RESIDUE rows in the measured 260 were GREY on
+the image side and said four rows was four rows. At full scale there
+are 97, and they are 29% GREY against a base rate of 28%.
+
+    ENRICHMENT 1.03x. The agreement was chance.
+
+The FRAGMENT sub-class does hold -- 11 rows of 4 characters or fewer,
+10 of them GREY, 91% against 28% -- which is the piece that was
+actually doing the work in the n=4. Eleven rows.
+
+--------------------------------------------------------------------
+AND THEN THE RESULT THAT MATTERS, WHICH IS AGAINST MY OWN INSTRUMENT
+
+Crossing the source-side verdict against the image-side class over
+3,096 rows looked like a strong finding:
+
+    source          %RED
+    matched          4.4%     (LaTeX identical to the author's)
+    known class     13.8%     (LaTeX differs by a known substitution)
+
+3.1x. Rows whose LaTeX MathPix changed are three times as likely to be
+flagged in the image. Exactly what the whole chain predicts.
+
+IT IS ENTIRELY A LENGTH CONFOUND.
+
+    %RED         matched        known class
+    0-19 ch   1.0% (n=573)     0.5% (n=205)
+    20-39     4.8% (n=269)     4.2% (n=602)
+    40-79    15.0% (n=100)    13.7% (n=737)
+    80-999   42.1% (n=19)     39.8% (n=334)
+
+WITHIN EVERY LENGTH BUCKET THE TWO ARE THE SAME, and where they differ
+at all it is `matched` that is HIGHER. The substituted rows are longer,
+that is all. Length drives the flag rate from 1% to 42% and the source
+verdict adds nothing on top of it.
+
+SO THE RED FLAGS DO NOT DETECT LATEX/SOURCE DIVERGENCE. A row whose
+LaTeX is character-identical to what the author wrote is flagged at the
+same rate as one MathPix rewrote, once both are the same length.
+
+--------------------------------------------------------------------
+WHAT THAT MEANS, STATED PLAINLY
+
+The eye review in out/643 confirmed the poor fits are REAL -- visible
+in the image, and the reviewer's five diagnoses were all correct. That
+still stands. But "a real poor fit" and "a document error" are not the
+same claim, and this measurement separates them: the fit degrades with
+LENGTH whatever the LaTeX says.
+
+The most likely reading is that the residual is cumulative rendering
+divergence -- our pdflatex against the paper's typesetting, a fraction
+of a percent per glyph, adding up over 80 characters until the profile
+match falls below a floor calibrated on shorter rows. out/646 saw a
+piece of this and called it a `\mid` effect; out/648 saw another piece
+and called it a prescript effect. Both were real and both were small,
+and neither is the mechanism.
+
+THIS IS TESTABLE AND WAS NOT TESTED. If the cause is cumulative, the
+score of a row should fall with length on rows whose LaTeX MATCHES the
+author exactly -- there the only difference left is the rendering. The
+`matched` column above says 1.0% -> 42.1% over four buckets, which is
+consistent with it, and consistent is not measured.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * ONE DOCUMENT. 3,096 rows of 0902.0431.
+  * The length control has n=19 in the top-left cell. The 40-79 and
+    80-999 comparisons carry the weight.
+  * The score floor is calibrated over ALL lengths at once, so a
+    single floor on a length-dependent score is itself suspect and
+    was not re-examined here.
+  * The 67 non-line rows were excluded, not fixed. `match_rows_to_lines`
+    still accepts a page-sized region.
+  * Nothing was changed in the pipeline beyond `--shard`, `--scale`
+    and a crop cache.
