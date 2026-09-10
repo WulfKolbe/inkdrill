@@ -1,0 +1,163 @@
+640 - the residual report: which evidence rows are WRONG
+=========================================================
+
+REPORT ONLY. `tools/formularesidual.py` consumes `formulafind.py`'s
+JSON. The ask was to invert 639: instead of placing every expression,
+find the rows where something has gone wrong, mark those, and later
+show only those.
+
+--------------------------------------------------------------------
+THE DESIGN DECISION THAT MATTERS
+
+NOT PLACING A ROW IS NOT EVIDENCE OF ANYTHING.
+
+639 measured that 49 of 200 rows carry one gap or none -- `G`, `w`,
+`\mathfrak{D}^{\prime}` -- and that an expression that short has no
+position to find. Marking those red would publish the instrument's
+blind spot as the document's error. That is the failure CLAUDE.md
+records as "a filter that excludes the class it exists to compare
+against", and it would poison the residual report with its largest
+class.
+
+So there are THREE outcomes, not two, and the middle one is the one
+that is usually got wrong:
+
+    SILENT   placed, and every check agrees
+    GREY     NOT EXAMINED -- the expression is too short to carry a
+             position, or the line repeats and the position is not
+             established. Reported as not examined. NEVER as wrong.
+    RED      CONTRADICTED -- two computations that share no code
+             disagree.
+
+Measured over 260 rows of 0902.0431:
+
+    SILENT        81   31.2%
+    GREY         163   62.7%   (61 unplaceable, 102 ambiguous)
+    RED           16    6.2%   <- the residual report
+
+--------------------------------------------------------------------
+THE FIVE RED RULES, AND WHAT EACH ACCUSES
+
+  R1 EDGE_CUT    a rectangle boundary falls INSIDE a blob. A correct
+                 placement ends in a gap, because that is what a gap
+                 is. Accuses the placement.            fired on 1
+  R2 BLOB_COUNT  the rendered LaTeX has a different component count
+                 from the ink it sits on. Accuses the SOURCE -- a
+                 missing subscript, a swallowed operator.  fired on 8
+  R3 POOR_FIT    the position is established (high margin: it fits
+                 here and nowhere else) and yet the shape agrees
+                 badly. Where it is versus what it looks like.
+                                                        fired on 9
+  R4 OVERLAP     two expressions on ONE line placed on overlapping x.
+                 Impossible.                            fired on 0
+  R5 ORDER       two expressions on one line placed out of reading
+                 order. Impossible.                     fired on 0
+
+EVERY THRESHOLD IS CALIBRATED FROM THE ROWS THAT AGREE, not chosen.
+The reference population is the 97 confidently placed rows; the cut is
+their 90th percentile (10th for the score), so about a tenth of the
+reference set would flag itself. That is stated rather than hidden: a
+rule that fires on nothing it was calibrated against has no measured
+false-positive rate at all.
+
+    blob_diff_max  2     spread {0:63, 1:17, 2:9, 3:5, 5:1, 7:1, 13:1}
+    edge_cut_max   2     spread {0:30, 1:50, 2:16, 3:1}
+    score_min      0.6698
+
+R4 AND R5 NEED NO EXTERNAL DATA. Rows on the same line are given
+BYTE-IDENTICAL copies of the crop, so the content hash recovers the
+line: 183 distinct crops among 260 rows, 56 shared by more than one.
+
+  THE FIRST VERSION GROUPED BY PATH AND FOUND 0 SHARED LINES, which
+  silently disabled both line rules and reported them as firing on
+  nothing. A rule that cannot fire and a rule that finds nothing print
+  the same zero.
+
+  THE READING-ORDER PREMISE IS VERIFIED BEFORE IT IS USED TO ACCUSE:
+  on the 9 pairs where both rows are confidently placed, x order
+  matches id order 9 times out of 9.
+
+--------------------------------------------------------------------
+ONE RULE WAS RETRACTED, AND IT IS THE MOST USEFUL THING HERE
+
+R3 was first written as SCALE: flag a row whose own best-fit scale is
+far from the document's, reasoning that a different length accuses the
+LaTeX. It fired on 9 rows and looked convincing.
+
+ALL 9 WERE ARTEFACTS OF MY OWN SEARCH. The own-scale distribution over
+the 97 reference rows is bimodal:
+
+    0.24-0.27   85 rows      <- the document's true scale
+    0.10-0.15   10 rows      <- the FLOOR of the search range
+
+`FO0036` scored a PERFECT 1.000 at scale 0.100 -- the same degeneracy
+639 found in `G`: a template shrunk until it fits anywhere. The rule
+was measuring the instrument, and every row it accused was a row where
+the free-scale search had collapsed.
+
+What those rows actually have in common is something better: at the
+DOCUMENT scale their margin is high and their score is low. FO0039
+scores 0.633 with a margin of 0.633 -- the runner-up scored zero. It
+fits in exactly one place, and badly. That is a contradiction between
+two computations rather than an artefact of one, so R3 became POOR_FIT
+and is calibrated on the score distribution.
+
+--------------------------------------------------------------------
+THE RED ROWS ARE REAL. THREE CHECKED BY EYE
+
+    FO0045  conf 1.000  BLOB_COUNT+POOR_FIT  S U(3)) / \boldsymbol{Z}_{3}
+            The crop is 159x22 and shows "= {a". THE EXPRESSION IS
+            NOT IN IT AT ALL. Note also the doubled paren in the
+            LaTeX itself.
+
+    FO0059  conf 1.000  BLOB_COUNT+POOR_FIT  (S U(3) \times S U(6)) / ...
+            The crop is 635x24 and is essentially BLANK -- the only
+            ink found is a sliver at y 1-3. A row whose evidence
+            contains no evidence.
+
+    FO0039  conf 1.000  POOR_FIT             z\left(E_{6}\right)
+            The crop reads roughly "(E_6)_0" where the LaTeX says
+            "z(E_6)". A genuine disagreement about what is there.
+
+15 OF THE 16 RED ROWS CARRY A SOURCE CONFIDENCE >= 0.99.
+
+That is the whole point of the package. Column 3 already holds the
+other tool's opinion of itself, and it says 1.000 on a row whose crop
+is blank. The finding is not either number, it is the DISAGREEMENT --
+which is why the mark belongs beside that cell rather than replacing
+it, and why sorting the residual report by source confidence
+descending puts the most valuable rows first.
+
+--------------------------------------------------------------------
+HOW IT SHOULD LOOK
+
+  * In the full table: a RED rectangle drawn on the col-6 crop at the
+    located position, and a red mark beside the col-3 confidence.
+    GREY rows get a grey mark meaning NOT EXAMINED, with no rectangle
+    -- there is nothing to draw and drawing a guess would be worse
+    than drawing nothing. Silent rows are left alone.
+  * The residuals report is the red rows only, sorted by source
+    confidence descending, each with its flag names, its rectangle,
+    and the two numbers that disagreed. 16 rows out of 260 is a page,
+    not a report to skim.
+  * The GREY count must be printed at the top of that report. A
+    residual report that shows 16 rows without saying that 163 were
+    never examined invites the reader to conclude the other 244 are
+    fine.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * ONE DOCUMENT, 260 of 3,163 rows. 0902.0431 only.
+  * R4 and R5 FIRED ON NOTHING. They are sound and cost nothing, but
+    9 comparable pairs is not a test of them. They are unproven, not
+    clean.
+  * POOR_FIT AND BLOB_COUNT CANNOT YET SEPARATE "the LaTeX is wrong"
+    from "the crop is wrong" from "my renderer differs from the
+    paper's font". FO0045 and FO0059 are plainly crop failures;
+    FO0039 might be either. The classes are worth splitting and the
+    evidence to do it -- the ink that is NOT covered by any placed
+    expression -- has not been used.
+  * NO GROUND TRUTH, so there is no measured false-negative rate.
+    Three red rows were confirmed by eye; nothing says how many wrong
+    rows sit in the 81 SILENT ones.

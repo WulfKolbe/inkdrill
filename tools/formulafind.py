@@ -300,6 +300,9 @@ def main() -> int:
                 continue
             sc, x0, x1, margin, gaps = got
             y0, y1, nin = vertical(cb, x0, x1)
+            own_sc, own_scale, _, _ = locate(fb, fw, cb, cm.width, scales)
+            cut = [b for b in cb
+                   if b[0] < x0 <= b[1] or b[0] <= x1 < b[1]]
             ok = (sc >= args.min_score and margin >= args.min_margin
                   and gaps >= args.min_gaps)
             rec = dict(id=row["id"], page=int(row["page"]),
@@ -308,6 +311,8 @@ def main() -> int:
                        formula_blobs=len(fb), crop_blobs=len(cb), gaps=gaps,
                        score=round(sc, 4), margin=round(margin, 4),
                        rect=[x0, y0, x1, y1], blobs_in_rect=nin,
+                       own_scale=own_scale, own_score=round(own_sc, 4),
+                       edge_cuts=len(cut), crop=row["crop"],
                        accepted=ok)
             out.append(rec)
             print(f"{row['id'].split('_')[-1]:<8} {sc:>6.3f} {margin:>7.3f} "
