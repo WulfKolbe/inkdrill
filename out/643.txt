@@ -1,0 +1,94 @@
+643 - the fifteen checked by eye. POOR_FIT holds; my alternative refuted
+=========================================================================
+
+Reviewed by the author of the corpus against the images in
+`~/pdfdrill-library/0902.0431/inkdrill-residuals/`, 2026-09-10.
+
+  VERDICT: the markings were correct. Where a row was flagged
+  POOR_FIT there was a poor fit, and it was legible in the image.
+
+This closes the item out/642 left open -- "the 15 red rows of the
+lossless run have NOT been checked by eye" -- and it closes it the
+right way round, against the page rather than against a crop I chose.
+
+--------------------------------------------------------------------
+WHAT IT CONFIRMS
+
+POOR_FIT is the rule out/640 INVENTED, and it is now the only one of
+the five with an external verdict on it. Its history is worth keeping
+beside the result:
+
+  * It replaced a rule I had to retract. The first R3 compared each
+    row's own best-fit scale against the document's; all 9 rows it
+    accused turned out to be artefacts of my own search collapsing to
+    the floor of its scale range.
+  * What those rows really had in common was a HIGH MARGIN WITH A LOW
+    SCORE -- placed with certainty, and fitting badly. That is a
+    contradiction between two computations rather than a property of
+    one, which is why it was worth keeping.
+  * It is now the largest red class, 12 of 15, and it is confirmed.
+
+THE MARGIN-LED GATE IS VINDICATED TOO. out/639 concluded that the
+score must be reported and never gated, because gating on it rejected
+rows whose position was certain. Eleven of these fifteen have
+MARGIN EQUAL TO SCORE -- the best non-overlapping rival scores ZERO,
+so the expression fits in exactly one place in the line and nowhere
+else at all -- while their scores run 0.56 to 0.92, well under any
+plausible score threshold. A score gate would have discarded eleven
+confirmed findings.
+
+    FO0111 0.709   FO0112 0.713   FO0144 0.915   FO0150 0.820
+    FO0156 0.565   FO0170 0.650   FO0173 0.715   FO0200 0.629
+    FO0207 0.589   FO0228 0.681   FO0237 0.581
+
+--------------------------------------------------------------------
+AND WHAT IT REFUTES -- MY OWN ALTERNATIVE EXPLANATION
+
+Handing over the fifteen I wrote:
+
+    "Nine of the fifteen have blob counts that match exactly. Those
+    are flagged on SHAPE disagreement alone... If those look right to
+    your eye, the likeliest cause is my renderer's font differing from
+    the paper's, not a document error."
+
+Seven of the twelve POOR_FIT rows have an exact blob match -- FO0096,
+FO0111, FO0112, FO0154, FO0170, FO0173, FO0228 -- and the review says
+the poor fit was real and visible in those images.
+
+SO THE FONT HYPOTHESIS IS REFUTED. An exact component count with a
+badly agreeing profile is not the signature of a renderer mismatch;
+it is a real difference in what the glyphs are, at the same count.
+That is the interesting case, not the noisy one: same number of
+things, different things.
+
+It also removes the softest reading of the rule. POOR_FIT could have
+been "inkdrill and pdflatex disagree about typography"; it is not.
+
+--------------------------------------------------------------------
+WHAT IS STILL NOT ESTABLISHED
+
+  * WHICH SIDE IS WRONG. A confirmed poor fit says the rendered LaTeX
+    and the ink disagree. It does not say whether MathPix mis-read the
+    page or the page contains something the LaTeX cannot express. The
+    evidence that would separate them -- the ink inside the rectangle
+    that no rendered glyph covers -- is computable and was named in
+    out/640 as unused. It still is.
+  * THE OTHER THREE RULES. The verdict addresses the markings, and
+    POOR_FIT explicitly. EDGE_CUT (1 row), BLOB_COUNT (3) and OVERLAP
+    (2) were not separately confirmed row by row, and OVERLAP in
+    particular fired for the first time in this run.
+  * NO FALSE-NEGATIVE RATE. Fifteen accusations were checked; the 105
+    SILENT rows were not. Nothing here says how many wrong rows sit
+    among them.
+  * ONE DOCUMENT, 260 of 3,163 rows, LaTeX-produced. The Infineon
+    counterexample has not been run.
+
+--------------------------------------------------------------------
+STATUS LINE
+
+  639  method: locate an expression in its line          stands
+  640  three-way SILENT/GREY/RED, five red rules         method stands,
+                                                         row list retracted
+  641  resample null test                                stands, narrow
+  642  measure on lossless crops                         supersedes 640
+  643  15 red rows confirmed by eye, POOR_FIT verified   this file
