@@ -1,0 +1,124 @@
+656 - no MathPix errors found; the whitespace class is mostly invisible
+=======================================================================
+
+Three things, all of them corrections to what this line of work has
+been claiming.
+
+--------------------------------------------------------------------
+1. AFTER 155 EYE VERDICTS, ZERO RECOGNITION ERRORS
+
+    0902.0431   75 rows + 60 rows   7 errors
+    1510.06699  20 rows (blind)     4 errors  (+1 at n=60 earlier)
+    ------------------------------------------------------------
+    155 verdicts                   12 errors
+
+EVERY ONE OF THE TWELVE WAS INKDRILL'S OWN PLACEMENT. Not one was a
+MathPix recognition error. The red flags have never once found a
+defect in the thing they were built to check.
+
+`formularesidual` said "THAT DISAGREEMENT IS THE PRODUCT" on every
+run. It is corrected in place to say what the labels say instead. That
+line survived eight reports because nothing had ever been labelled.
+
+--------------------------------------------------------------------
+2. THE WHITESPACE CLASS IS REAL, AND THE INK CANNOT SEE IT
+
+Measured on 2,048 ALIGNED rows -- same expression on both sides, so
+the only question is the spacing:
+
+    intra-token spaces, MathPix   2237
+    intra-token spaces, author    1755      1.27x
+
+    rows where MathPix has MORE space   455   22.2%
+    rows where MathPix has LESS space   185    9.0%
+
+    x y=y x              vs   xy = yx
+    (a x) y+x(y a)       vs   (ax)y + x(ya)
+    S U(3) \times        vs   SU(3) \times
+    L_{e_{i}}=2 F_{i 0}  vs   L_{e_i} = 2F_{i0}
+    s g s^{-1}=g         vs   sgs^{-1} = g
+
+Exactly the class described: the maths is right and the reconstruction
+of the spacing is not.
+
+BUT A REPAIR CAN ONLY FIX WHAT THE INK CAN DECIDE, and in math mode
+TeX IGNORES a space between two ordinary atoms. Each pair rendered and
+the ink compared:
+
+    x y        vs  xy           287 / 287   INVISIBLE
+    S U(3)     vs  SU(3)        276 / 276   INVISIBLE
+    F_{i 0}    vs  F_{i0}       144 / 144   INVISIBLE
+    (a x) y    vs  (ax)y        484 / 484   INVISIBLE
+    s g s^{-1} vs  sgs^{-1}     355 / 355   INVISIBLE
+    { }^{t} A  vs  {}^tA        191 / 191   INVISIBLE
+    \mid       vs  \, | \,      231 / 212   visible, +19
+    \quad      vs  (nothing)    158 /  75   visible, +83
+
+SIX OF EIGHT ARE THE SAME PICTURE. No measurement of the page can
+choose between `xy` and `x y`, because the page does not contain the
+difference. inkdrill cannot repair that class from the raster --
+not badly, but at all.
+
+SPLIT BY WHAT RENDERS, over the same 2,048 rows:
+
+    EXPLICIT spacing (\quad, \, ...)   MathPix 17, author 50, 0.34x
+                                       differs on 33 rows    1.6%
+    TOKEN BOUNDARY (x y / xy)          MathPix 2237, author 1755
+                                       differs on 640 rows   31.2%
+
+So the repairable part is 1.6% and MathPix's error there is the
+OPPOSITE direction -- it DROPS explicit spacing, using a third as many
+`\quad` and `\,` as the author. The 31.2% needs the author's LaTeX or
+a model of well-formed maths; the ink has nothing to say about it.
+
+--------------------------------------------------------------------
+3. AND THAT CORRECTS out/648
+
+out/648 ranked `{ }^{ }` prescript first among geometric substitutions
+at +8.9% width, introduced in 320 of 333 documents. WRONG. That test
+compared `\tau\left({ }^{t} A\right) A=E` against
+`\tau({}^tA)A = E`, which ALSO differs in `\left(` against `(`. The
++39 px was the delimiter. Isolated, the prescript is 191 px either
+way -- identical ink.
+
+A pair that differs in two things measures neither. out/648 is
+corrected in place, and its ranking is wrong at the top.
+
+--------------------------------------------------------------------
+WHAT CHANGED IN THE CODE
+
+  THE MARK IS SUPPRESSED WHERE THE PLACEMENT IS NOT TRUSTED. A
+  rectangle in the wrong place is worse than none: it sends a reader
+  to the wrong glyphs and looks authoritative doing it. No mark when
+
+      gaps <= 1                       (nothing to place)
+      margin < 0.10                   (the line repeats)
+      gaps <= 2 AND edge_cuts >= 2    (wrong on 4 of 4, both documents)
+
+  876 of 3,096 rows on 0902.0431 -- 28.3% -- now carry no rectangle.
+
+  THE RESIDUAL REPORT IS THE PRODUCER'S OWN LOW CONFIDENCE. A new
+  `LOW_CONFIDENCE` class at conf < 0.80: 161 rows on 0902.0431 (5.2%),
+  103 on 1510.06699 (9.7%). That is what a reader should be asked to
+  look at.
+
+  THE RED FLAGS STAY, RELABELLED. They are evidence-table marks for
+  someone chasing a detail, not a report. The tool now says so.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * "NO RECOGNITION ERRORS" MEANS NONE FOUND IN 155 VERDICTS, all of
+    them on rows this instrument had already selected. The instrument
+    selects on placement fit, so it is not a sample of recognition at
+    all. A recognition error that placed cleanly would never have
+    reached a reviewer.
+  * The whitespace measurement is on ALIGNED rows only -- 2,048 of
+    5,643 -- which are the shorter and simpler ones by construction.
+    The user's description names LARGE open expressions, and those are
+    mostly in the unaligned 64%.
+  * Source confidence does NOT predict placement error: nine of the
+    twelve errors sit at conf 1.000. The two lists are independent,
+    which is the reason for keeping them apart, not a reason to
+    prefer one.
+  * 0.80 is a chosen threshold, not a calibrated one.

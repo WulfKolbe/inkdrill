@@ -69,6 +69,22 @@ import statistics
 GREY = ("UNPLACEABLE", "AMBIGUOUS")
 RED = ("EDGE_CUT", "BLOB_COUNT", "POOR_FIT", "OVERLAP", "ORDER")
 
+#: The source's OWN confidence, below which a row belongs in front of a
+#: reader whatever inkdrill thinks of it. Two separate things share the
+#: word "residual" and must not share a list:
+#:
+#:   LOW_CONFIDENCE  the producer says it is unsure. That is the
+#:                   reader's business, and it is what the residual
+#:                   report is FOR.
+#:   the RED flags   inkdrill disagrees with where an expression sits.
+#:                   Measured over 155 eye verdicts on two documents,
+#:                   every one of the twelve errors those flags found
+#:                   was inkdrill's OWN placement, not a recognition
+#:                   error. They belong in the evidence table, which is
+#:                   a store for someone chasing a detail, not in a
+#:                   report someone is asked to read.
+LOW_CONFIDENCE = 0.80
+
 
 def calibrate(rows, min_margin):
     """Thresholds from the rows that AGREE, never chosen by hand.
@@ -117,6 +133,20 @@ def classify(rows, cal, min_margin):
 
     for r in rows:
         r["flags"] = []
+        # DO NOT DRAW A RECTANGLE YOU DO NOT TRUST. A mark in the wrong
+        # place is worse than no mark: it sends a reader to the wrong
+        # glyphs and looks authoritative doing it.
+        #
+        # `gaps <= 2 and edge_cuts >= 2` was WRONG ON EVERY ROW IT HAS
+        # EVER BEEN SEEN ON -- 3 of 3 on 1510.06699 and 1 of 1 on
+        # 0902.0431, four for four across two documents and 155
+        # verdicts. Four rows is four rows, so it suppresses the mark
+        # rather than raising a flag.
+        r["mark"] = not (r["gaps"] <= 1
+                         or r["margin"] < min_margin
+                         or (r["gaps"] <= 2 and r["edge_cuts"] >= 2))
+        if r["conf"] < LOW_CONFIDENCE:
+            r["flags"].append("LOW_CONFIDENCE")
         if r["gaps"] <= 1:
             r["flags"].append("UNPLACEABLE")
             continue                      # nothing else can be said
@@ -199,6 +229,8 @@ def main() -> int:
     print(f"{'class':<14} {'rows':>5}   what it means")
     meaning = {
         "SILENT": "placed and everything agrees",
+        "LOW_CONFIDENCE": "THE RESIDUAL REPORT -- the producer says it is "
+                          "unsure",
         "UNPLACEABLE": "GREY -- too short to carry a position",
         "AMBIGUOUS": "GREY -- the line repeats; position not established",
         "EDGE_CUT": "RED -- a rectangle edge falls inside a glyph",
@@ -207,18 +239,31 @@ def main() -> int:
         "OVERLAP": "RED -- two expressions placed on the same ink",
         "ORDER": "RED -- two expressions placed out of reading order",
     }
-    for k in ("SILENT",) + GREY + RED:
+    for k in ("SILENT", "LOW_CONFIDENCE") + GREY + RED:
         print(f"{k:<14} {counts[k]:>5}   {meaning[k]}")
+    low = [r for r in rows if "LOW_CONFIDENCE" in r["flags"]]
+    unmarked = [r for r in rows if not r.get("mark", True)]
+    print(f"\nRESIDUAL REPORT: {len(low)} rows below confidence "
+          f"{LOW_CONFIDENCE} ({100*len(low)/len(rows):.1f}%)")
+    print(f"MARK SUPPRESSED on {len(unmarked)} rows "
+          f"({100*len(unmarked)/len(rows):.1f}%) -- no rectangle is drawn "
+          f"where the placement is not trusted")
     red = [r for r in rows if set(r["flags"]) & set(RED)]
     grey = [r for r in rows if set(r["flags"]) & set(GREY)]
     print(f"\nRED {len(red)} of {len(rows)} ({100*len(red)/len(rows):.1f}%) "
-          f"-- these are the residual report")
+          f"-- EVIDENCE-TABLE marks, not the residual report")
     print(f"GREY {len(grey)} ({100*len(grey)/len(rows):.1f}%) "
           f"-- reported as not examined, never as wrong")
 
     hi = [r for r in red if r["conf"] >= 0.99]
     print(f"\n{len(hi)} of the {len(red)} red rows carry a source confidence "
-          f">= 0.99. THAT DISAGREEMENT IS THE PRODUCT.")
+          f">= 0.99.")
+    print("  THIS WAS ONCE CALLED 'the product'. IT IS NOT. 155 eye verdicts "
+          "over two\n  documents found twelve errors among these rows and "
+          "EVERY ONE was inkdrill's\n  own placement, not a recognition "
+          "error. The disagreement is between the\n  producer and THIS "
+          "INSTRUMENT, and the instrument has been the wrong one\n  every "
+          "time it has been checked. See out/653, out/655, out/656.")
     for r in sorted(red, key=lambda r: -r["conf"])[:args.show]:
         print(f"   {r['id'].split('_')[-1]:<8} conf={r['conf']:.3f} "
               f"{'+'.join(r['flags']):<22} blobs {r['formula_blobs']}->"

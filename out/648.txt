@@ -51,6 +51,11 @@ LOOKS DIFFERENT. Each pair rendered and the ink compared:
 
     class                mathpix  author   delta       verdict
     { }^{ } prescript        475     436    +39  (+8.9%)  GEOMETRIC
+       ^ WRONG. CORRECTED IN out/656: that pair also differed in
+         `\left(` against `(`, and the +39 px was the delimiter. The
+         prescript ISOLATED renders to IDENTICAL ink -- 191 px either
+         way -- so it is cosmetic, not geometric, and the ranking
+         below is wrong at its top.
     \left(                   302     288    +14  (+4.9%)  GEOMETRIC
     \mid                     675     657    +18  (+2.7%)  GEOMETRIC
     \operatorname            334     334     +0            identical ink
