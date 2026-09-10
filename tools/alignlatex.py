@@ -33,6 +33,25 @@ from tools.formulafind import rows                         # noqa: E402
 
 #: name -> (pattern, replacement). Each undoes ONE MathPix habit.
 RULES = {
+    # FONTS FIRST, and they are the largest rule in the set. `\mathfrak`
+    # appears in 22.7% of unmatched rows and in 0.0% of matched ones;
+    # `\boldsymbol` in 13.9% and 0.0%. Not "rare in matched" -- ZERO.
+    # Authors reach for a macro (`\R`, `\g`) or a group (`{\bf R}`)
+    # and MathPix names the font it sees, so the two never agree
+    # textually however the glyphs are set.
+    #
+    # This rule ERASES the font, so `\mathfrak{g}` and `g` become the
+    # same string. That is aggressive and it is why the leave-one-out
+    # exists: the column below says how many rows it is carrying, and
+    # a reader can discount it.
+    "fonts":        (r"\\(?:mathfrak|boldsymbol|mathbf|mathrm|mathcal|mathbb"
+                     r"|mathsf|mathscr|bm|bold|textbf|textit|mathit)\s*"
+                     r"\{([^{}]*)\}|\{\\(?:bf|rm|cal|it|sf)\s+([^{}]*)\}",
+                     r"\1\2"),
+    "text":         (r"\\(?:text|mbox|hbox|textrm)\s*\{([^{}]*)\}", r"\1"),
+    "primes":       (r"\\prime\b", "'"),
+    "arrows":       (r"\\(?:long)?(?:rightarrow|to)\b", r"\\to"),
+    "over":         (r"\{([^{}]+?)\\over([^{}]+?)\}", r"\\frac{\1}{\2}"),
     "left/right":   (r"\\left|\\right", ""),
     "operatorname": (r"\\operatorname\s*\{([^{}]*)\}", r"\\\1"),
     "empty group":  (r"\{\s*\}", ""),

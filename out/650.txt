@@ -1,0 +1,134 @@
+650 - the missing rules, and why raising the match rate was the wrong goal
+===========================================================================
+
+Five rules added to `tools/alignlatex.py`, chosen from the data rather
+than guessed: the tokens enriched in unmatched rows were counted first.
+
+    token          in unmatched   in matched
+    \mathfrak            22.7%         0.0%
+    \boldsymbol          13.9%         0.0%
+    \Perp                 1.7%         0.0%
+    \prime                4.6%         0.1%
+    \rightarrow           9.0%         0.4%
+
+NOT "RARE IN MATCHED" -- ZERO. No matched row contains `\mathfrak` or
+`\boldsymbol` at all. Authors reach for a macro (`\R`, `\g`) or a group
+(`{\bf R}`); MathPix names the font it sees. The two never agree
+textually however the glyphs are set.
+
+--------------------------------------------------------------------
+THE RESULT, AND TWO MORE BLANK CONTROLS
+
+    rule       rows it carries
+    fonts             182
+    arrows             54
+    text                9
+    primes              0
+    over                0
+
+    match rate  32.1%  ->  36.3%
+
+`primes` and `over` contribute EXACTLY ZERO, joining `\cdots` from
+out/649. Three rules in the set now fire blank, which is what keeps
+the others honest: a ladder where every rule scores well is a ladder
+measuring itself.
+
+--------------------------------------------------------------------
+BUT THE GAIN IS NOWHERE NEAR WHAT THE PREVALENCE PREDICTED
+
+`\mathfrak` is in 22.7% of unmatched rows -- about 870 of them -- and
+the fonts rule recovered 182. The other ~690 contain `\mathfrak` AND
+something else, and a row matches only if EVERY difference in it is
+normalised at once.
+
+MEASURED, NOT ASSUMED:
+
+    expression length     rows   matched    rate
+        0-10 chars        1100       798   72.5%
+       11-20              1168       551   47.2%
+       21-40              1581       485   30.7%
+       41-80              1237       179   14.5%
+       81-160              492        34    6.9%
+        161+               65         1    1.5%
+
+    unmatched rows by how many rule classes they contain
+        0 classes   511  (14.2%)
+        1           701  (19.5%)
+        2          1129  (31.4%)
+        3           735  (20.4%)
+        4           390  (10.8%)
+        5+          129  ( 3.6%)
+    median: 2
+
+THE MATCH RATE IS A FUNCTION OF LENGTH, NOT OF HOW MANY RULES I WRITE.
+72.5% at ten characters and 1.5% past 160. Two-thirds of unmatched
+rows carry two or more classes, so each new rule has to share credit
+with the rest and the marginal return collapses.
+
+So the unmatched fraction is NOT an error rate and never was going to
+become one by adding rules. Exact-string matching is the right
+instrument for short expressions and the wrong one for long ones, and
+out/649's plan -- "write the missing rules and watch the 41.7% fall"
+-- was mine and was wrong about what it would show. It did show which
+rules are classes and which are settled, which is worth having.
+
+--------------------------------------------------------------------
+THE PRODUCT IS THE 511, NOT THE 63.7%
+
+511 rows differ from the author's source and contain NONE of the
+twelve classes. Of those:
+
+    213 (42%)  appear verbatim inside an author expression
+               -- a boundary difference, not a content one
+    298        remain. Median 12 characters, p90 36.
+
+AND THE SHORT ONES ARE FRAGMENTS:
+
+    0902.0431   FO0340    )
+    0902.0431   FO1514    (
+    1510.06699  FO0219    C
+    2106.07890  FO0011    *
+    0707.4470   FO0163    t<
+    0902.0431   FO1173    f:
+    0902.0431   FO1526    =0
+    0902.0431   FO2434    z(
+    2106.07890  FO0016    x=
+    2501.06662  FO0149    b=
+
+A lone `)` is not a formula. These are rows where MathPix cut a piece
+out of an expression and emitted it as one, and they are a defect
+class an evidence table should carry in its own right -- narrowed to
+298 candidates out of 5,643 by twelve rules and a boundary test,
+rather than left inside a 63.7% that means nothing.
+
+--------------------------------------------------------------------
+TWO INSTRUMENTS THAT SHARE NO CODE AGREE
+
+The 260 rows of 0902.0431 measured in out/645 have an IMAGE-side
+class. Crossed against the SOURCE-side verdict:
+
+    source           SILENT   GREY   RED
+    matched              44     72     5
+    known class          80     36    12
+    boundary              3      3     1
+    RESIDUE               0      4     0
+
+ALL FOUR RESIDUE ROWS ARE GREY. Unaccounted in the author's source and
+unplaceable in the ink, decided by two computations with nothing in
+common -- one a string comparison against a 2009 e-print, the other a
+blob-profile fit against a 400 dpi raster.
+
+FOUR ROWS IS FOUR ROWS. The direction is right and the number is too
+small to carry weight; the residue is concentrated later in the table
+than the measured 260 reach.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * SEVEN DOCUMENTS, 0902.0431 is 56% of the rows.
+  * The fonts rule ERASES the font, so `\mathfrak{g}` and `g` become
+    one string. That can create false matches; the leave-one-out
+    column says it is carrying 182 rows and a reader can discount it.
+  * The 298 were not individually inspected beyond the sample above.
+  * The cross-check is n=4.
+  * Nothing in the pipeline was changed.
