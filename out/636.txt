@@ -1,0 +1,133 @@
+636 - CR B1 step 3: the mutation gate, committed
+=================================================
+
+The thirteen moment mutants are now in `tools/mutate_sweep.py` rather
+than run once by hand, and the harness itself gained the guard that
+two of my own edits needed.
+
+    26 / 26 KILLED
+
+--------------------------------------------------------------------
+THE GATE
+
+  M1-M12   the case dispatch. Killed by `assert_same`, which compares
+           `sweep` against `_sweep_reference`.
+  MM1-MM13 CR B1's accumulators. Killed by `assert_moments`, which
+           compares against `aggregate.moments_per_component`.
+
+  M1   union_roots size tie-break < -> <=                    KILLED
+  M2   first-parent attach arguments swapped                 KILLED
+  M3   first-parent edge not counted, root-stays branch      KILLED
+  M3b  first-parent edge not counted, root-moves branch      KILLED
+  M4   further-parents loop starts at the first parent again KILLED
+  M5   root not carried forward after a later merge          KILLED
+  M6   BIRTH counter pair given the wrong initial value      KILLED
+  M7   CYCLE does not raise the hole count                   KILLED
+  M8   adjacency predicate loses the endpoint at NONE        KILLED
+  M9   roots_before / adj guarded on the wrong capture level KILLED
+  M10  kids_of not recorded for the first parent             KILLED
+  M11  attach fast path does not grow the component size     KILLED
+  M12  attach fast path returns the singleton, not the root  KILLED
+  MM1  sx and sy swapped in the row branch                   KILLED
+  MM2  sxy uses the run length where the index sum belongs   KILLED
+  MM3  _sum_ii used where _sum_i belongs                     KILLED
+  MM4  _sum_i used where _sum_ii belongs                     KILLED
+  MM5  min/max swapped for x0 on the attach path             KILLED
+  MM6  extents not merged on union -- x0                     KILLED
+  MM7  extents not merged on union -- y1 (COLUMN sweep only) KILLED
+  MM8  the moment vector not stored back after a union       KILLED
+  MM9  area at BIRTH but not on the attach path              KILLED
+  MM10 moment sums at BIRTH but not on the attach path       KILLED
+  MM11 the axis branch swapped                               KILLED
+  MM12 the column branch reuses the row mapping for sx       KILLED
+  MM13 the BIRTH vector does not carry the run's own extents KILLED
+
+The CR named seven; all seven are here (MM1, MM2, MM3, MM5, MM6, MM8,
+MM9/MM10) plus six more that the two axis branches and the three
+migration sites invite.
+
+KILLED BY THE RIGHT TEST, which the CR asks for specifically. Spot
+checked by name:
+
+  MM6  -> test_all_ten_fields_over_the_fixtures,
+          test_all_ten_fields_over_the_fuzz_ladder,
+          test_extents_match_the_oracle_over_the_fixtures,
+          test_the_whole_mask_bbox_does_not_depend_on_the_axis
+  MM7  -> the same four
+  MM9  -> those, plus test_area_is_the_ink_count,
+          test_moments_match_the_oracle,
+          test_the_whole_mask_moments_do_not_depend_on_the_axis
+  MM11 -> those, plus test_moments_match_the_oracle
+
+Every one is an `assert_moments` test. NOT ONE MM MUTANT IS CAUGHT BY
+`assert_same`, which is right and worth stating: `moments` is
+`compare=False` and `_sweep_reference` has no moments at all, so the
+960-check equivalence gate is blind to this entire step by
+construction. The two gates do not overlap and neither substitutes for
+the other.
+
+--------------------------------------------------------------------
+THE HARNESS GAINED THE GUARD I NEEDED TWICE
+
+`apply_last` took the last occurrence of the anchor, which the
+docstring justified as "the live sweep -- _sweep_reference is the
+earlier copy". That is necessary and NOT sufficient, and it bit me
+twice while writing steps 0 and 1: `uf = _UF()` ... `cycles_of = {}`
+and `for r in runs:` are verbatim identical in both functions, so an
+anchor ending inside the oracle mutates the oracle. It presents as
+seven unrelated tests erroring on a `NameError`, which reads like a
+broken edit rather than a mutated oracle.
+
+`apply_last` now refuses an anchor landing inside `_sweep_reference`'s
+body.
+
+  NOT "before `def sweep(`" -- MY FIRST ATTEMPT AT THE GUARD WAS THAT,
+  AND IT REFUSED M1 IMMEDIATELY. M1, M11 and M12 mutate `_UF`, which
+  is defined before the oracle, so the whole M series would have been
+  locked out. The rule is the oracle's BODY, bounded by the next
+  top-level `def`.
+
+Both sides of the refusal are checked, since a guard tested only by
+its raise can be made unconditional and still pass:
+
+    anchor unique to the oracle          REFUSED
+    anchor in the live sweep             accepted
+    anchor in `_UF`, before the oracle   accepted
+
+And the hazard is not hypothetical -- one shared docstring line occurs
+twice in the file today.
+
+--------------------------------------------------------------------
+ONE MUTANT IS DELIBERATELY ABSENT, AND THE DOCSTRING SAYS SO
+
+`moms_of[rn] = moms_of.pop(rp)` -> `moms_of[rn] = moms_of[rp]` on the
+ATTACH path. Step 1 proved it an equivalent mutant by digest -- 27
+fixtures x 4, 40 random masks, a real 15.5 Mpx page, byte-identical --
+because `rp` has just become a child and a union-find root never
+becomes a root again, so nothing can read the stale entry.
+
+It is UNKILLABLE. Adding it would fail the gate forever, and someone
+reading the CR's list will be tempted to add it, so the reason it is
+missing is written into the harness docstring beside the two families
+rather than left in a report. It is not free: it leaks one entry per
+root-move, 739 stale against 421 live on p1, so `pop` stays and the
+cost is visible only in step 5's memory number.
+
+--------------------------------------------------------------------
+TESTS
+
+No test changed in this step. Full suite 1223, 37 skipped, no expected
+failures -- identical to step 2, which is the point: step 3 adds a
+gate, not behaviour.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * No measurement. Step 5.
+  * The gate is only as good as the fixture set it runs against, and
+    step 1 showed how thin that can be -- three (fixture, axis) pairs
+    contained a merge at all before two were designed for it. A
+    mutant killed today is killed by TODAY's fixtures; MM6 and MM7
+    would both survive a revert of those four fixtures, which is
+    worth knowing before anyone tidies them.
+  * `aggregate.py` still untouched. Step 4.

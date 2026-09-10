@@ -10,7 +10,31 @@ fixture set that needs fixing, not the mutant.
     python3 tools/mutate_sweep.py M3         # run one
 
 Edits are applied to the last occurrence in the file, which is the live
-sweep -- _sweep_reference is the earlier copy.
+sweep -- _sweep_reference is the earlier copy. `apply_last` now REFUSES
+an anchor whose offset is before `def sweep(`, because a shared block
+that happens to end earlier would silently mutate the oracle instead;
+that mistake was made twice while writing the B1 accumulators, and it
+presents as seven unrelated tests erroring on a NameError.
+
+TWO FAMILIES
+------------
+M1-M12   the case dispatch -- union-find, counters, events, `attach`.
+MM1-MM13 CR B1's per-component moment and extent accumulators. These
+         are killed by `assert_moments`, which compares against
+         `aggregate.moments_per_component`; the M series is killed by
+         `assert_same`, which compares against `_sweep_reference`.
+
+ONE KNOWN EQUIVALENT MUTANT, DELIBERATELY ABSENT
+------------------------------------------------
+`moms_of[rn] = moms_of.pop(rp)` -> `moms_of[rn] = moms_of[rp]` on the
+ATTACH path. It leaves a stale entry behind, but `rp` has just become
+a child and union-find roots never become roots again, so nothing can
+ever read it. Verified by digest over 27 fixtures x 4, 40 random masks
+and a real 15.5 Mpx page: byte-identical. It is UNKILLABLE and must
+not be added here -- it would fail the gate forever. It is not free,
+though: it leaks one entry per root-move, measured at 739 stale
+against 421 live components on p1, so `pop` stays and the cost is
+visible only in a memory measurement.
 """
 
 from __future__ import annotations
@@ -104,6 +128,82 @@ MUTANTS = {
         "            return root\n        return self.union_roots(new_id, root)",
         "            return new_id\n        return self.union_roots(new_id, root)",
     ),
+    # -- CR B1: the moment and extent accumulators --------------------
+    # Killed by `assert_moments` (against `aggregate`), not by
+    # `assert_same` (against `_sweep_reference`, which has no moments).
+    "MM1": (
+        "sx and sy swapped in the row branch",
+        "                    rsx = rs1\n                    rsy = rn_area * k",
+        "                    rsx = rn_area * k\n                    rsy = rs1",
+    ),
+    "MM2": (
+        "sxy uses the run length where the index sum belongs",
+        "                    rsxy = k * rs1\n                else:",
+        "                    rsxy = k * rn_area\n                else:",
+    ),
+    "MM3": (
+        "_sum_ii used where _sum_i belongs",
+        "                rs1 = _sum_i(r.lo, r.hi)",
+        "                rs1 = _sum_ii(r.lo, r.hi)",
+    ),
+    "MM4": (
+        "_sum_i used where _sum_ii belongs",
+        "                rs2 = _sum_ii(r.lo, r.hi)",
+        "                rs2 = _sum_i(r.lo, r.hi)",
+    ),
+    "MM5": (
+        "min/max swapped for x0 on the attach path",
+        "                    if rx0 < v[6]:",
+        "                    if rx0 > v[6]:",
+    ),
+    "MM6": (
+        "extents not merged on union -- survivor's x0 kept, loser's dropped",
+        "                            if w[6] < v[6]:\n"
+        "                                v[6] = w[6]",
+        "                            if False:\n"
+        "                                v[6] = w[6]",
+    ),
+    "MM7": (
+        "extents not merged on union -- y1, which only a COLUMN sweep reaches",
+        "                            if w[9] > v[9]:\n"
+        "                                v[9] = w[9]",
+        "                            if False:\n"
+        "                                v[9] = w[9]",
+    ),
+    "MM8": (
+        "the moment vector is not stored back after a union",
+        "                        if moms_of is not None:\n"
+        "                            moms_of[rn] = v",
+        "                        if False:\n"
+        "                            moms_of[rn] = v",
+    ),
+    "MM9": (
+        "area accumulated at BIRTH but not on the attach path",
+        "                    v[0] += rn_area",
+        "                    v[0] += 0",
+    ),
+    "MM10": (
+        "moment sums accumulated at BIRTH but not on the attach path",
+        "                    v[3] += rsxx",
+        "                    v[3] += 0",
+    ),
+    "MM11": (
+        "the axis branch swapped -- a row sweep gets the column mapping",
+        "                    rx0, rx1, ry0, ry1 = r.lo, r.hi, k, k",
+        "                    rx0, rx1, ry0, ry1 = k, k, r.lo, r.hi",
+    ),
+    "MM12": (
+        "the column branch reuses the row mapping for sx",
+        "                    rsx = rn_area * k\n                    rsy = rs1",
+        "                    rsx = rs1\n                    rsy = rs1",
+    ),
+    "MM13": (
+        "the BIRTH vector does not carry the run's own extents",
+        "                    moms_of[nid] = [rn_area, rsx, rsy, rsxx, rsyy, rsxy,\n"
+        "                                    rx0, ry0, rx1, ry1]",
+        "                    moms_of[nid] = [rn_area, rsx, rsy, rsxx, rsyy, rsxy,\n"
+        "                                    0, 0, 0, 0]",
+    ),
 }
 
 
@@ -111,6 +211,20 @@ def apply_last(text: str, old: str, new: str) -> str:
     i = text.rfind(old)
     if i == -1:
         raise SystemExit(f"mutant anchor not found:\n{old}")
+    # `_sweep_reference` is the oracle. Several blocks appear verbatim
+    # in both it and the live sweep, so "last occurrence" is necessary
+    # but not sufficient. Refuse an anchor landing inside the oracle's
+    # BODY -- not merely "before `def sweep`", because M1/M11/M12
+    # legitimately mutate `_UF`, which is defined earlier still.
+    ref = text.find("\ndef _sweep_reference(")
+    if ref != -1:
+        end = text.find("\ndef ", ref + 1)
+        if end == -1:
+            end = len(text)
+        if ref < i < end:
+            raise SystemExit(
+                "mutant anchor landed inside _sweep_reference -- the "
+                f"oracle would be mutated:\n{old}")
     return text[:i] + new + text[i + len(old):]
 
 
