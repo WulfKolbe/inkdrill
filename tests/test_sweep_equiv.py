@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import random
 import unittest
+from unittest import mock
 
+from inkdrill import aggregate as aggmod
 from inkdrill import sweep as sweepmod
 from inkdrill.aggregate import moments_per_component
 from inkdrill.raster import InkMask
@@ -668,6 +670,79 @@ class TestMomentsExact(_SameMixin, unittest.TestCase):
                         seen[f] += 1
         for f, n in seen.items():
             self.assertGreater(n, 0, f"{f} is zero on every fixture")
+
+
+class TestMomentsHandoff(_SameMixin, unittest.TestCase):
+    """Step 4: `moments_per_component` uses what the sweep already has."""
+
+    @staticmethod
+    def _mask():
+        return InkMask.from_rows(FIXTURES["comb"])
+
+    def test_a_result_that_asked_is_handed_back_as_it_is(self):
+        r = sweep(self._mask(), moments=True)
+        self.assertIs(moments_per_component(r), r.moments)
+
+    def test_a_result_that_did_not_ask_falls_back_and_agrees(self):
+        m = self._mask()
+        plain = sweep(m, capture=Capture.GRAPH)
+        self.assertIsNone(plain.moments)
+        self.assertEqual(moments_per_component(plain),
+                         sweep(m, moments=True).moments)
+
+    def test_the_predicate_is_is_not_None_and_not_truthiness(self):
+        """An EMPTY dict must not fall through to the second pass.
+
+        `{}` is a mask with no components -- a complete, correct
+        answer. `None` means nobody accumulated anything. Written as
+        `if result.moments:` the two collapse, and a blank page silently
+        takes the slow path it explicitly asked to skip.
+
+        `_accumulate` is replaced with a bomb so the difference is
+        observable: under truthiness this raises, under `is not None`
+        it returns `{}`.
+        """
+        empty = sweep(InkMask(b"", 0, 0), moments=True)
+        self.assertEqual(empty.moments, {})
+        with mock.patch.object(aggmod, "_accumulate",
+                               side_effect=AssertionError(
+                                   "fell back on an empty but populated "
+                                   "moments dict")):
+            self.assertEqual(moments_per_component(empty), {})
+
+    def test_the_fallback_is_still_reachable(self):
+        """Both sides of the branch. A guard tested only on the fast
+        path can be made unconditional and still pass."""
+        plain = sweep(self._mask(), capture=Capture.GRAPH)
+        with mock.patch.object(aggmod, "_accumulate",
+                               side_effect=AssertionError("reached")):
+            with self.assertRaises(AssertionError):
+                moments_per_component(plain)
+
+    def test_band_stitch_results_fall_back_rather_than_lying(self):
+        """`band.stitch` builds a fresh `SweepResult` positionally, so
+        `moments` is None and the second pass runs. That is correct
+        rather than ideal: the alternative would be a result whose
+        moments covered one band.
+
+        Compared as a MULTISET OF VALUES, not as a dict. `band`'s own
+        docstring says node ids and component roots depend on how the
+        work was divided, so the keys legitimately differ from a whole
+        sweep's -- which is exactly what this test found on its first
+        run, and what `test_per_component_moments_survive_stitching`
+        already compares this way.
+        """
+        from inkdrill import band
+        mask = self._mask()
+        for k in (2, 3, mask.height):
+            with self.subTest(k=k):
+                stitched = band.sweep_banded(mask, k, conn=8)
+                self.assertIsNone(stitched.moments)
+                self.assertEqual(
+                    sorted(moments_per_component(stitched).values(),
+                           key=lambda mo: (mo.area, mo.sx, mo.sy)),
+                    sorted(sweep(mask, moments=True).moments.values(),
+                           key=lambda mo: (mo.area, mo.sx, mo.sy)))
 
 
 if __name__ == "__main__":

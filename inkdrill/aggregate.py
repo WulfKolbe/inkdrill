@@ -327,7 +327,35 @@ def moments_per_component(result: SweepResult) -> dict[int, Moments]:
     Needs `Capture.GRAPH` only for the node list; the runs themselves are
     what is accumulated, so this works at any capture level that retains
     nodes.
+
+    IF THE SWEEP ALREADY ACCUMULATED THEM, THEY ARE RETURNED AS THEY
+    ARE. `sweep(..., moments=True)` builds the same ten integers per
+    component during the scan (U3's G10) instead of making this second
+    full pass over every run, which was measured at 56-66% of a
+    `Capture.NONE` sweep on five real pages. The two agree exactly --
+    every value is an integer and all ten are commutative monoids over
+    the run set, so there is nothing to round.
+
+    THE TEST IS `is not None`, NOT TRUTHINESS. An empty dict is a
+    complete and correct answer -- a mask with no components -- while
+    `None` means nobody accumulated anything. `if result.moments:`
+    would send a blank page down the second pass, which is merely
+    wasteful, and would say the two states are the same, which is
+    wrong.
+
+    `_accumulate` STAYS. It is the fallback for every result that did
+    not ask (`band.stitch` builds one, and no caller in the package
+    passes `moments=True` today), and it is the ORACLE -- a second
+    computation sharing no code with the accumulator, which is the
+    only independent check on it. Same precedent as `nest._label` and
+    `sweep._sweep_reference`; do not delete it because it looks
+    redundant.
+
+    The returned dict is the result's own, not a copy. Treat it as
+    immutable, per G9.
     """
+    if result.moments is not None:
+        return result.moments
     # U3's G8: node ids are dense and equal their index in `nodes`, so
     # a node is looked up by indexing rather than through a rebuilt
     # {id: node} map.

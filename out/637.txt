@@ -1,0 +1,110 @@
+637 - CR B1 step 4: the second pass disappears for a caller that asks
+======================================================================
+
+`aggregate.moments_per_component(result)` now returns
+`result.moments` when the sweep already built them, and falls back to
+`_accumulate` otherwise. This is the step where the 56-66% is actually
+recoverable.
+
+--------------------------------------------------------------------
+THE PREDICATE IS `is not None`, AND THAT IS THE WHOLE STEP
+
+    if result.moments is not None:
+        return result.moments
+
+Written `if result.moments:` an EMPTY dict falls through to the second
+pass. `{}` is a mask with no components -- a complete and correct
+answer. `None` means nobody accumulated anything. Truthiness collapses
+the two, which is wasteful on a blank page and, worse, asserts they
+are the same state when step 0 pinned them as different precisely for
+this line.
+
+`test_the_predicate_is_is_not_None_and_not_truthiness` makes the
+difference OBSERVABLE rather than arguing it: `_accumulate` is
+replaced with a bomb and an empty-but-populated result is passed in.
+Under truthiness it raises; under `is not None` it returns `{}`.
+
+`test_the_fallback_is_still_reachable` is the other side of the same
+branch -- the same bomb, a result that did NOT ask, and the raise is
+asserted. A guard tested only on its fast path can be made
+unconditional and still pass.
+
+--------------------------------------------------------------------
+`_accumulate` STAYS, AND THE DOCSTRING NOW SAYS WHY
+
+Two reasons, and only the first is obvious:
+
+  1. It is the FALLBACK. Every result in the package today goes
+     through it, because nothing passes `moments=True`.
+  2. It is the ORACLE. It is a second computation sharing no code with
+     the accumulator, and it is the only independent check on G10.
+     Delete it and `assert_moments` has nothing to compare against.
+
+Same precedent as `nest._label` and `sweep._sweep_reference`, both of
+which CLAUDE.md already warns not to delete for looking unused. This
+is now the third, and it is named in the docstring beside them.
+
+--------------------------------------------------------------------
+THE RETURNED DICT IS THE RESULT'S OWN, NOT A COPY
+
+Checked before deciding: every caller in the package and the tools --
+`emit` (three sites), `__main__` (two), `component_moments`,
+`punctprofile`, `bookprofile`, `mathpixcoverage`, `measure` (six) --
+reads it by key or takes `.values()`. None mutates it. So the CR's
+literal "returns `result.moments`" is safe, it is consistent with G9's
+"immutable once constructed", and `Moments` is frozen so the only
+thing mutable is the dict container.
+
+Pinned by identity (`assertIs`) rather than equality, so a later
+"tidy-up" to `dict(result.moments)` shows up as a failing test and a
+decision rather than as a silent copy per call.
+
+--------------------------------------------------------------------
+BAND FALLS BACK, AND THE TEST FOUND SOMETHING ON ITS FIRST RUN
+
+`band.stitch` builds its `SweepResult` positionally with six
+arguments, so `moments` takes its default of `None` and the second
+pass runs. That is correct rather than ideal -- the alternative would
+be a result whose moments covered one band.
+
+The test as first written compared the two dicts and FAILED:
+
+    {0: Moments(area=19, ...)} != {1: Moments(area=19, ...)}
+
+Same moments, different key. `band.py`'s own docstring says it: "node
+ids and component roots depend on how the work was divided". The
+existing `test_per_component_moments_survive_stitching` has always
+compared sorted VALUES for this reason. My test was wrong, not the
+code, and it is now a multiset comparison at k = 2, 3 and height.
+
+Worth recording because it is a live trap for anything downstream that
+joins a banded result to an unbanded one BY ROOT.
+
+--------------------------------------------------------------------
+TESTS -- TestMomentsHandoff, 5, all ok
+
+  test_a_result_that_asked_is_handed_back_as_it_is
+  test_a_result_that_did_not_ask_falls_back_and_agrees
+  test_the_predicate_is_is_not_None_and_not_truthiness
+  test_the_fallback_is_still_reachable
+  test_band_stitch_results_fall_back_rather_than_lying
+
+    full suite       1228 tests, 37 skipped, no expected failures
+    mutation gate    26 / 26 killed
+
+Was 1223 at step 3. Nothing removed, nothing changed in the M or MM
+results.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * THE PACKAGE IS NOT FASTER. Nothing passes `moments=True`, which is
+    the capability-only scope that was chosen deliberately. Every
+    caller still takes the fallback and behaves exactly as before,
+    which is why "suite unchanged" is the pass condition rather than a
+    timing number. Step 5 measures what the capability is worth, not
+    what the pipeline gained.
+  * `band` does not propagate moments across a seam. Not attempted:
+    the moments are per-root and stitching renumbers roots, so it is a
+    real piece of work rather than plumbing, and it is outside this
+    CR.
