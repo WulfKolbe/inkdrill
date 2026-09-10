@@ -1,0 +1,196 @@
+638 - CR B1 step 5: the measurement, and the end-of-CR report
+==============================================================
+
+Three numbers, `tools/b1_measure.py`. Population: the 42 DISTINCT
+pages of kolbe2018hubbard/inspect/pages, 649.6 Mpx, 63,520
+components. Best of 3, gc.collect() between runs, 1 and 2 timed in
+both orders. Baseline 0796014, the commit before step 0, checked out
+into a temp directory as a second importable package so both versions
+run in ONE process -- two processes cannot be compared to 1%.
+
+--------------------------------------------------------------------
+1. THE GATE: moments=False IS FREE
+
+    order          pre-B1        now    change
+    pre first      8.199s     8.205s    +0.07%
+    now first      8.597s     8.656s    +0.69%
+    mean           8.398s     8.430s    +0.39%
+
+THE CR'S CRITERION IS MET: it budgets the per-run `if moments:` branch
+at about 2% and says the flag is in the wrong place above that. +0.39%
+mean, worst order +0.69%.
+
+Read it as "at or below 0.7%", not as "0.39%". The two orders differ
+by more than the effect does -- 8.199 vs 8.597 for the SAME baseline
+code -- so run-to-run variation exceeds what is being measured. The
+honest statement is that the branch is not detectable above noise on
+this machine, which is what the CR asked to hear "especially if it is
+zero".
+
+--------------------------------------------------------------------
+2. THE WIN IS 1.04x, NOT THE 1.6x THE PREMISE IMPLIES
+
+    order          two passes    in-loop    change
+    two first         13.800s    13.152s    -4.69%
+    loop first        13.962s    13.437s    -3.76%
+    mean              13.881s    13.295s    -4.22%   (1.04x)
+
+The premise held -- the second pass costs 64.7% of a sweep here
+(13.881 - 8.430 = 5.451s against 8.430s), which is the 56-66% out/633
+measured. If moving it into the loop had made it free, this row would
+read -39%. It reads -4.2%, because the in-loop accumulation costs
+4.865s against the separate pass's 5.451s: only 10.7% less.
+
+WHY, MEASURED RATHER THAN GUESSED. Decomposing `_accumulate` over
+p41's 143,965 runs, best of 5:
+
+    bare iteration over the runs             0.0063s     4%
+    + the two closed-form calls              0.0865s    55%
+    full _accumulate (locals + extents)      0.1574s   100%
+
+    the same arithmetic into LOCALS          0.1185s
+    the same arithmetic into a LIST          0.1321s   (+11.5%)
+
+THE TWO `_sum_i` / `_sum_ii` CALLS ARE 51% OF THE ACCUMULATION
+(0.0865 - 0.0063 = 0.080s of 0.157s). Re-iterating the node list --
+the thing this CR removes -- is 4%. So the CR moved the cheap half
+and left the expensive half exactly where it was, because BOTH
+implementations make those two Python calls once per run.
+
+The list-versus-locals penalty is real but secondary: 11.5%.
+`_accumulate` sums a whole component into ten local variables and
+builds one `Moments` at the end; the sweep cannot, because runs of
+different components interleave, so it pays indexed writes plus a dict
+lookup per run. That is most of why 10.7% and not more.
+
+WHAT WOULD CLOSE THE GAP, AND WHY IT WAS NOT DONE: inlining the two
+closed forms. The CR forbids it -- "two copies of a closed-form
+identity is two chances to get the `(lo-1)*lo` term wrong" -- and that
+is a good argument, made before the price was known. The price is now
+known: 51% of the accumulation, about 33% of the second pass. Not
+done, because the standing instruction is to report and stop rather
+than start unspecced work, and because a wrong second moment is a
+plausible centroid rather than a crash.
+
+--------------------------------------------------------------------
+3. MEMORY IS SLIGHTLY WORSE, NOT BETTER
+
+Peak allocation, `tracemalloc`, three pages:
+
+    page   comps   no moments   in-loop   second pass
+    p1       421       14.82M    14.99M        14.82M
+    p2      1793       17.69M    18.64M        17.69M
+    p3      1852       24.12M    25.11M        24.12M
+
+THE CR EXPECTED THE OPPOSITE -- "ten integers plus a list object per
+component, against the dict of `Moments` it replaces". It does not
+replace it. The `Moments` dict is still built, in the assembly loop;
+the ten-slot lists are held IN ADDITION, and they are alive during the
+sweep, which is when the peak happens. So the in-loop route adds about
+0.95 M on p2, roughly 530 bytes per component, and 5% of peak.
+
+The second-pass column equals the no-moments column exactly, on all
+three pages. That is not an error: the peak is set while the node list
+grows, and the `Moments` dict built afterwards never reaches it.
+
+This is also where step 1's equivalent mutant becomes visible. Keeping
+`pop` on the attach path is what bounds those lists to one per LIVE
+root; dropping it leaks one per root-move, measured at 739 stale
+against 421 live on p1 -- 2.76x the dict, and it would land on the
+peak above.
+
+--------------------------------------------------------------------
+END-OF-CR REPORT
+================
+
+EVERY TEST BY NAME, ALL PASSING
+
+TestMomentsPlumbing (step 0)
+  test_not_asking_yields_None_not_an_empty_dict              ok
+  test_an_empty_mask_asked_for_moments_gives_an_empty_dict   ok
+  test_the_flag_changes_nothing_else                         ok
+  test_moments_match_the_oracle                              ok
+        (shipped `expectedFailure` in steps 0 and 1; the decorator
+         came off in step 2, when an unexpected success turned the
+         suite red)
+
+TestMomentsExtents (step 1)
+  test_extents_match_the_oracle_over_the_fixtures            ok
+  test_the_extents_are_asymmetric_somewhere_in_the_fixtures  ok
+  test_area_is_the_ink_count                                 ok
+
+TestMomentsExact (step 2)
+  test_all_ten_fields_over_the_fixtures                      ok
+  test_all_ten_fields_over_the_fuzz_ladder                   ok
+  test_the_whole_mask_moments_do_not_depend_on_the_axis      ok
+  test_the_whole_mask_bbox_does_not_depend_on_the_axis       ok
+  test_the_moment_sums_are_not_all_zero                      ok
+
+TestMomentsHandoff (step 4)
+  test_a_result_that_asked_is_handed_back_as_it_is           ok
+  test_a_result_that_did_not_ask_falls_back_and_agrees       ok
+  test_the_predicate_is_is_not_None_and_not_truthiness       ok
+  test_the_fallback_is_still_reachable                       ok
+  test_band_stitch_results_fall_back_rather_than_lying       ok
+
+    17 tests added by B1. Full suite 1228, 37 skipped, no expected
+    failures. Was 1211 before step 0.
+
+MUTATION COUNT
+
+    26 / 26 killed  (tools/mutate_sweep.py)
+      M1-M12    13 mutants, the case dispatch, killed by assert_same
+      MM1-MM13  13 mutants, B1's accumulators, killed by assert_moments
+
+    Not one MM mutant is caught by `assert_same`: `moments` is
+    `compare=False` and `_sweep_reference` has no moments, so the
+    960-check equivalence gate is blind to B1 by construction.
+
+    One mutant is deliberately absent and the harness docstring says
+    why: dropping `pop` on the attach path is an equivalent mutant,
+    proven by identical digest over 27 fixtures x 4, 40 random masks
+    and a real 15.5 Mpx page.
+
+ASSUMPTIONS STILL UNVERIFIED
+
+The CR listed three and expected them to stay open. All three do, and
+there are four more.
+
+  1. Whether `moments=False` is genuinely free -- measured, but ON ONE
+     MACHINE, and the two orders differ by more than the effect. What
+     is established is "below the noise floor here", not "zero".
+  2. Whether the ten-integer list is the right storage. Measurement 3
+     says it costs 5% of peak rather than saving any, so the question
+     is now sharper than when the CR wrote it: the storage is not
+     paying for itself in memory, and the case for it rests entirely
+     on the 1.04x.
+  3. Whether axis invariance is checked as well on the column path as
+     on the row path. IMPROVED but not closed: step 1 found the fixture
+     set was row-shaped -- `y1`'s merge branch is unreachable on a row
+     sweep by construction -- and added transposed fixtures. The fuzz
+     ladder runs both axes. But the fixture set is still 27 shapes
+     drawn by hand for row-sweep intuitions.
+  4. NEW. Whether 1.04x is worth the mechanism at all. That is a
+     judgement, not a measurement, and it is yours: the gate is free,
+     the win is 4%, the memory is 5% worse, and the code carries a
+     second accumulator that must be kept in step with `_accumulate`
+     forever.
+  5. NEW. What inlining the two closed forms would buy. Bounded above
+     by 51% of the accumulation; unmeasured, because the CR forbids
+     the change.
+  6. NEW. `band` does not carry moments across a seam, so a banded
+     result always takes the fallback. Not attempted -- stitching
+     renumbers roots, which is real work rather than plumbing.
+  7. NEW. Nothing in the package passes `moments=True`. The
+     capability-only scope was chosen deliberately, so NO PIPELINE
+     NUMBER EXISTS. The 1.04x is what a caller would get if one asked;
+     the measured end-to-end gain today is exactly zero.
+
+WHAT IS NOT CLAIMED
+
+  * B1 did not make inkdrill faster. It made a capability available.
+  * The premise the CR rests on is confirmed and was never in doubt.
+    What the CR got wrong is the inference from it: that a pass
+    costing 65% of a sweep is 65% recoverable by moving it. 4% of it
+    is. The cost was in the arithmetic, not in the traversal, and only
+    the traversal was moved.
