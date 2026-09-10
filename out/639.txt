@@ -1,0 +1,178 @@
+639 - locating a col-5 expression inside its col-6 line crop
+=============================================================
+
+REPORT ONLY. `tools/formulafind.py` is the harness; nothing was added
+to the package. The question was what inkdrill can say about the
+evidence-formula table and how to show it, and the first step asked
+for was a rectangle plus the matching conditions.
+
+--------------------------------------------------------------------
+WHAT THE TWO COLUMNS ACTUALLY ARE
+
+Measured on 0902.0431, `evidence-formula.tex`, 3,163 rows parsed.
+
+  col 5  `\FitMath{$\displaystyle ...$}` -- the expression as TeX sets
+         it. Rendered here by pdflatex at a dpi we choose.
+  col 6  `\includegraphics{report-crops-b/<id>.jpg}` -- a crop of the
+         ORIGINAL page. 3,170 FO crops; width median 741 px, height
+         median 27 px (p25 25, p75 30).
+
+The scale between them is NOT given and had to be established:
+
+    Mathpix page raster        2125 x 2750 px  (612 pt page = 250 dpi)
+    line region, lines.json    1287 x 45 px at (462, 900)
+    the crop                    772 x 27 px
+    crop / region              0.5998
+
+So the crop is the line region downscaled to 60%, about 150 dpi, and a
+line is 27 px tall. Rendering col 5 at 600 dpi makes the expected
+ratio 150/600 = 0.250. THE MEASUREMENT FOUND 0.250 WITHOUT BEING TOLD:
+63 rows voted, 28 of them exactly 0.250 and the bulk within 0.24-0.26.
+
+At 27 px a glyph is 8-10 px tall and its counters are 1-2 px, which is
+the speckle floor out/591 measured. HOLE COUNTS ARE NOT USED HERE and
+that is deliberate, not an omission.
+
+--------------------------------------------------------------------
+THE METHOD, AND WHY IT IS BLOBS AND NOT PIXELS
+
+Both masks are swept and reduced to their COMPONENTS. Each is then
+turned into a binary ink/gap profile along x built from the blob
+BOXES, never from the pixels: a column inside a blob's box counts as
+ink even where that glyph has a gap. That is what survives a 4x scale
+change and a different rasteriser.
+
+The expression's profile is resampled to a candidate scale and slid
+across the line's. The rectangle is the best offset; the y-extent is
+taken from the crop blobs whose centre falls inside it.
+
+THE SCALE IS ESTIMATED ONCE PER DOCUMENT, not per row. It is a
+property of how the report was built -- one downscale applied to every
+line. Estimating it per row is what made the first version wrong: it
+voted 0.165 instead of 0.250, because expressions of one or two blobs
+fit degenerately at ANY small scale and there are far more of them
+than there are long ones. Only rows with >= 6 gaps may vote.
+
+--------------------------------------------------------------------
+IT WORKS, AND THE CHECK IS FALSIFIABLE
+
+FO0001 and FO0002 are two different expressions in the SAME line:
+
+    "Lie algebras, called A_n, B_n, C_n, D_n (classical type) and
+     G_2, F_4, E_6, E_7, E_8 (exceptional"
+
+    FO0001  A_{n}, B_{n}, C_{n}, D_{n}      x 177-310, y 5-23
+    FO0002  G_{2}, F_{4}, E_{6}, E_{7}, E_{8}  x 496-651, y 5-23
+
+Disjoint, in the right order, and drawn on the crop they sit exactly
+on the two expressions. That check needs no ground truth, which is
+just as well: the corpus has line-level geometry in `lines.json` and
+in the pdfminer file, but NO per-character boxes, so there is nothing
+to score a rectangle against directly.
+
+ONE VISIBLE RESIDUAL. FO0002's right edge clips the final subscript by
+about 2 px. The right edge is systematically the weaker one, because
+the last thing in these expressions is usually a subscript -- small,
+low, and the first thing to be lost to the 27 px raster.
+
+--------------------------------------------------------------------
+THE FIGURE OF MERIT IS THE MARGIN, NOT THE SCORE
+
+Score is the 1-D Jaccard of the two profiles: columns where both say
+ink over columns where either does. Margin is that score minus the
+best score at any NON-OVERLAPPING position.
+
+200 rows, acceptance by gap count -- the number of interior gaps in
+the expression's own profile, which is its discriminating power:
+
+    gaps   rows  accepted   rate   med score   med margin
+       0     23         0    0.0%      1.000        0.000
+       1     26         0    0.0%      1.000        0.000
+     2-3     29         6   20.7%      0.923        0.056
+     4-5     27         7   25.9%      0.871        0.071
+     6-9     30        11   36.7%      0.818        0.079
+   10-14     28         7   25.0%      0.736        0.091
+     15+     37        13   35.1%      0.734        0.702
+
+READ THE TWO MIDDLE COLUMNS AGAINST EACH OTHER. The score FALLS as the
+expression gets longer, 1.000 down to 0.734, while the margin RISES,
+0.000 up to 0.702. They move in opposite directions, and only one of
+them is measuring what we want.
+
+A PERFECT SCORE IS EVIDENCE OF FAILURE. 39 of 200 rows score exactly
+1.000, and 36 of those have one gap or none. A one-blob expression's
+profile is a solid bar, and a bar fits over any bar: `G` scored 1.000
+at column 2 of a line it does not begin. `w` likewise. The rows that
+fit perfectly are exactly the rows that carry no information about
+where they are.
+
+So the score cannot be the gate. Measured over the same 200 rows:
+
+    gaps>=2 AND score>=0.80 AND margin>=0.10     44   (as first run)
+    gaps>=2 AND margin>=0.10                     72
+    gaps>=2 AND margin>=0.15                     55
+    gaps>=4 AND margin>=0.10                     64
+    gaps>=2, no other condition                 151
+
+The score threshold rejects 28 rows the margin accepts, and some of
+them are the strongest matches in the set -- a margin EQUAL to the
+score means the runner-up scored zero, i.e. the expression fits in
+exactly one place and nowhere else at all:
+
+    FO0039  score 0.633  margin 0.633   z\left(E_{6}\right)
+    FO0045  score 0.402  margin 0.402   S U(3)) / \boldsymbol{Z}_{3}
+    FO0012  score 0.724  margin 0.613   \mathfrak{g}_{2}{ }^{C}
+
+--------------------------------------------------------------------
+THE MATCHING CONDITIONS, AS MEASURED
+
+  1. SCALE is one number per document, estimated from rows with >= 6
+     gaps and imposed on the rest. 0.250 here, from 63 votes.
+  2. GAPS >= 2. Below that the expression cannot be placed by this
+     signal at all -- 0 of 49 rows with <= 1 gap, and their scores are
+     perfect.
+  3. MARGIN >= 0.10 over the best non-overlapping alternative. This is
+     the gate.
+  4. SCORE is REPORTED, NOT GATED. Its value is diagnostic: a low
+     score with a high margin means "here and nowhere else, but the
+     fit is loose", which is a different finding from "nowhere".
+  5. BLOB AGREEMENT as a secondary check. Among 44 accepted, the
+     rendered expression's blob count equals the count inside the
+     rectangle in 33 (75%); the differences are
+     {-3:1, -2:1, -1:7, 0:33, +1:1, +3:1}. The -1s are glyphs that
+     merge at 27 px. A large positive difference means the rectangle
+     swallowed a neighbour.
+
+--------------------------------------------------------------------
+WHAT INKDRILL CAN PROVIDE HERE, AND HOW TO SHOW IT
+
+  * A RECTANGLE per row, in crop pixel coordinates, with a margin and
+    a score. That is a seventh column in the evidence table, or an
+    overlay drawn on the sixth.
+  * THE RESIDUAL, which is the point. Three classes fall out of the
+    measurement and each is a different finding about the source:
+      - PLACED     margin high: the expression is where the table says
+                   it is.
+      - AMBIGUOUS  gaps >= 2 but margin low: the line repeats itself
+                   and the position is not established.
+      - UNPLACEABLE gaps <= 1: too short to carry a position.
+    An overlay makes all three visible at a glance, in three colours,
+    which a single accuracy number would have thrown away.
+  * BLOB-COUNT DISAGREEMENT inside the rectangle, which localises
+    where the 27 px raster merged or split glyphs.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * ONE DOCUMENT. 0902.0431 only, 200 of its 3,163 rows. The scale
+    0.5998 and the 250 dpi page are that report's, and the Infineon
+    counterexample has not been tried.
+  * NO GROUND TRUTH. The rectangles are checked by construction --
+    disjointness, order, and by eye on the overlay -- not scored
+    against known character boxes, because the corpus has none.
+  * SCORE IS NOT REFINED PER ROW. A single document scale leaves a
+    residual that accumulates across a long expression, which is the
+    likeliest reason the score falls with length. Allowing +/- 2%
+    per row is the obvious next measurement and was not run.
+  * THE RIGHT EDGE IS WEAKER THAN THE LEFT, seen on FO0002 and not yet
+    quantified.
