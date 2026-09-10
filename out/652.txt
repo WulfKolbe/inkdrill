@@ -1,0 +1,113 @@
+652 - the per-length floor: it fixes the confound and finds no signal
+======================================================================
+
+out/651 closed by naming the single score floor as the bug. Tested.
+
+--------------------------------------------------------------------
+THE CALIBRATION POPULATION IS WHAT MAKES THIS POSSIBLE
+
+The floor is fitted on rows whose LaTeX is CHARACTER-IDENTICAL to the
+author's arXiv source. For those the only remaining difference between
+our render and the page is the RENDERING, so their score-versus-length
+curve is the divergence with nothing else in it. 572 such rows.
+
+That population could not have been built from MathPix's output alone,
+and it is the first thing in this chain that needed the e-print.
+
+    length   MATCHED  median   p10      KNOWN-CLASS  median   p10
+      0-14     170     0.977  0.935          35       0.982  0.949
+     15-24     137     0.972  0.863         180       0.973  0.894
+     25-34     108     0.965  0.854         204       0.959  0.836
+     35-49      90     0.937  0.777         299       0.946  0.824
+     50-69      38     0.886  0.805         335       0.906  0.797
+     70-99      22     0.914  0.746         213       0.861  0.754
+
+THE TWO COLUMNS ARE THE SAME CURVE. Rows MathPix rewrote score like
+rows it copied, at every length. out/651's length-confound conclusion
+is confirmed on a second cut of the data.
+
+    floor(L) = 1.0806 - 0.1685*log10(L)
+
+        L=10   0.912        L=80    0.760
+        L=20   0.861        L=160   0.709   EXTRAPOLATED
+        L=40   0.811        L=274   0.670   EXTRAPOLATED
+
+    the single floor: 0.7896
+
+--------------------------------------------------------------------
+IT FIXES THE CONFOUND, AND THE FIX IS LARGE
+
+    POOR_FIT by length, single floor    {0:7, 25:40, 50:37, 75:44,
+                                         100:35, 125:23, 150:36}
+    POOR_FIT by length, per-length      {0:52, 25:70, 50:35, 75:21,
+                                         100:16, 125:12, 150:7}
+
+The single floor RISES with length and the per-length one FALLS. 222
+rows become 213, but 84 are dropped and 75 are new -- two-thirds of
+the set turned over.
+
+THE SINGLE FLOOR WAS WRONG IN BOTH DIRECTIONS, as predicted. At three
+characters it demanded 0.79 where correct rows deliver 0.96, so it saw
+7 flags in the whole 0-24 band. At 150 characters it demanded 0.79
+where correct rows deliver ~0.71, so it flagged 36 rows for being long.
+
+--------------------------------------------------------------------
+AND IT FINDS NO SOURCE SIGNAL. THE INSTRUMENT DOES NOT SEE THE LATEX
+
+                        single 0.7896     per-length
+    matched (n=572)          5.8%            10.3%
+    known   (n=1467)        12.4%             9.2%
+
+The 2.1x apparent enrichment collapses, and reverses: under the
+per-length floor a row whose LaTeX is character-identical to the
+author's is flagged SLIGHTLY MORE OFTEN than one MathPix rewrote.
+Length-controlled it holds at every band -- 8.8/6.0, 11.6/8.2,
+10.0/8.9.
+
+SO THE FLAG IS NOT ABOUT THE SOURCE AT ANY FLOOR. It measures how well
+our render of an expression sits on the ink, and that is dominated by
+rendering divergence whatever the LaTeX says. A better floor does not
+turn a fit measurement into an OCR measurement; it only stops the fit
+measurement from being a length measurement.
+
+--------------------------------------------------------------------
+WHAT IT IS WORTH ANYWAY
+
+A uniform ~10% flag rate across every length instead of 1% to 42%. The
+residual report stops being a list of long expressions. And the 0-24
+band goes from 7 flagged rows to 52, which is where a misfit CANNOT be
+blamed on accumulation -- a three-character expression has nothing to
+accumulate.
+
+The new short flags, score against their own floor:
+
+    FO0255  L=3  0.935 / 0.960   t=0
+    FO1180  L=3  0.942 / 0.960   a=0
+    FO0651  L=5  0.871 / 0.960   |a|=1
+    FO2850  L=5  0.950 / 0.960   J B=B J
+    FO2297  L=6  0.886 / 0.949   a(X)=0
+    FO2854  L=6  0.870 / 0.949   J B=-B J
+
+ONE CHECKED AGAINST THE SOURCE AND IT DOES NOT EXPLAIN THE SCORE. The
+author writes `JB = BJ` twice; MathPix writes `J B=B J`. In math mode
+TeX IGNORES the space, so the two render identically and the
+substitution cannot be why FO2850 scores 0.950 or FO2854 0.870. These
+rows need an eye, exactly as the eighteen did.
+
+--------------------------------------------------------------------
+NOT CLAIMED, AND ONE LIMIT THAT BITES
+
+  * ABOVE 99 CHARACTERS THE FLOOR IS EXTRAPOLATED. The longest
+    author-matched row is 99 characters and 201 known-class rows are
+    longer than that. The curve is fitted on six buckets and used on
+    a range half again as wide, which is exactly the kind of reach
+    this project keeps recording as a population error. The 150+
+    figures should be read as the weakest in the table.
+  * A LOG-LINEAR FIT ON SIX POINTS. The p10 series is not monotone
+    (0.777 then 0.805 then 0.746), so the fit is smoothing noise as
+    well as trend.
+  * ONE DOCUMENT.
+  * NOT ADOPTED. `formularesidual` still uses the single floor. The
+    harness is committed and the decision is not mine: it turns over
+    two-thirds of the red set and buys no source detection, so it is
+    a change in what the report is ABOUT.
