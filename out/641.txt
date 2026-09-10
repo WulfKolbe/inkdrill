@@ -1,0 +1,120 @@
+641 - null test: does the MathPix-size resample move the five-tuple?
+=====================================================================
+
+NULL TEST, NO FIX. Nothing here was tuned, and nothing found was
+repaired.
+
+  QUESTION. A published table / image / host-line residual compares a
+  locally rendered crop against a MathPix one. Those differ in two
+  ways at once: the content may genuinely disagree, and one side has
+  been through a resample. Take a crop we rendered OURSELVES, apply
+  ONLY the resample, and see whether the five-tuple moves. Systematic
+  movement means the resample is a constant confound inside every one
+  of those residuals. Scattered movement means it is not.
+
+--------------------------------------------------------------------
+PROTOCOL
+
+  population   20 rows drawn by SEEDED RANDOM (seed 20260910) from the
+               3,163 rows of 0902.0431 `evidence-formula.tex`.
+               NOT THE FIRST 20: the table is ordered by page and its
+               opening rows are single symbols -- `G`, `\sigma`, `w`
+               -- which have one component and almost nothing for a
+               resample to change. Taking the head would have made a
+               null result nearly certain before the instrument ran.
+               The sample spans 2 to 31 components.
+  (a) native   pdflatex -> gs pgmraw at 400 dpi
+  (b) resample the same PGM, LANCZOS to 62.5%, JPEG q92, back to PGM
+  ratio        MEASURED, NOT CHOSEN. 0902.0431 is 612 x 792 pt and
+               MathPix rasterises it to 2125 x 2750 = 250.00 dpi on
+               both axes, so 400 -> 250 is exactly 0.625.
+  instrument   `mathstruct.pair_stats`, the ONE definition the CLI and
+               the tools share. Threshold 200 on BOTH sides -- moving
+               it between them would be a fix.
+  harness      `tools/nulltest_resample.py`
+
+--------------------------------------------------------------------
+PER-CROP DELTAS (resampled minus native)
+
+    id        native      resampled   comp  hole  stac  cent  offs
+    FO0492    211x32       132x20      7 +0  3 +0  1 +0  1 +0  0 +0
+    FO1046    526x100      329x63     19 +0  4 +0  3 +0  1 +0  2 +0
+    FO0326     85x46        53x29      4 -1  0 +0  0 +0  0 +0  0 +0
+    FO0678    251x55       157x34      9 +0  2 +0  1 +0  1 +0  0 +0
+    FO2784    239x49       149x31      7 +0  1 +0  0 +1  0 +1  0 +0
+    FO1506    821x63       513x39     23 -1  3 +0  1 +0  1 +0  0 +0
+    FO2942     63x55        39x34      3 +0  0 +0  1 +0  1 +0  0 +0
+    FO1419    205x67       128x42      8 +0  2 +0  0 +0  0 +0  0 +0
+    FO2330    220x58       138x36      7 +0  5 +0  0 +0  0 +0  0 +0
+    FO1049    233x46       146x29      7 +0  1 +0  2 +0  2 +0  0 +0
+    FO0067    433x55       271x34     13 +0  0 +0  0 +0  0 +0  0 +0
+    FO0383     62x35        39x22      2 +0  1 +0  0 +0  0 +0  0 +0
+    FO0723    382x68       239x43     12 +0  6 +0  2 +0  2 +0  0 +0
+    FO0775    198x38       124x24      5 +0  1 +1  1 +0  1 +0  0 +0
+    FO2946    113x55        71x34      4 +0  0 +0  0 +0  0 +0  0 +0
+    FO0537    908x55       568x34     30 +0 12 -4  3 +0  3 +0  0 +0
+    FO1638    459x67       287x42     17 +0  0 +2  0 +0  0 +0  0 +0
+    FO2850    235x38       147x24      8 +0  4 +0  1 +0  1 +0  0 +0
+    FO2580    948x60       593x38     31 +0  3 +2  2 +0  2 +0  0 +0
+    FO2214    544x55       340x34     16 +0  3 +0  1 +0  1 +0  0 +0
+
+--------------------------------------------------------------------
+DISTRIBUTION
+
+    key          zero   neg   pos   min   max     mean   median
+    components     18     2     0    -1     0   -0.100      0.0
+    holes          16     1     3    -4     2   +0.050      0.0
+    stacked        19     0     1     0     1   +0.050      0.0
+    centred        19     0     1     0     1   +0.050      0.0
+    offset         20     0     0     0     0    0.000      0.0
+
+    component delta histogram   {-1: 2, 0: 18}
+    n=20  zero=18  nonzero=2  mean=-0.100  sd=0.300
+
+--------------------------------------------------------------------
+THE ANSWER TO THE QUESTION ASKED
+
+THE COMPONENT DELTA IS SCATTERED, NOT SYSTEMATIC. 18 of 20 crops are
+unchanged, the mean is -0.100 against a spread of 0.300, and the
+median is 0. The resample is NOT sitting inside every published
+table / image / host-line residual as a constant offset. It is inside
+about one in ten of them.
+
+TWO QUALIFICATIONS, BOTH AGAINST MY OWN CONCLUSION.
+
+  1. THE DIRECTION IS NOT SCATTERED, ONLY THE INCIDENCE. Both non-zero
+     deltas are -1 and neither is +1. Components are lost, never
+     gained, which is what a downsample should do physically -- two
+     glyphs whose gap falls below a pixel merge, and nothing splits.
+     So the right description is not "random noise" but "a rare,
+     one-directional loss". At n=20 with 2 events, 2-0 cannot be
+     separated from chance; the physical argument is what makes the
+     asymmetry believable, not the count.
+
+  2. COMPONENTS ARE THE CLEANEST CHANNEL OF THE FIVE, AND THE
+     QUESTION ONLY ASKED ABOUT THEM. Holes move on 4 of 20 crops, in
+     BOTH directions, and by up to 4: FO0537 goes 12 -> 8, while
+     FO1638 goes 0 -> 2 and FO2580 3 -> 5. That is a larger and
+     messier effect than the component channel shows, and any residual
+     that reads the hole count carries it. It is consistent with what
+     out/591 and out/496 recorded about the hole channel near a
+     speckle floor -- at 250 dpi a counter is a few pixels, and
+     LANCZOS ringing plus q92 can both close one and open one.
+
+  `stacked` and `centred` each moved on the same single crop (FO2784),
+  and `offset` did not move at all.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * n = 20, ONE DOCUMENT, one resample ratio. 0902.0431 is
+    LaTeX-produced; the Infineon counterexample has not been run, and
+    a pasted raster has a very different run population.
+  * NOT MEASURED: whether the two non-zero crops are the ones the
+    published residuals actually contain. This says the resample
+    perturbs about 10% of crops; it does not say which 10%, nor
+    whether that 10% is enriched in the rows already flagged.
+  * NOT MEASURED: the q92 and the LANCZOS separately. They were
+    applied together because that is the pipeline; which of the two
+    moves the hole count is unknown.
+  * NO FIX. FO0537's four lost holes were not investigated.
