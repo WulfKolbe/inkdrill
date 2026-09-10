@@ -236,13 +236,39 @@ def gaps_of(p):
     return n
 
 
+def bits(p):
+    """A binary profile as ONE integer, column i in bit i.
+
+    The score is a 1-D Jaccard, and both terms are popcounts of AND and
+    OR. As bytes-per-column that is a Python loop over every column at
+    every offset at every scale; as a big integer it is two shifts, two
+    bitwise ops and two `bit_count()` calls, all in C. Same arithmetic,
+    and `test_bits_matches_the_column_loop` in the harness holds them
+    equal -- an optimisation that changes the answer is a bug, and this
+    one is on the path a per-row refit multiplies by a hundred.
+    """
+    v = 0
+    for i, x in enumerate(p):
+        if x:
+            v |= 1 << i
+    return v
+
+
 def scan(fp, cp, s):
     """Scores at every offset for one scale. Returns (n, [score, ...])."""
     n = round(len(fp) * s)
     if not 4 <= n <= len(cp):
         return 0, []
-    q = resample(fp, n)
-    return n, [jaccard(q, cp, off)[0] for off in range(len(cp) - n + 1)]
+    q = bits(resample(fp, n))
+    line = bits(cp)
+    window = (1 << n) - 1
+    out = []
+    for off in range(len(cp) - n + 1):
+        t = q << off
+        lw = line & (window << off)
+        u = (t | lw).bit_count()
+        out.append(((t & lw).bit_count() / u) if u else 0.0)
+    return n, out
 
 
 def locate(fb, fw, cb, cw, scales):
@@ -257,6 +283,40 @@ def locate(fb, fw, cb, cw, scales):
         if sc[i] > best[0]:
             best = (sc[i], s, i, i + n - 1)
     return best
+
+
+def locate_refit(fb, fw, cb, cw, scale, band, step):
+    """Best fit with the scale REFITTED for this row.
+
+    One scale per document is right for the document and wrong for a
+    long expression: out/644 measured the per-row spread at about
+    +/-5%, and a 0.5% error over a 1,500 px expression is 7 px, which
+    is a glyph. Refitting recovered FO0237 (260 px out) and FO0200 (a
+    missing Fraktur C) outright.
+
+    The band is CONSTRAINED and the constraint is REPORTED. A free
+    scale search collapses to the floor of its range -- that is what
+    out/640 had to retract a rule over -- and the tell is a refined
+    scale sitting on the boundary. The caller counts those.
+    """
+    fp, cp = trimmed(fb, fw), profile(cb, cw)
+    steps = int(round(2 * band / step))
+    best = None
+    for k in range(steps + 1):
+        s = scale * (1 - band + k * step)
+        n, sc = scan(fp, cp, s)
+        if not sc:
+            continue
+        i = max(range(len(sc)), key=sc.__getitem__)
+        if best is None or sc[i] > best[0]:
+            best = (sc[i], i, n, s, sc)
+    if best is None:
+        return None
+    top, i, n, s, sc = best
+    rival = max((v for j, v in enumerate(sc) if abs(j - i) >= n), default=0.0)
+    on_edge = abs(s / scale - (1 - band)) < 1e-9 or \
+        abs(s / scale - (1 + band)) < 1e-9
+    return top, i, i + n - 1, top - rival, gaps_of(fp), s, on_edge
 
 
 def locate_at(fb, fw, cb, cw, s):
@@ -303,6 +363,12 @@ def main() -> int:
                          "losslessly from inspect/pages at 400 dpi")
     ap.add_argument("--crop-dpi", type=float, default=0.0,
                     help="0 = infer: 400 for fullres, 150 for report")
+    ap.add_argument("--refit", action=argparse.BooleanOptionalAction,
+                    default=True,
+                    help="refit the scale per row within a band around the "
+                         "document scale (out/644)")
+    ap.add_argument("--refit-band", type=float, default=0.12)
+    ap.add_argument("--refit-step", type=float, default=0.002)
     ap.add_argument("--min-gaps", type=int, default=2)
     ap.add_argument("--scale-min-gaps", type=int, default=6)
     ap.add_argument("--min-score", type=float, default=0.80)
@@ -410,13 +476,24 @@ def main() -> int:
 
         print(f"{'id':<8} {'score':>6} {'margin':>7} {'gaps':>5} "
               f"{'rect x':>12} {'y':>8} {'blobs':>10}  expression")
+        edge_hits = 0
         for row, fw, fb, cm, cb in prepared:
-            got = locate_at(fb, fw, cb, cm.width, scale)
-            if got is None:
-                continue
-            sc, x0, x1, margin, gaps = got
+            if args.refit:
+                got = locate_refit(fb, fw, cb, cm.width, scale,
+                                   args.refit_band, args.refit_step)
+                if got is None:
+                    continue
+                sc, x0, x1, margin, gaps, own_scale, on_edge = got
+                edge_hits += on_edge
+                own_sc = sc
+            else:
+                got = locate_at(fb, fw, cb, cm.width, scale)
+                if got is None:
+                    continue
+                sc, x0, x1, margin, gaps = got
+                own_sc, own_scale, _, _ = locate(fb, fw, cb, cm.width, scales)
+                on_edge = False
             y0, y1, nin = vertical(cb, x0, x1)
-            own_sc, own_scale, _, _ = locate(fb, fw, cb, cm.width, scales)
             cut = [b for b in cb
                    if b[0] < x0 <= b[1] or b[0] <= x1 < b[1]]
             ok = (sc >= args.min_score and margin >= args.min_margin
@@ -429,6 +506,7 @@ def main() -> int:
                        rect=[x0, y0, x1, y1], blobs_in_rect=nin,
                        own_scale=own_scale, own_score=round(own_sc, 4),
                        edge_cuts=len(cut), crop=row["crop"],
+                       refit=bool(args.refit), on_edge=bool(on_edge),
                        accepted=ok)
             out.append(rec)
             print(f"{row['id'].split('_')[-1]:<8} {sc:>6.3f} {margin:>7.3f} "
@@ -436,6 +514,25 @@ def main() -> int:
                   f"{f'{len(fb)}->{nin}':>10}  {'' if ok else 'REJECT '}"
                   f"{row['math'][:34]}")
 
+    if out and args.refit:
+        r = [x["own_scale"] / scale for x in out if x.get("own_scale")]
+        r.sort()
+        print(f"\nREFIT: per-row scale / document scale -- "
+              f"min {r[0]:.3f}  p25 {r[len(r)//4]:.3f}  median "
+              f"{r[len(r)//2]:.3f}  p75 {r[3*len(r)//4]:.3f}  max {r[-1]:.3f}")
+        # COUNTED AMONG PLACED ROWS, which is the number that matters.
+        # Reported over all rows it read 54 of 260 and looked alarming;
+        # every one of those was a row the gap rule had already thrown
+        # out -- 48 of them at the LOW edge with a median of ZERO gaps,
+        # which is a one-blob template shrinking until it fits
+        # anywhere. The degeneracy is real and lands entirely on rows
+        # that carry no position to begin with.
+        pl = [x for x in out if x["accepted"]]
+        pe = sum(1 for x in pl if x.get("on_edge"))
+        print(f"  band edge: {pe} of {len(pl)} PLACED rows "
+              f"(+/-{args.refit_band:.0%}) -- this is the number that "
+              f"matters; {edge_hits} of {len(out)} over all rows, the rest "
+              f"being unplaceable templates shrinking to fit")
     if out:
         acc = [r for r in out if r["accepted"]]
         print(f"\n{len(acc)} of {len(out)} accepted "

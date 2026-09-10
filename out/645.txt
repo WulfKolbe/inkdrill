@@ -1,0 +1,135 @@
+645 - the refit over all 260, and the calibration retaken
+==========================================================
+
+`formulafind` now refits the scale PER ROW inside +/-12% of the
+document scale. out/644 measured the case for it on fifteen rows; this
+is the run over all 260 with the calibration retaken from scratch, as
+out/644 said it had to be before any count was quoted.
+
+--------------------------------------------------------------------
+FIRST, THE SPEED, BECAUSE IT IS WHAT MADE THE RUN POSSIBLE
+
+A per-row refit is 121 scales where there was one. The profile match
+was a Python loop over every column at every offset; it is now two
+shifts, two bitwise ops and two `bit_count()` calls on big integers,
+which is the same arithmetic done in C -- the same reason the mask
+encoding is `bytes.translate` and `bytes.find`.
+
+Held to the old implementation over 300 random (template, line, scale)
+triples: 0 disagreements. An optimisation that changes the answer is a
+bug, and this one sits on the path the refit multiplies by 121.
+
+--------------------------------------------------------------------
+THE ALARM I HAD TO CHASE FIRST
+
+    54 of 260 refits sit ON the band edge
+
+My own docstring says a high count there means the band is too narrow
+or the fit is degenerate, so this had to be resolved before any result
+was reported. Broken down:
+
+               n    median gaps   median score   placed
+    LOW edge   48       0.0           1.000        0
+    HIGH edge   6       4.0           0.800        0
+    interior  206       6.0           0.958      127
+
+THE DEGENERACY IS REAL AND LANDS ENTIRELY WHERE IT CANNOT DO HARM. All
+48 low-edge rows have 3 gaps or fewer -- 28 of them have ZERO -- and
+score a median of 1.000, which is the `G` failure of out/639 exactly:
+a one-blob template shrinking until it fits anywhere. Every one is
+already excluded by the gaps >= 2 rule.
+
+NOT ONE OF THE 127 PLACED ROWS SITS ON EITHER EDGE. That is the number
+that matters and the tool now prints that one; printing 54 of 260 was
+alarming and misleading.
+
+The 6 high-edge rows want MORE than +12% and none is placed. They are
+the one thing this run leaves genuinely unexplained.
+
+--------------------------------------------------------------------
+WHAT THE REFIT BOUGHT
+
+                        one scale    refit
+    rows placed             95        127
+    SILENT                 105        127
+    GREY                   140        115   (AMBIGUOUS 79 -> 54)
+    RED                     15         18
+    reference population    120        145
+    reading-order pairs   12/12      18/18
+    OVERLAP fires            2          0
+
+    CALIBRATION, retaken
+      score floor         0.7167    0.7854
+      blob-diff spread    {0:98, 1:19, 2:1, 3:1, 6:1}
+                       -> {0:128, 1:14, 2:1, 3:1, 4:1}
+
+The floor RISES because the population fits better, which is the
+honest direction: a rule calibrated on a sharper instrument is
+stricter, not looser. 36 of 260 rows change class.
+
+OVERLAP GOING TO ZERO IS THE CLEANEST RESULT HERE. out/644 diagnosed
+the FO0236/FO0237 pair as one row sitting 260 px too far left. Refit
+it and the overlap dissolves; both rows are now SILENT. The rule was
+right, the cause was placement, and fixing the placement removed the
+symptom rather than hiding it.
+
+--------------------------------------------------------------------
+THE FIFTEEN
+
+Five become SILENT -- FO0096, FO0144, FO0154, FO0200, FO0236 -- and
+FO0174 becomes GREY. Nine stay RED. The reviewer's own five split
+exactly as out/644 predicted they would:
+
+    FO0200  39->38 becomes 39->39, 0.63 -> 0.83   SILENT
+    FO0236  overlap dissolves                     SILENT
+    FO0237  37->38 becomes 37->37, 0.58 -> 0.71   still RED, just
+                                                  under the new floor
+    FO0207  50->44 becomes 50->49, 0.59 -> 0.68   still RED
+    FO0150  53->50 unchanged,      0.82 -> 0.84   still RED
+
+FO0150 is the equation-number class out/644 named: `11 R(x y)=...`
+with the number folded into the expression. No scale reconciles a
+flush-left equation number against a thin math space, and the refit
+confirms it by not moving.
+
+--------------------------------------------------------------------
+AND NINE NEW RED ROWS, WITH A PATTERN
+
+FO0081, FO0093, FO0114, FO0115, FO0134, FO0151, FO0162, FO0172,
+FO0221. These were SILENT or GREY only because a loose fit was hiding
+inside a loose instrument.
+
+A LEAD, NOT YET A FINDING. Set-builder notation is enriched among the
+red rows against its own base rate in the placed population:
+
+    set braces \{ or \left\{     RED  8/18 (44.4%)   placed 17/145 (11.7%)
+    \mid                         RED  6/18 (33.3%)   placed 13/145 ( 9.0%)
+    \quad                        RED  3/18 (16.7%)   placed 15/145 (10.3%)
+    \operatorname                RED  2/18 (11.1%)   placed 12/145 ( 8.3%)
+
+Braces at 3.8x and `\mid` at 3.7x; the two controls are flat, which is
+what makes the first two worth looking at rather than an artefact of
+long expressions being flagged more often. EIGHT ROWS IS EIGHT ROWS --
+against an expected 2.1 it is well beyond chance, but it is a lead and
+is recorded as one.
+
+The mechanism to test, and NOT tested here: `\mid` takes LaTeX's
+relation spacing, which is wide, and `\left\{...\right\}` sizes braces
+to their content. If MathPix's reconstruction spaces the bar or sizes
+the braces differently from the page, everything after the bar shifts
+-- a displacement INSIDE the expression, which is exactly "placed
+right, shape wrong". That is a testable prediction: the residual
+should concentrate to one side of the bar.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * THE EIGHTEEN ARE UNREVIEWED. Nine are new and were never looked
+    at; nine carried over from a set whose POOR_FIT verdict was
+    confirmed, but at different scores under a different calibration.
+  * THE SIX HIGH-EDGE ROWS want a scale beyond +12% and none is
+    placed. Widening the band would let them in and would also let
+    more degeneracy in at the low end; that trade is unmeasured.
+  * NO FALSE-NEGATIVE RATE STILL. 127 SILENT rows, none reviewed.
+  * The set-builder enrichment is measured on 18 red rows of one
+    document.
