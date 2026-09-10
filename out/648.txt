@@ -1,0 +1,115 @@
+648 - MathPix's LaTeX against the author's, over 389 documents
+===============================================================
+
+out/647 used one author source to settle one token. Most arXiv papers
+ship theirs, so the same comparison runs corpus-wide with no
+rasteriser, no scale estimate and no placement in between -- three
+things that have each been wrong at least once in 639-646.
+
+`tools/authordiff.py census` and `... geometry`.
+
+--------------------------------------------------------------------
+WHAT IS AVAILABLE
+
+    2,826 document directories
+      389  have BOTH an author `.tgz` and MathPix output
+      500  have an author `.tgz` at all
+        7  have an author source AND an evidence table
+
+THE FILE EXTENSION LIES ABOUT THE FORMAT. 29 of the 389 are a gzip of
+ONE `.tex`; the other 360 are real tarballs, from 1 to 190 `.tex`
+members. The reader decides on the ustar magic, not the name, and
+concatenates every member -- a paper split across files would
+otherwise be read as whichever happens to be first.
+
+--------------------------------------------------------------------
+THE CENSUS -- WHAT MATHPIX WRITES THAT THE AUTHOR DID NOT
+
+389 pairs. "author never" counts documents where the author uses the
+construct ZERO times and MathPix uses it at least once.
+
+    token              author   mathpix   ratio   docs   author never
+    \left(               3124     31076     9.9    349        176
+    \boldsymbol{         1238     12269     9.9    115         84
+    \operatorname{        400      9275    23.2    299        257
+    { }^{                  86      7557    87.9    333        320
+    \mathfrak{            752      4260     5.7     32          7
+    \left\{               374      2979     8.0    248        176
+    \mid                 1359      3693     2.7    196        113
+    \quad                2977      3755     1.3    190         59
+    \stackrel              132       239     1.8     40         22
+    \cdots                1341      1416     1.1    100         16
+
+`\cdots` at 1.1 is the control that makes the rest readable: a
+construct MathPix reproduces rather than normalises.
+
+--------------------------------------------------------------------
+AND THE HALF THAT MAKES THE CENSUS USEFUL
+
+A RATIO SAYS MATHPIX WRITES SOMETHING ELSE. IT DOES NOT SAY THE PAGE
+LOOKS DIFFERENT. Each pair rendered and the ink compared:
+
+    class                mathpix  author   delta       verdict
+    { }^{ } prescript        475     436    +39  (+8.9%)  GEOMETRIC
+    \left(                   302     288    +14  (+4.9%)  GEOMETRIC
+    \mid                     675     657    +18  (+2.7%)  GEOMETRIC
+    \operatorname            334     334     +0            identical ink
+    \left\{                  286     286     +0            identical ink
+    \cdots                   352     352     +0            identical ink
+    \boldsymbol              107     107     +0   same width, other glyphs
+
+`\operatorname{det}` FOR `\det` IS THE MOST SUBSTITUTED TOKEN IN THE
+CORPUS -- 23x, 257 documents where the author never writes it -- AND
+IT RENDERS TO IDENTICAL INK. It cannot produce a residual and must
+never be flagged as one. Same for `\left\{` at this size and `\cdots`.
+
+--------------------------------------------------------------------
+THE RANKING THIS PRODUCES, AND IT IS NOT THE ONE I WAS WORKING ON
+
+Geometric effect against prevalence:
+
+  1. `{ }^{ }` PRESCRIPT   +8.9% width, introduced in 320 of 333
+     documents, 88x the author rate. The dominant class by both
+     measures, and by a distance.
+  2. `\left(`              +4.9%, 176 documents.
+  3. `\mid`                +2.7%, 113 documents.
+  4. `\boldsymbol`         a GLYPH substitution rather than a spacing
+     one -- same width, different ink -- 84 documents. A different
+     kind of defect and it needs a different check.
+
+I SPENT out/646 AND out/647 ON THE THIRD ONE. `\mid` surfaced because
+it was enriched among eighteen flagged rows, and eighteen flagged rows
+are the rows that FAILED, not a census. The corpus says the empty-group
+prescript is three times the effect in three times the documents, and
+nothing in the red list pointed at it.
+
+That is the same shape as every population finding this project has
+recorded: the instrument was right and the sample it was reasoning
+from was not the population.
+
+--------------------------------------------------------------------
+WHAT IT MEANS FOR AN EDGE-CASE COLLECTION
+
+1,637 substituted bars across 113 documents is not 1,637 findings; it
+is one finding with 1,637 instances. A collection that keeps them all
+is 1,637 copies of the same edge, and a collection that keeps four
+representatives of each CLASS covers more ground in less space. The
+census gives the classes and the geometry test says which of them can
+produce a visible residual at all -- three of the seven tested.
+
+--------------------------------------------------------------------
+NOT CLAIMED
+
+  * NOT AN ALIGNED COMPARISON. Token counts over whole documents
+    cannot say a given expression was changed, only that one source
+    uses a construct the other does not. Alignment needs the evidence
+    table and only 7 of 389 pairs have one.
+  * THE GEOMETRY IS ONE MINIMAL EXPRESSION PER CLASS. `\left(` around
+    a fraction differs far more than `\left(x+y\right)`; the deltas
+    are a floor, not an average.
+  * `\boldsymbol{R}` was paired against `\mathbf{R}`. The author of
+    0902.0431 writes a macro `\R`, and what it expands to was not
+    checked, so that row is the weakest in the table.
+  * 389 of 2,826 directories. Whether documents WITH a source differ
+    from those without is unmeasured.
+  * Nothing was changed in the pipeline.
