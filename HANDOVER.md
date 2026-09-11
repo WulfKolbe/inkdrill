@@ -433,9 +433,12 @@ placement edges lean left (7 of 12 eye errors); and out/660 found two
 limits the books expose. `margin` is blind when an expression fills
 more than half its line (no non-overlapping rival fits, so margin =
 score), and one document scale cannot serve a book set in two type
-sizes (johnston's refit scales peak at 0.50 and 0.60). Whether to
-suppress band-edge marks or withhold johnston's is the USER'S
-decision, since it reopens 658 — out/660 §6 lists the options. (2) MathPix errors:
+sizes (johnston's refit scales peak at 0.50 and 0.60). The user
+DECIDED (2026-09-11): publish as measured — 658 stands, the two
+limits are known and not acted on. The corpus marks and their work
+directories are in `~/inkdrill-marks/` (`index.json`); re-emit with
+`formulamarks marks <bibkey> --work <dir>`, which refuses if the
+evidence rows or `lines.json` have changed since. (2) MathPix errors:
 none found yet. (3) whitespace in large open expressions — with
 MathPix, who fixed a de-tokenizer bug inventing invisible brackets;
 re-run `tools/fuzzyalign.py` on their next build. (4) matrix-arrangement

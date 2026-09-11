@@ -145,6 +145,12 @@ halfway through its first glyph and FO2689 cuts its last.
 
 Nothing here changes the closed constants.
 
+DECIDED 2026-09-11 by the user: (a), publish as measured. The 658
+policy stands unchanged, Johnston included; limits one and two stay
+recorded as known, not acted on. The marks are kept, with the work
+directories `formulamarks marks` re-emits from, in ~/inkdrill-marks/
+(index.json lists every document).
+
 ====================================================================
 7. MIELKE
 ====================================================================
