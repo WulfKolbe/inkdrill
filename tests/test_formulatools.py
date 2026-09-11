@@ -276,6 +276,56 @@ class TF_4_MarksContract(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("no row could vote", d["refused"])
 
+    def _marks_on(self, edit_tex=None, edit_lines=False):
+        """formulamarks.marks over a finished run of ten real-shaped rows,
+        after optionally changing the evidence or the lines."""
+        import contextlib, io
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td); doc = lib / "X"; work = lib / "work"
+            doc.mkdir(); work.mkdir()
+            tex = _HEAD + "".join(
+                _row(rf"X\_FO{i:04d}", 3, r"\confcell{confgreen}{1.000}", "s",
+                     rf"\FitMath{{$\displaystyle x_{{{i}}}+y$}}", _img(f"X_FO{i:04d}"))
+                for i in range(1, 11)) + r"\end{longtable}"
+            (doc / "evidence-formula.tex").write_text(tex)
+            (doc / "X.lines.json").write_text('{"pages": []}')
+            recs = [dict(id=f"X_FO{i:04d}", page=3, host_page=3, math=f"x_{{{i}}}+y",
+                         region=dict(top_left_x=100, top_left_y=60 * i, width=125, height=46),
+                         frame=(1.6, 1.6, 0.0, 0.0), rect=[10, 5, 60, 40], crop_w=200,
+                         crop_h=74, conf=1.0, gaps=9, margin=0.3, score=0.95,
+                         edge_cuts=0, blobs_in_rect=5, formula_blobs=5, crop=None)
+                    for i in range(1, 11)]
+            (work / "shard0.json").write_text(json.dumps(recs))
+            (work / "meta.json").write_text(json.dumps(dict(
+                measured_against=fm._inputs(doc, "X"), jobs=1, scale=0.665,
+                inkdrill="test")))
+            if edit_tex:
+                (doc / "evidence-formula.tex").write_text(edit_tex(tex))
+            if edit_lines:
+                (doc / "X.lines.json").write_text('{"pages": [], "x": 1}')
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                rc = fm.marks(lib, "X", work)
+        return rc, json.loads(out.getvalue())
+
+    def test_unchanged_evidence_keeps_every_mark(self):
+        rc, d = self._marks_on()
+        self.assertEqual((rc, d["refused"], len(d["rows"])), (0, None, 10))
+        self.assertEqual(d["rows"][0]["math"], "x_{1}+y")
+
+    def test_a_changed_reading_drops_that_row_only(self):
+        """pdfdrill republishes the evidence -- one corrected row must not
+        cost the other nine their marks."""
+        rc, d = self._marks_on(edit_tex=lambda t: t.replace("x_{3}+y", "x_{3}+z"))
+        self.assertEqual((rc, d["refused"], len(d["rows"])), (0, None, 9))
+        self.assertIn("reading changed", d["not_measured"]["X_FO0003"])
+        self.assertEqual(d["counts"]["reading_changed"], 1)
+
+    def test_changed_lines_refuse_the_document(self):
+        rc, d = self._marks_on(edit_lines=True)
+        self.assertEqual(rc, 2)
+        self.assertIn("lines.json", d["refused"])
+
     @staticmethod
     def _rows():
         base = dict(conf=1.0, crop_h=74, blobs_in_rect=5, formula_blobs=5,

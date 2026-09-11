@@ -39,11 +39,16 @@ WHAT A ROW SAYS
 
 WHAT IT REFUSES
 
-  the whole document, when the evidence rows (id and maths) or
-  `lines.json` changed since `run` -- digests recorded then and compared
-  now, because a mark set must name the build it describes (HANDOVER,
-  Coordination). Not the bytes of `evidence-formula.tex`: pdfdrill
-  rewrites that file to publish these marks;
+  the whole document, when `lines.json` changed since `run` -- every
+  host region may have moved (digest recorded then, compared now; a mark
+  set must name the build it describes, HANDOVER, Coordination);
+  A ROW, not the document, when its reading changed since `run`: it
+  moves to `not_measured` as "reading changed", and every unchanged row
+  keeps its mark. pdfdrill republishes `evidence-formula.tex` -- to
+  insert these marks, to render rows it once could not -- and a
+  document-wide digest over the rows would refuse every mark for one
+  corrected row. Each emitted row carries the `math` it was measured
+  on, so a consumer can hold its own row to the same test;
   the whole document, when the run is incomplete or no row could vote a
   scale; a row, with its reason in `not_measured`, when it could not be
   measured. No row is ever given a default.
@@ -206,12 +211,11 @@ def marks(library, bib, work):
     if not meta_f.exists():
         return _refuse(bib, f"no finished run in {work}; `run` first")
     meta = json.loads(meta_f.read_text())
-    now = _inputs(doc, bib)
-    if now != meta["measured_against"]:
-        changed = sorted(k for k in now if now[k] != meta["measured_against"].get(k))
-        return _refuse(bib, f"stale: {', '.join(changed)} changed since the "
-                            f"run; the marks describe a build that no longer "
-                            f"exists", measured_against=meta["measured_against"])
+    now, was = _inputs(doc, bib), meta["measured_against"]
+    lines_key = f"{bib}.lines.json"
+    if now[lines_key] != was.get(lines_key):
+        return _refuse(bib, f"stale: {lines_key} changed since the run; every "
+                            f"host region may have moved", measured_against=was)
     shards = sorted(work.glob("shard*.json"))
     if len(shards) != meta["jobs"]:
         return _refuse(bib, f"incomplete run: {len(shards)} of {meta['jobs']} "
@@ -233,8 +237,14 @@ def marks(library, bib, work):
                 logged[m.group(1)] = m.group(2).lower()
     measured = {r["id"]: r for r in res}
     out, not_measured = [], {}
+    changed = 0
     for e in rows(doc / "evidence-formula.tex"):
         r = measured.get(e["id"])
+        if r is not None and e["math"] != r["math"]:
+            changed += 1
+            not_measured[e["id"]] = ("reading changed since the run; re-run "
+                                     "to mark it")
+            continue
         if r is None:
             not_measured[e["id"]] = (
                 "not rendered by the producer (no \\FitMath)"
@@ -251,6 +261,7 @@ def marks(library, bib, work):
         px, frac, y_from = to_region(r)
         out.append(dict(
             id=r["id"], page=r["page"], host_page=r["host_page"],
+            math=r["math"],
             region=r["region"], mark=r["mark"], why_no_mark=why,
             rect=px if r["mark"] else None,
             rect_frac=frac if r["mark"] else None,
@@ -261,6 +272,7 @@ def marks(library, bib, work):
     flags = collections.Counter(f for r in out for f in (r["flags"] or ["SILENT"]))
     counts = dict(
         evidence_rows=len(out) + len(not_measured), measured=len(out),
+        reading_changed=changed,
         marked=sum(1 for r in out if r["mark"]),
         not_measured=dict(collections.Counter(not_measured.values())),
         suppressed=dict(collections.Counter(

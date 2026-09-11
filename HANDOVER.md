@@ -412,7 +412,7 @@ pixel of pdfdrill's full-size crop), `rect_frac`, `host_page`,
 | **pdfdrill's host-line rule**, copied (`first_occurrence_lines` = `inlinectx.load_spans` + `first_occurrences`) | a rectangle is meaningless on another line. The copy and inkdrill's old per-page cursor agree on 37,503 of 37,503 rows both place, but a copy can drift: **pdfdrill must compare `region` with its own host line and draw nothing on a mismatch** |
 | **MathPix frame**, not inkdrill page px | pdfdrill's crop is the region resized to its MathPix pixel size |
 | **page frames per page and per axis, CropBox-aware** (`page_frames`, `frame_of`) | MathPix's page is the CropBox, `inspect/pages` the MediaBox. 4 of 21 documents are inset (cardona, voloshin, gilmore, kohlhase-omdoc); one width ratio cut the wrong strip there, correlation −0.014 against +0.924 once mapped |
-| **staleness on (id, maths) and `lines.json`**, not the bytes of `evidence-formula.tex` | pdfdrill rewrites that file to insert the marks; a byte hash would make every mark set refuse itself |
+| **staleness: `lines.json` per document, the reading per ROW** — not the bytes of `evidence-formula.tex`, and not a digest over all rows | pdfdrill rewrites that file to insert the marks and to render rows it once could not; a byte hash, or a digest over every row, would refuse every mark for one corrected row. A changed row goes to `not_measured` as "reading changed"; each row carries the `math` it was measured on |
 
 **NOT INKDRILL'S: stale published crops.** pdfdrill's `render_crops`
 caches by TITLE (`if f.is_file() and f.stat().st_size > 500: cached`),
@@ -436,9 +436,9 @@ score), and one document scale cannot serve a book set in two type
 sizes (johnston's refit scales peak at 0.50 and 0.60). The user
 DECIDED (2026-09-11): publish as measured — 658 stands, the two
 limits are known and not acted on. The corpus marks and their work
-directories are in `~/inkdrill-marks/` (`index.json`); re-emit with
-`formulamarks marks <bibkey> --work <dir>`, which refuses if the
-evidence rows or `lines.json` have changed since. (2) MathPix errors:
+directories are in `~/inkdrill-marks/` (`index.json`, `README.md` for
+pdfdrill, `stale-crops.json`); re-emit with `formulamarks marks
+<bibkey> --work <dir>`. (2) MathPix errors:
 none found yet. (3) whitespace in large open expressions — with
 MathPix, who fixed a de-tokenizer bug inventing invisible brackets;
 re-run `tools/fuzzyalign.py` on their next build. (4) matrix-arrangement
