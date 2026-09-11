@@ -245,6 +245,37 @@ class TF_4_MarksContract(unittest.TestCase):
             tex.write_text(FIXTURE.replace("w_{3}", "w_{4}"))
             self.assertNotEqual(fm._inputs(doc, "X"), before)
 
+    def _fake_run(self, finder_body):
+        """formulamarks.run against a stand-in formulafind, on the
+        fixture table. Returns (rc, the JSON it printed)."""
+        import contextlib, io, sys as _sys
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td)
+            (lib / "X").mkdir()
+            (lib / "X" / "evidence-formula.tex").write_text(FIXTURE)
+            (lib / "X" / "X.lines.json").write_text('{"pages": []}')
+            finder = lib / "finder.py"
+            finder.write_text(finder_body)
+            old = fm.FINDER
+            fm.FINDER = finder
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = fm.run(lib, "X", lib / "work", 1)
+            finally:
+                fm.FINDER = old
+        return rc, json.loads(out.getvalue().splitlines()[0])
+
+    def test_a_crashed_vote_is_refused_as_a_crash(self):
+        rc, d = self._fake_run("import sys\nprint('Traceback')\nsys.exit(1)\n")
+        self.assertEqual(rc, 2)
+        self.assertIn("crashed", d["refused"])
+
+    def test_a_vote_with_no_scale_is_refused_as_such(self):
+        rc, d = self._fake_run("print('no row could establish a scale')\n")
+        self.assertEqual(rc, 2)
+        self.assertIn("no row could vote", d["refused"])
+
     @staticmethod
     def _rows():
         base = dict(conf=1.0, crop_h=74, blobs_in_rect=5, formula_blobs=5,

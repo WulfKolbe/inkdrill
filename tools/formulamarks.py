@@ -120,8 +120,14 @@ def run(library, bib, work, jobs):
     t0 = time.time()
     _log(f"{bib}: voting the document scale on {len(sample)} of {len(ev)} rows")
     vote = subprocess.run(base + ["--ids", ",".join(r["id"] for r in sample)],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, errors="replace")
     (work / "vote.log").write_text(vote.stdout + vote.stderr)
+    # A CRASH IS NOT A VERDICT. The first corpus run reported mielke as
+    # "no row could vote a scale" when formulafind had died on a byte
+    # pdflatex echoed back -- a refusal naming the wrong cause.
+    if vote.returncode != 0:
+        return _refuse(bib, f"the scale vote crashed (rc={vote.returncode}); "
+                            f"see vote.log", work=str(work))
     m = re.search(r"^document scale: ([\d.]+)", vote.stdout, re.M)
     if not m:
         return _refuse(bib, "no row could vote a document scale; see vote.log",
@@ -234,8 +240,9 @@ def marks(library, bib, work):
                 "not rendered by the producer (no \\FitMath)"
                 if e["math"] is None else
                 logged.get(e["id"].split("_")[-1],
-                           "not placed (no blob to place in the crop or "
-                           "the rendering)"))
+                           "not placed (at every scale of the refit band "
+                           "the rendering is wider than its host line, or "
+                           "under 4 px)"))
             continue
         why = why_no_mark(r)
         if (why is None) != r["mark"]:

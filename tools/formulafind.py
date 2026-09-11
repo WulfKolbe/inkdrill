@@ -117,7 +117,8 @@ def page_frames(library, bibkey):
         return frames, {pg["page"]: "no source pdf" for pg in pages}
     last = max(pg["page"] for pg in pages)
     info = subprocess.run(["pdfinfo", "-box", "-f", "1", "-l", str(last),
-                           str(pdf)], capture_output=True, text=True).stdout
+                           str(pdf)], capture_output=True, text=True,
+                          errors="replace").stdout
     box = collections.defaultdict(dict)
     for m in re.finditer(r"^Page\s+(\d+)\s+(MediaBox|CropBox|rot):\s+(.*)$",
                          info, re.M):
@@ -369,7 +370,9 @@ def render(math, out, dpi):
         (t / "f.tex").write_text(STANDALONE % math, encoding="utf-8")
         subprocess.run(["pdflatex", "-interaction=nonstopmode",
                         "-halt-on-error", "f.tex"],
-                       cwd=t, capture_output=True, text=True)
+                       cwd=t, capture_output=True, text=True,
+                       errors="replace")   # pdflatex echoes the input's bytes:
+                                           # mielke's 0xa3 crashed a whole vote
         if not (t / "f.pdf").exists():
             return False
         subprocess.run(["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=pgmraw",
