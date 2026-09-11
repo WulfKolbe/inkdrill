@@ -1,0 +1,214 @@
+659 - what happened to the formula evidence: no interface, stale crops, and three defects in inkdrill's own tools
+==============================================================================================================
+
+The user's report: pdfdrill published the formula evidence with
+confidence values and NO marks; low confidence "shows that the cropping
+range is wrong"; example 0902.0431_FO0068. And: check that yesterday's
+tested changes are integrated and documented.
+
+They were not. Nothing from 630-658 had reached pdfdrill or any
+document: the marking policy lived in `tools/formularesidual.py`,
+there was no entry point a consumer could call, and CLAUDE.md,
+HANDOVER.md and docs/ did not mention the formula tools at all.
+
+====================================================================
+1. WHY THERE ARE NO MARKS
+====================================================================
+
+pdfdrill has no consumer for them. `reports/evidence.py` opens:
+"Lookup, not reading matter. No ink, no legend, no findings, no
+cell-rect marks." A grep of pdfdrill's src/ finds no reference to
+formulafind, formularesidual or any inkdrill formula output. inkdrill
+had nothing for it to call either -- until now: section 4.
+
+====================================================================
+2. FO0068, AND THE STALE CROPS BEHIND IT
+====================================================================
+
+FO0068's published crop is the RIGHT RECTANGLE CUT FROM THE WRONG
+PAGE: the region {491, 873, 699x48} of its host line on page 4, cut
+from page 177 instead (correlation with page 177 at that rectangle
++0.714; with the host line -0.018). The size is exactly what the
+region predicts, which is why a size check passed it.
+
+The cause is pdfdrill's crop cache. `render_crops` skips any title
+whose file exists (`if f.is_file() and f.stat().st_size > 500:
+cached += 1; continue`), so a crop is rendered ONCE and never again,
+whatever the host-line join does later. FO0068's was rendered
+2026-09-03 09:09, ten minutes after pdfdrill's c6c184c3, under the
+join as it stood then; the first-occurrence rule pdfdrill uses today
+arrived with 42b92d15 (2026-09-06). `report-crops-b` is a downscale
+of `report-crops`, so it inherits every stale crop.
+
+HOW MANY, corpus-wide. `tools/cropcheck.py` compares every published
+crop with its row's host line cut LOSSLESS from `inspect/pages`,
+resampled to the crop's size, by pixel correlation. 21 documents,
+37,610 rows, 37,491 checkable:
+
+    document                  checked  wrong
+    1510.06699                  1,059     85   8.03%
+    0902.0431                   3,163     60   1.90%
+    2010.14265                    368      7   1.90%
+    2501.06662                    385      3   0.78%
+    2106.07890                    318      2   0.63%
+    bradley_spring22              181      2   1.10%
+    the other 15 (all books)   31,017      0
+    TOTAL                      37,491    159   0.42%
+
+Every stale crop is in an arXiv-era document; the 15 books are clean.
+Within a document they come in RUNS of consecutive ids (0902.0431
+FO0007-FO0077; 1510.06699 FO0069-0083, FO0585-0593, FO0651-0679),
+i.e. whole stretches of lines, not scattered rows. Three shapes, all
+seen by eye: a different page (FO0068); the line directly ABOVE the
+host (1510.06699 FO0719, FO0799, FO0669, FO0904); the same words at a
+different occurrence (0902.0431 FO0034 shows the bold centred
+"Exceptional Lie group E6", its host is the "III." heading).
+
+THE CUT, 0.35, is placed by eye in an empty interval. The highest row
+judged wrong is 0.262 and the lowest judged right 0.413, and no row
+of the 37,491 lies between: 5 of 5 wrong below, 10 of 10 right from
+0.413 to 0.548. The first value, 0.5, came from 0902.0431 alone and
+called four correct crops wrong -- thin glyphs, a sub-pixel shift, and
+penev_A is a scan.
+
+    correlation   rows
+    < 0.0           86
+    0.0-0.3         73
+    0.3-0.5         55     (none below 0.413)
+    0.5-0.7      1,200
+    0.7-0.9      8,348
+    >= 0.9      27,729
+
+THE REMEDY IS PDFDRILL'S, and is not done here: key the crop cache by
+(page, region) rather than by title, or invalidate and re-render. The
+159 ids are listed at the end of this file.
+
+====================================================================
+3. "LOW CONFIDENCE SHOWS THE CROP IS WRONG" -- REFUTED
+====================================================================
+
+A formula row's confidence and page are its HOST LINE's
+(`FormulaRow.shown_confidence` returns `host_line.confidence`): the
+number is MathPix's opinion of the whole line, and says nothing about
+where a crop was cut. Measured on the 37,491 checked rows:
+
+    host-line confidence   rows    wrong crop
+    >= 0.8               33,676    146   0.43%
+    <  0.8                3,815     13   0.34%
+
+No association. A low-confidence row belongs in the residual report
+because the producer is unsure of the line, which is what 658 decided;
+it is not evidence about the crop.
+
+====================================================================
+4. WHAT IS NOW INTEGRATED (abfc7f7)
+====================================================================
+
+`tools/formulamarks.py run <bibkey> --work DIR` then `marks`: one JSON
+document on stdout, pdfdrill's `reportpages` convention. Per row
+`mark`, `why_no_mark`, `rect` in MathPix pixels relative to the host
+region (a pixel of pdfdrill's full-size crop), `rect_frac`,
+`host_page`, `region`, `flags`. Refuses the document when the rows
+(id, maths) or `lines.json` changed since the run, and names why.
+The contract is in HANDOVER, "Formula evidence".
+
+Checked by eye on pdfdrill's OWN crops of 1605.05775: 7 of 7 marks on
+the right expression, some edges a glyph early or late (the known left
+bias). 26 of 138 rows marked there against 66% on 0902.0431 -- its
+expressions are short (median 3 gaps, 47 single symbols), and the
+closed policy suppresses exactly those.
+
+The corpus run (21 documents) is in progress; its counts are out/660.
+
+WHAT A MARK CANNOT REACH. 67 rows carry a published crop but no line
+inkdrill can find: 58 because the evidence shows a REWRITTEN reading
+(`\operatorname{\mathbf{Rel}}` where MathPix's line holds
+`\boldsymbol{\operatorname{Rel}}`) and pdfdrill keys the host line on
+the raw reading, which the evidence file does not carry; 6 not
+rendered; 3 with no similar span. They appear under `not_measured`,
+never with a guessed line. pdfdrill can close the 58 by passing its
+host line or the raw latex.
+
+====================================================================
+5. THREE DEFECTS IN INKDRILL'S OWN TOOLS (fixed, pinned)
+====================================================================
+
+`tests/test_formulatools.py`, 20 hermetic tests, fixture numbers
+measured.
+
+a. `rows()` parsed the whole table with one lazy regex that demanded
+   every cell. A row with no published crop took the NEXT row's
+   picture and swallowed that row: 0902.0431 lost FO0020, FO0022,
+   FO0052, FO0053, FO0065, FO0071 and FO0341 from every measurement
+   since 639, and FO0019, FO0021, FO0051, FO0064, FO0070 and FO0340
+   carried a neighbour's picture. `\lowconf{...}` leaked into 35 ids of
+   1510.06699. Rows are now parsed from `\ident` to `\ident` -- a row
+   terminator also occurs inside an `array` in the maths (johnston
+   FO2040) -- and a missing cell is None. 37,610 of 37,610 idents, 0
+   polluted ids.
+
+   What this touches in 630-658: those measurements cut their crops
+   from the lossless page, so the placement figures stand for the rows
+   they measured; seven rows were never measured, and the six
+   mis-paired rows were grouped onto a neighbour's line for the
+   OVERLAP and ORDER rules.
+
+b. The MathPix -> page-image mapping read ONE ratio off page 1's width.
+   MathPix's page is the CropBox and `inspect/pages` the MediaBox; on
+   the four books whose CropBox is inset (cardona, voloshin, gilmore,
+   kohlhase-omdoc) every crop was the wrong strip -- the check first
+   reported those two books 100% wrong, and the error was mine.
+   `page_frames`/`frame_of` map per page, per axis, inset-aware, and
+   refuse what they cannot map (0 pages of 21 documents refused).
+   Correlation with the published crops, 1-in-40 sample: gilmore
+   +0.959, cardona +0.924, voloshin +0.946, omdoc +0.854. None of
+   630-658 measured an inset document, so no earlier figure moves.
+
+c. Host lines by a per-page cursor, not pdfdrill's rule. Now a copy of
+   `inlinectx` (first span in document order, by equality); it and
+   the old cursor agree on 37,503 of 37,503 rows both place. A copy
+   can drift, so the consumer compares `region`.
+
+Full suite 1,247 tests, 37 skipped.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * The content check detects a crop showing a DIFFERENT LINE. A crop
+    of the right line cut a few pixels off would correlate high and
+    pass; that is not measured here.
+  * The cut is eye-placed on 15 rows either side of an empty interval,
+    not calibrated on labelled data.
+  * 119 rows could not be checked: 52 have no published crop, 67 no
+    host line inkdrill can find (section 4).
+  * The stale-crop ORIGIN (the 09-03 join) is inferred from one row's
+    timestamps and pdfdrill's commit history, not re-run.
+
+====================================================================
+THE 159 STALE CROPS (published crop < 0.35 against its host line)
+====================================================================
+
+0902.0431 (60): FO0007 FO0008 FO0009 FO0010 FO0011 FO0012 FO0013 FO0014
+  FO0015 FO0017 FO0018 FO0020 FO0022 FO0023 FO0024 FO0025 FO0026 FO0027
+  FO0028 FO0029 FO0030 FO0031 FO0032 FO0033 FO0034 FO0035 FO0036 FO0037
+  FO0038 FO0039 FO0040 FO0041 FO0042 FO0045 FO0046 FO0047 FO0048 FO0049
+  FO0050 FO0053 FO0054 FO0055 FO0057 FO0059 FO0060 FO0061 FO0062 FO0063
+  FO0065 FO0066 FO0067 FO0068 FO0069 FO0072 FO0074 FO0075 FO0076 FO0077
+  FO0935 FO2334
+1510.06699 (85): FO0069 FO0070 FO0071 FO0072 FO0073 FO0074 FO0075 FO0076
+  FO0077 FO0078 FO0079 FO0080 FO0081 FO0082 FO0083 FO0329 FO0330 FO0550
+  FO0585 FO0586 FO0587 FO0588 FO0589 FO0590 FO0591 FO0592 FO0593 FO0602
+  FO0603 FO0616 FO0617 FO0618 FO0619 FO0620 FO0621 FO0622 FO0628 FO0651
+  FO0652 FO0653 FO0654 FO0655 FO0656 FO0658 FO0659 FO0660 FO0664 FO0665
+  FO0666 FO0667 FO0668 FO0669 FO0670 FO0671 FO0672 FO0673 FO0674 FO0675
+  FO0676 FO0677 FO0678 FO0679 FO0695 FO0696 FO0697 FO0698 FO0706 FO0707
+  FO0708 FO0709 FO0719 FO0720 FO0764 FO0777 FO0799 FO0859 FO0860 FO0861
+  FO0862 FO0901 FO0902 FO0903 FO0904 FO0905 FO0910
+2010.14265 (7): FO0219 FO0297 FO0298 FO0299 FO0300 FO0301 FO0335
+2106.07890 (2): FO0001 FO0002
+2501.06662 (3): FO0001 FO0030 FO0100
+bradley_spring22 (2): FO0007 FO0009
+
+Re-run: python3 tools/cropcheck.py run <bibkey> --out F.json, then
+        python3 tools/cropcheck.py report F.json ...

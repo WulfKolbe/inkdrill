@@ -44,10 +44,17 @@ sys.path.insert(0, str(ROOT))
 from tools.formulafind import (frame_rect, host_regions,  # noqa: E402
                                page_frames, rows)
 
-#: below this the published crop does not show its row's line. The
-#: measured distribution is bimodal with an empty middle, so the value
-#: is not critical -- anything from 0.3 to 0.6 splits 0902.0431 the same.
-WRONG = 0.5
+#: below this the published crop does not show its row's line. Placed
+#: BY EYE in the empty interval of the corpus-wide distribution
+#: (2026-09-11, 37,491 checked rows of 21 documents): the highest row
+#: judged a WRONG line was 0.262 (1510.06699 FO0719, the line above
+#: its host) and the lowest judged RIGHT was 0.413 (kohlhase-omdoc
+#: FO0266), with no row between. 5 of 5 wrong below, 10 of 10 right
+#: from 0.413 to 0.548 (penev_A, a scan, sits at 0.41-0.45).
+#: The first value, 0.5, came from 0902.0431 alone and called four
+#: correct crops wrong -- six rows from 0.41 to 0.55 were all the right
+#: line, low only through a sub-pixel shift on thin glyphs.
+WRONG = 0.35
 
 
 def _pgm(args):

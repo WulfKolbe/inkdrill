@@ -551,6 +551,26 @@ normalisation in the same function as the constant** so the two cannot
 be separated by a later edit. This applies to every angle and gradient
 threshold in the warp work, before either unit exists.
 
+## Formula evidence (tools, not units)
+
+`tools/formulafind.py` places each inline formula of a published
+`evidence-formula.tex` in its host line; `tools/formularesidual.py`
+classifies and holds the marking policy (closed in out/658 — change
+its constants only with new eye verdicts); `tools/formulamarks.py` is
+the JSON entry point pdfdrill calls; `tools/cropcheck.py` checks
+published crops by content. The contract is in HANDOVER, "Formula
+evidence". Three rules cost real time:
+
+- **Measure on the lossless page, never on a published crop.** The
+  crops are downsampled for publishing, and the residual report is a
+  handful of rows a reader is asked to trust.
+- **MathPix pixels are the CropBox; `inspect/pages` is the MediaBox.**
+  Map per page and per axis through `page_frames`. One ratio off one
+  page's width is wrong on 4 of 21 documents and still looks like a line.
+- **Parse a table ROW BY ROW.** A regex over the whole body that
+  demands every cell borrows the next row's cell wherever one is
+  missing, and nothing raises.
+
 ## Where the deliberate gaps are
 
 Three things are missing on purpose, each with the measurement that

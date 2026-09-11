@@ -372,6 +372,69 @@ lattice row is still positional, and pages are 28 rows deep on
 Geometric_topology. A manifest carrying the CELL rect closes it; that
 is 598 #4 and #2's remaining half.
 
+## Formula evidence — the marks contract with pdfdrill
+
+Built over out/630–659; the state on 2026-09-11.
+
+**WHAT PDFDRILL PUBLISHES.** `evidence-formula.tex`: one row per
+DISTINCT inline formula — id, page, the producer's confidence, the
+maths rendered (`\FitMath`), and a crop of the line it first occurs on
+(`report-crops/`, scaled copies in `report-crops-b/`). 21 documents,
+37,610 rows.
+
+**WHAT INKDRILL ADDS: where the expression sits in its line.**
+`tools/formulafind.py` renders the maths, cuts the host line LOSSLESS
+from `inspect/pages` and places the rendering along it (blob ink/gap
+profiles, a bigint Jaccard scan, a document scale voted by rows with
+≥ 6 gaps, a per-row refit). Never measured on a published crop: those
+are downsampled, and out/641 measured what that moves. The user's
+rule: a residual report is a few rows and never holds downsampled data.
+
+`tools/formularesidual.py` classifies and HOLDS THE MARKING POLICY,
+closed in out/658 on 155 eye verdicts over two documents. A rectangle
+is drawn only if the host region is a line (≤ `NON_LINE`=3 median line
+heights), gaps ≥ 2, margin ≥ `MARK_MARGIN`=0.15, and NOT (gaps ≤
+`MARK_GAPS`=7 and edge cuts ≥ `MARK_CUTS`=1): 66.2% of rows marked,
+~1.7 wrong marks in 2,240, a mark right 99.89%. The RED flags are
+evidence-table detail, not the residual report: every error they found
+in those 155 verdicts was inkdrill's own placement. The residual
+report is the producer's own low confidence (`LOW_CONFIDENCE`=0.80).
+
+**THE INTERFACE** is `tools/formulamarks.py` — `run <bibkey> --work
+DIR` measures, `marks` re-emits — one JSON document on stdout, the
+`reportpages` convention. Per row: `mark`, `why_no_mark` (the clause),
+`rect` (MathPix px relative to the host region's top-left, i.e. a
+pixel of pdfdrill's full-size crop), `rect_frac`, `host_page`,
+`region`, `flags`.
+
+| decided | because |
+|---|---|
+| **pdfdrill's host-line rule**, copied (`first_occurrence_lines` = `inlinectx.load_spans` + `first_occurrences`) | a rectangle is meaningless on another line. The copy and inkdrill's old per-page cursor agree on 37,503 of 37,503 rows both place, but a copy can drift: **pdfdrill must compare `region` with its own host line and draw nothing on a mismatch** |
+| **MathPix frame**, not inkdrill page px | pdfdrill's crop is the region resized to its MathPix pixel size |
+| **page frames per page and per axis, CropBox-aware** (`page_frames`, `frame_of`) | MathPix's page is the CropBox, `inspect/pages` the MediaBox. 4 of 21 documents are inset (cardona, voloshin, gilmore, kohlhase-omdoc); one width ratio cut the wrong strip there, correlation −0.014 against +0.924 once mapped |
+| **staleness on (id, maths) and `lines.json`**, not the bytes of `evidence-formula.tex` | pdfdrill rewrites that file to insert the marks; a byte hash would make every mark set refuse itself |
+
+**NOT INKDRILL'S: stale published crops.** pdfdrill's `render_crops`
+caches by TITLE (`if f.is_file() and f.stat().st_size > 500: cached`),
+so a crop rendered under the old host-line join (before their
+`42b92d15`) is never re-rendered. 0902.0431 FO0068 is the right
+rectangle cut from page 177 instead of page 4. `tools/cropcheck.py`
+finds them by CONTENT — a size check passes FO0068 — and the corpus
+count is in out/659.
+
+**THE TOOLS' OWN DEFECTS, fixed and pinned** by
+`tests/test_formulatools.py`: `rows()` let a crop-less row steal the
+next row's picture and swallow that row, and let `\lowconf{…}` into
+ids; the width-only ratio above; rows split on `\\ \hline`, which an
+`array` in the maths holds too.
+
+**OPEN, in the four workstreams out/658 separated.** (1) marking: the
+placement edges lean left (7 of 12 eye errors). (2) MathPix errors:
+none found yet. (3) whitespace in large open expressions — with
+MathPix, who fixed a de-tokenizer bug inventing invisible brackets;
+re-run `tools/fuzzyalign.py` on their next build. (4) matrix-arrangement
+repair, for low-confidence equations only.
+
 ## Coordination
 
 pdfdrill runs in `~/MX/PDFDRILL` as a peer session, owns the reports
