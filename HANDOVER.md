@@ -429,7 +429,13 @@ ids; the width-only ratio above; rows split on `\\ \hline`, which an
 `array` in the maths holds too.
 
 **OPEN, in the four workstreams out/658 separated.** (1) marking: the
-placement edges lean left (7 of 12 eye errors). (2) MathPix errors:
+placement edges lean left (7 of 12 eye errors); and out/660 found two
+limits the books expose. `margin` is blind when an expression fills
+more than half its line (no non-overlapping rival fits, so margin =
+score), and one document scale cannot serve a book set in two type
+sizes (johnston's refit scales peak at 0.50 and 0.60). Whether to
+suppress band-edge marks or withhold johnston's is the USER'S
+decision, since it reopens 658 — out/660 §6 lists the options. (2) MathPix errors:
 none found yet. (3) whitespace in large open expressions — with
 MathPix, who fixed a de-tokenizer bug inventing invisible brackets;
 re-run `tools/fuzzyalign.py` on their next build. (4) matrix-arrangement

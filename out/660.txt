@@ -1,0 +1,170 @@
+660 - the marks over the corpus: 0902.0431 reproduces id for id, and two limits of the policy the books expose
+============================================================================================================
+
+`tools/formulamarks.py run` over every document with a published
+`evidence-formula.tex`: formulafind on LOSSLESS crops cut from
+`inspect/pages`, pdfdrill's host-line rule, CropBox-aware page frames,
+per-row refit, the document scale voted on <= ~450 rows spread evenly
+over each document. Code: abfc7f7, then 210004f for mielke (below).
+4 documents at a time, 4 shards each; 20 documents in ~2 h wall,
+then mielke alone in 12 shards (~12 min) after the fix in §7.
+
+====================================================================
+1. THE NUMBERS
+====================================================================
+
+    document                        scale   rows placed marked  %rows  %plcd  edge no-rival lowconf
+    johnston-linear-matrix-algebra   0.55   5143   3048   1590  30.9%  52.2%   356     1001     239
+    lyche-numerical-linear-algebra   0.65   4638   2208   1110  23.9%  50.3%    11      367     197
+    fong-spivak-invitation          0.645   4059   1570    614  15.1%  39.1%    13      171     734
+    fong-spivak-seven-sketches       0.69   4028   1335    450  11.2%  33.7%    51      136     731
+    cardona-qft-methods             0.665   3755   2070   1068  28.4%  51.6%     9      284     219
+    gilmore-lie-groups              0.675   3473   1277    577  16.6%  45.2%    14      196     329
+    0902.0431                       0.665   3170   2276   1474  46.5%  64.8%     8      430     163
+    voloshin-hypergraph              0.66   2554   1220    524  20.5%  43.0%     3      145     191
+    mielke-geometrodynamics          0.64   1793    601    185  10.3%  30.8%     4       34     240
+    1510.06699                       0.67   1062    488    255  24.0%  52.3%     7       93     102
+    penev_A                         0.465    674    227     90  13.4%  39.6%     6       30     222
+    penev_B                         0.455    497    147     50  10.1%  34.0%     1       12     110
+    rph8-g15q                        0.65    489    255     96  19.6%  37.6%     0       25      29
+    kohlhase-omdoc                  0.665    458    135     55  12.0%  40.7%     2       20      80
+    2501.06662                      0.785    386    185     93  24.1%  50.3%     1       11      34
+    2010.14265                       0.57    369    149     51  13.8%  34.2%     0       25      87
+    2106.07890                       0.73    319    187    100  31.3%  53.5%     1       14      20
+    0707.4470                       0.635    213     71      9   4.2%  12.7%     0        4      16
+    BradleyGastaldiTerilla2023       0.64    211     56     13   6.2%  23.2%     0        4      20
+    bradley_spring22                 0.67    181     47     23  12.7%  48.9%     0        0       5
+    1605.05775                      0.665    138     65     26  18.8%  40.0%     1        8       3
+    TOTAL, 21 documents                    37610  17617   8453  22.5%  48.0%   488     3010    3771
+
+"placed" = measured and neither UNPLACEABLE (gaps <= 1) nor AMBIGUOUS
+(margin < 0.10). 658's "66.2% of rows marked" was a share of PLACED
+rows on two arXiv documents; over all rows of 21 documents the share
+is 22.5% (8,453 of 37,610), and of placed rows 48.0% (of 17,617).
+
+Why a measured row carries no mark (out/658's four clauses):
+    position not unique                      19,984
+    too short to carry a position             4,904
+    short expression cut by a rectangle edge  3,030
+    host region is not a line                   989
+
+Rows not measured, with the reason each one carries:
+    not placed (no blob to place in the crop or the rendering)                 146
+    no line match                                                               94
+    not rendered by the producer (no \FitMath)                                   6
+    render failed                                                                4
+
+====================================================================
+2. 0902.0431 REPRODUCES 658 ID FOR ID
+====================================================================
+
+1,474 rows marked, the SAME 1,474 ids 658 marked. The placed set is
+658's plus 6; 7 rows are new because the old parser dropped them
+(659 §5a). So the three tool fixes of 659 changed no published mark
+on the document the policy was closed on. (658's text quotes "2,240
+placed rows"; its own result file holds 2,270 non-grey rows -- the
+2,240 was a different filter, and is not what is compared here.)
+
+====================================================================
+3. THE POLICY ON DOCUMENTS IT WAS NOT CLOSED ON -- by eye
+====================================================================
+
+The policy was closed on two arXiv papers whose document scale was
+0.665 and 0.67. The books vote from 0.455 (penev_B, a scan) to 0.69,
+and 2501.06662 votes 0.785. Nothing had checked it there.
+
+My eye check -- NOT the corpus author's, and not blind -- on pdfdrill's
+OWN full-size crops, rectangles drawn from the JSON's `rect`:
+
+    random marked rows, seed 660     penev_B 4/4, gilmore 4/4,
+                                     johnston 4/5
+    johnston, seed 6601, shuffled    with a rival 6/6; at the band
+                                     edge 4 right, 1 wrong, 1 off
+
+Two wrong and one off in 25. All three are Johnston's, and all three
+show one of the two limits below.
+
+====================================================================
+4. LIMIT ONE: `margin` IS BLIND WHEN AN EXPRESSION FILLS ITS LINE
+====================================================================
+
+margin = best score - best NON-OVERLAPPING rival. A rival must start
+at least one template width away, so when the template is wider than
+half its line there is no room for one: the rival is 0 and margin
+equals score. The MARK_MARGIN clause cannot fire on such a row at
+all.
+
+    marked rows with no possible rival   3,010 of 8,453 (35.6%)
+
+Johnston FO3893, `x_n = x_{n-1} - 4x_{n-2} + 4x_{n-3}`: the refit
+shrank the rendering to 0.499 (the line's 703 px leave no room for a
+506 px rival), offset 134 scored 0.716 against 0.622 at the true
+start, and the mark went on "n-1 ... when n", margin 0.716.
+
+How risky the class is, is NOT established. Among the 155 eye
+verdicts of 653-657 only 31 rows are ones the policy marks (the review
+sampled flagged rows, which the policy suppresses); 8 of those have no
+possible rival and all 8 are right. Eight rows prove nothing about a
+class this size -- they only show it is not always wrong.
+
+====================================================================
+5. LIMIT TWO: ONE DOCUMENT SCALE CANNOT SERVE A BOOK WITH TWO TYPE SIZES
+====================================================================
+
+Johnston's refitted scales are BIMODAL -- rows with >= 6 gaps, score
+>= 0.8, off the band edge:
+
+    0.475   79      0.550   81
+    0.500  391      0.575  234
+    0.525  185      0.600  360
+                    0.625  137
+
+against lyche's single peak at 0.650. The vote's median, 0.55, sits
+in the valley; each population lies ~9% from it, the refit band is
++/-12%, and what falls outside lands ON the band edge -- the tell 640
+had to retract a rule over.
+
+    marked rows at the refit band edge   488 of 8,453 (5.8%), johnston 356
+
+Of Johnston's two wrong-or-off marks at the edge, FO2653 starts
+halfway through its first glyph and FO2689 cuts its last.
+
+====================================================================
+6. THE DECISION THIS LEAVES -- the user's, since it reopens 658
+====================================================================
+
+  a. Publish as measured. Johnston's marks carry the risk above.
+  b. Suppress marks at the refit band edge, corpus-wide: 488
+     marks, 356 of them Johnston's. A fifth clause, justified
+     by 640's degeneracy and 6 eye verdicts here -- thin.
+  c. Withhold Johnston's marks until the scale vote can return two
+     scales. The other 19 documents have at most 51
+     at the edge.
+  d. Before any of these: a blind eye review of the no-rival class
+     on two books, as 655 did for the conjunction.
+
+Nothing here changes the closed constants.
+
+====================================================================
+7. MIELKE
+====================================================================
+
+The first run refused it with "no row could vote a document scale".
+That was false: formulafind had crashed on a 0xa3 byte pdflatex echoed
+back (`text=True`), and formulamarks never checked the vote's return
+code. Fixed in 210004f (lenient decode; a crash is refused as a
+crash; both refusals tested). Re-run: scale 0.64, 185 of 1,793 rows marked, 1,790 measured.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * 25 eye checks are mine, not blind, and from three books.
+  * "a mark is right 99.89%" (658) is an extrapolation from two arXiv
+    documents; nothing here measures it on the books.
+  * Nothing measures a mark that should exist and does not.
+  * The 67 rows whose host line inkdrill cannot find (659 §4) have no
+    mark by construction.
+
+Re-run: python3 tools/formulamarks.py run <bibkey> --work DIR --jobs N
+        python3 tools/formulamarks.py marks <bibkey> --work DIR
