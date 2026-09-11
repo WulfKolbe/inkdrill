@@ -85,6 +85,27 @@ RED = ("EDGE_CUT", "BLOB_COUNT", "POOR_FIT", "OVERLAP", "ORDER")
 #:                   report someone is asked to read.
 LOW_CONFIDENCE = 0.80
 
+#: THE MARKING POLICY, closed 2026-09-11 on 155 eye verdicts over two
+#: documents (out/658). A rectangle is drawn only when all three hold.
+#:
+#: Chosen against the alternative that keeps more marks. Priced on a
+#: corpus of 2,240 placed rows carrying an estimated 20 real placement
+#: errors:
+#:
+#:     policy                       marks   wrong marks   a mark is right
+#:     margin>=0.10, gaps<=2&cuts>=2  99.8%      ~13.3            99.40%
+#:     margin>=0.15, gaps<=5&cuts>=2  79.5%       ~5.0            99.72%
+#:     THIS ONE                       66.2%       ~1.7            99.89%
+#:
+#: A third of expressions lose their rectangle to take the expected
+#: wrong marks from thirteen to under two. For a PUBLISHED corpus that
+#: is the right way round: a mark in the wrong place sends a reader to
+#: the wrong glyphs and looks authoritative doing it, while a missing
+#: one costs only that the reader finds the expression themselves.
+MARK_MARGIN = 0.15
+MARK_GAPS = 7
+MARK_CUTS = 1
+
 
 def calibrate(rows, min_margin):
     """Thresholds from the rows that AGREE, never chosen by hand.
@@ -143,8 +164,9 @@ def classify(rows, cal, min_margin):
         # verdicts. Four rows is four rows, so it suppresses the mark
         # rather than raising a flag.
         r["mark"] = not (r["gaps"] <= 1
-                         or r["margin"] < min_margin
-                         or (r["gaps"] <= 2 and r["edge_cuts"] >= 2))
+                         or r["margin"] < MARK_MARGIN
+                         or (r["gaps"] <= MARK_GAPS
+                             and r["edge_cuts"] >= MARK_CUTS))
         if r["conf"] < LOW_CONFIDENCE:
             r["flags"].append("LOW_CONFIDENCE")
         if r["gaps"] <= 1:

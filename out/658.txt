@@ -1,0 +1,123 @@
+658 - CLOSURE on marking, and the four workstreams separated
+=============================================================
+
+Four things have been tangled together in 639-657. They are separate
+problems with separate evidence and separate owners.
+
+====================================================================
+1. MARKING INLINE MATH -- CLOSED
+====================================================================
+
+THE POLICY. A rectangle is drawn on an evidence row only when
+
+    gaps >= 2                    the expression carries a position
+    margin >= 0.15               it fits here and not elsewhere
+    NOT (gaps <= 7 AND cuts >= 1) no boundary lands inside a glyph
+    the crop is line-like        crop height <= 3x the page median
+
+Implemented in `tools/formularesidual.py` as MARK_MARGIN / MARK_GAPS /
+MARK_CUTS with the pricing table beside them.
+
+WHAT IT COSTS AND BUYS, priced on 2,240 placed rows carrying an
+estimated 20 real placement errors (out/654, out/655), against 155 eye
+verdicts:
+
+    policy                          marks   wrong marks   a mark is right
+    margin>=0.10, gaps<=2 & cuts>=2  99.8%       ~13.3          99.40%
+    margin>=0.15, gaps<=5 & cuts>=2  79.5%        ~5.0          99.72%
+    CHOSEN                           66.2%        ~1.7          99.89%
+    margin>=0.20, gaps<=7 & cuts>=2  58.1%        ~3.3          99.74%
+
+The last is DOMINATED -- fewer marks and more errors -- so the real
+choice was the middle two.
+
+A THIRD OF EXPRESSIONS LOSE THEIR RECTANGLE TO TAKE THE EXPECTED WRONG
+MARKS FROM THIRTEEN TO UNDER TWO. For a published corpus that is the
+right way round. A mark in the wrong place sends a reader to the wrong
+glyphs and looks authoritative doing it; a missing mark costs only
+that the reader finds the expression themselves, which is what they do
+today.
+
+On 0902.0431: 1,474 of 3,096 rows marked, 1,622 suppressed.
+
+THE EVIDENCE BEHIND EACH CLAUSE
+  gaps >= 2      0 of 49 one-gap rows could be placed at all (out/639)
+  margin         the score cannot gate: at short lengths the WRONG
+                 rows score HIGHER than the right ones (out/653)
+  cuts           of 12 labelled errors every one had a boundary
+                 inside a glyph; 37 rows with none were all correct
+  line-like      67 rows sat on page-sized regions and scored 0.94
+                 for nonsense (out/651)
+
+====================================================================
+2. DETECTING MATHPIX ERRORS -- OPEN, AND NOTHING FOUND YET
+====================================================================
+
+155 eye verdicts, 12 errors, ALL TWELVE INKDRILL'S OWN PLACEMENT. Not
+one recognition error has been found by this instrument.
+
+That is not evidence that there are none. The instrument selects rows
+by PLACEMENT FIT, so a recognition error that placed cleanly never
+reached a reviewer. It has never sampled recognition at all.
+
+WHAT THE RESIDUAL REPORT SHOULD CARRY, and what exists today:
+
+  * LOW SOURCE CONFIDENCE -- implemented, conf < 0.80. 161 rows on
+    0902.0431 (5.2%), 103 on 1510.06699 (9.7%).
+  * CORRELATION AND PLAUSIBILITY GAPS -- not built. The signals that
+    exist and are unused: blob count of the rendered expression
+    against the ink inside its own rectangle; the width the LaTeX
+    predicts against the width measured; ink inside the rectangle
+    that no rendered glyph covers.
+  * The RED flags are NOT this. They are evidence-table marks for
+    someone chasing a detail, and the tool now says so.
+
+====================================================================
+3. REPAIRING INLINE MATH WHITESPACE -- NOT OURS, MEASURED FOR HANDOVER
+====================================================================
+
+The measurement is the deliverable. out/656 and out/657:
+
+  * MathPix inserts ~30% more intra-token spaces than the author, and
+    the rate is FLAT with expression length -- 1.38x, 1.34x, 1.26x,
+    1.32x per 100 characters across four length bands. It does not
+    concentrate in large expressions; it accumulates in them.
+  * SIX OF EIGHT tested differences are INVISIBLE. `x y` and `xy` are
+    the same picture, so no measurement of the page can choose. The
+    raster cannot repair that class at all.
+  * MathPix DROPS explicit spacing rather than adding it -- 0.12x the
+    author's rate under 25 characters, 0.73x at 100-199. Worst on
+    SHORT expressions, which is the opposite of the expectation.
+  * Aligned by similarity, not exact match; the aligner recovers
+    known answers 1,474 of 1,475 times.
+
+RE-RUN AFTER THEIR DE-TOKENIZER FIX. Every figure here predates it,
+and a bug that invented invisible brackets is in exactly this class.
+`tools/fuzzyalign.py` reproduces the whole table in one command.
+
+====================================================================
+4. REPAIRING LARGE OPEN MATRIX ARRANGEMENT -- SCOPED, NOT STARTED
+====================================================================
+
+Scope agreed: a repair step for EQUATIONS WITH LOW CONFIDENCE ONLY.
+
+Nothing in 639-657 touches it. All of that work is on
+`evidence-formula.tex`, which is inline maths;
+`evidence-equation.tex` exists alongside it and has not been read.
+The low-confidence gate is the same `conf` field already in use, so
+the population is available the moment the repair is.
+
+====================================================================
+NOT CLAIMED
+====================================================================
+
+  * TWO DOCUMENTS, both arXiv, both LaTeX-produced. 155 verdicts.
+  * THE 20-ERROR ESTIMATE behind the pricing table comes from one
+    sample of 60 with one error in it; its interval runs from 0 to 43,
+    so "~1.7 wrong marks" is the right order and not a precise figure.
+  * The marking policy is tuned on the same 12 errors it is scored
+    against. The only out-of-sample evidence is the blind twenty of
+    out/655, where the conjunction held at 36% against 41% in-sample.
+  * 0.80 for low confidence is chosen, not calibrated.
+  * Nothing here measures how often a mark is MISSING that should be
+    there -- a third of expressions now carry none by design.
