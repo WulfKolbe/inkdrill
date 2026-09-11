@@ -31,6 +31,7 @@ reported beside it, because a single score would throw away the finding.
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import pathlib
 import re
@@ -57,10 +58,8 @@ STANDALONE = r"""\documentclass[border=0pt]{standalone}
 def line_index(library, bibkey):
     """page -> [(region, text)] from `lines.json`, in reading order.
 
-    The regions are in MathPix page pixels. For 0902.0431 that raster
-    is 2125 x 2750 for a 612 x 792 pt page -- exactly 250 dpi -- and
-    the locally rendered page is 3400 x 4400, exactly 400 dpi, so the
-    two differ by 1.6 with no rounding.
+    The regions are in MathPix page pixels, the page's CropBox frame.
+    `page_frames` carries them onto the local page image.
     """
     import json
     d = json.loads((library / bibkey / f"{bibkey}.lines.json").read_text())
@@ -71,8 +70,107 @@ def line_index(library, bibkey):
     return out, d["pages"][0]["page_width"], d["pages"][0]["page_height"]
 
 
-def fullres_crop(library, bibkey, page, region, ratio, out):
+def _png_size(path):
+    """(width, height) from the IHDR chunk -- 24 bytes, no decode."""
+    import struct
+    with open(path, "rb") as fh:
+        head = fh.read(24)
+    if head[:8] != b"\x89PNG\r\n\x1a\n" or head[12:16] != b"IHDR":
+        return None
+    return struct.unpack(">II", head[16:24])
+
+
+def page_frames(library, bibkey):
+    """page -> (sx, sy, ox, oy): a MathPix page pixel (x, y) is the
+    inspect/pages pixel (ox + x*sx, oy + y*sy). Plus {page: reason} for
+    every page it REFUSES to map.
+
+    TWO FRAMES, NOT ONE SCALE. MathPix's page image is the PDF's
+    CROPBOX (pdfdrill measured it, its 654). `inspect/pages/p{N}.png` is
+    rendered from the MEDIABOX. On the 17 documents whose CropBox equals
+    their MediaBox the two differ by a scale; on the four that do not --
+    cardona, voloshin, gilmore and kohlhase-omdoc -- they differ by an
+    inset as well. The first version read ONE ratio off page 1's WIDTH
+    and applied it to x and y on every page, which is right only on the
+    17. Measured on published crops it cut the wrong strip of page
+    everywhere else: correlation with the published crop -0.014
+    (cardona) and +0.034 (voloshin), against +0.916 and +0.950 once the
+    inset is applied. Gilmore's page 1 is an 816 px cover, so the ratio
+    read there was wrong for the whole book.
+
+    x and y scale INDEPENDENTLY, as pdfdrill's `mathpix_to_raster` does:
+    MathPix rounds its own page dimensions, so a shared factor drifts
+    down the page.
+
+    Refused, never defaulted: a page with no MathPix dimensions, no page
+    image, no source PDF, a rotation, or a page image that is not the
+    MediaBox at a whole dpi. Cutting a crop from the wrong strip is worse
+    than not cutting it -- it still looks like a line.
+    """
+    import json
+    doc = library / bibkey
+    lj = json.loads((doc / f"{bibkey}.lines.json").read_text())
+    pdf = doc / f"{doc.name}.pdf"
+    frames, refused = {}, {}
+    pages = [pg for pg in lj["pages"]]
+    if not pdf.exists():
+        return frames, {pg["page"]: "no source pdf" for pg in pages}
+    last = max(pg["page"] for pg in pages)
+    info = subprocess.run(["pdfinfo", "-box", "-f", "1", "-l", str(last),
+                           str(pdf)], capture_output=True, text=True).stdout
+    box = collections.defaultdict(dict)
+    for m in re.finditer(r"^Page\s+(\d+)\s+(MediaBox|CropBox|rot):\s+(.*)$",
+                         info, re.M):
+        box[int(m.group(1))][m.group(2)] = m.group(3).split()
+    for pg in pages:
+        n, mw, mh = pg["page"], pg.get("page_width"), pg.get("page_height")
+        png = doc / "inspect" / "pages" / f"p{n}.png"
+        b = box.get(n, {})
+        wh = _png_size(png) if png.exists() else None
+        if not mw or not mh:
+            refused[n] = "no MathPix page dimensions"; continue
+        if wh is None:
+            refused[n] = "no page image"; continue
+        if "MediaBox" not in b:
+            refused[n] = "no MediaBox"; continue
+        if b.get("rot", ["0"])[0] not in ("0", "360"):
+            refused[n] = f"rotated {b['rot'][0]}"; continue
+        f = frame_of([float(v) for v in b["MediaBox"]],
+                     [float(v) for v in b.get("CropBox", b["MediaBox"])],
+                     wh[0], wh[1], mw, mh)
+        if f is None:
+            refused[n] = f"page image is not the MediaBox ({wh[0]}x{wh[1]})"
+            continue
+        frames[n] = f
+    return frames, refused
+
+
+def frame_of(media, crop, W, H, mw, mh):
+    """The arithmetic of `page_frames`, with no file and no pdfinfo.
+
+    `media`, `crop`: PDF boxes [x0, y0, x1, y1] in points, y UP.
+    `W x H`: the page image, rendered from the MediaBox, y DOWN.
+    `mw x mh`: MathPix's page image, which is the CropBox.
+    Returns (sx, sy, ox, oy), or None when the page image is not the
+    MediaBox at one dpi in both axes.
+    """
+    mx0, my0, mx1, my1 = media
+    cx0, cy0, cx1, cy1 = crop
+    # the CropBox is clipped to the MediaBox (PDF 32000 14.11.2)
+    cx0, cy0 = max(cx0, mx0), max(cy0, my0)
+    cx1, cy1 = min(cx1, mx1), min(cy1, my1)
+    kx, ky = W / (mx1 - mx0), H / (my1 - my0)
+    if abs(kx - ky) * 72 > 1.0:
+        return None
+    return ((cx1 - cx0) / mw * kx, (cy1 - cy0) / mh * ky,
+            (cx0 - mx0) * kx, (my1 - cy1) * ky)
+
+
+def fullres_crop(library, bibkey, page, region, frame, out):
     """The line, cut from the LOCALLY RENDERED page. No resample, no JPEG.
+
+    `frame` is this page's `page_frames` entry -- never a ratio shared
+    across pages or axes.
 
     `report-crops-b` is a PUBLISHING artefact: the line region scaled to
     0.5998 and saved at JPEG q92. out/641 measured what that costs --
@@ -86,16 +184,25 @@ def fullres_crop(library, bibkey, page, region, ratio, out):
     which is what `pnmio` reads.
     """
     src = library / bibkey / "inspect" / "pages" / f"p{page}.png"
-    if not src.exists():
+    if not src.exists() or frame is None:
         return None
-    x = int(round(region["top_left_x"] * ratio))
-    y = int(round(region["top_left_y"] * ratio))
-    w = int(round(region["width"] * ratio))
-    h = int(round(region["height"] * ratio))
+    x, y, w, h = frame_rect(region, frame)
     subprocess.run(["magick", str(src), "-crop", f"{w}x{h}+{x}+{y}",
                     "+repage", "-colorspace", "Gray", "-depth", "8", str(out)],
                    capture_output=True, check=True)
     return out
+
+
+def frame_rect(region, frame):
+    """A MathPix region -> (x, y, w, h) in page-image pixels."""
+    sx, sy, ox, oy = frame
+    x0 = ox + region["top_left_x"] * sx
+    y0 = oy + region["top_left_y"] * sy
+    x1 = ox + (region["top_left_x"] + region["width"]) * sx
+    y1 = oy + (region["top_left_y"] + region["height"]) * sy
+    return (int(round(x0)), int(round(y0)),
+            max(1, int(round(x1)) - int(round(x0))),
+            max(1, int(round(y1)) - int(round(y0))))
 
 
 def match_rows_to_lines(picked, index):
@@ -124,26 +231,136 @@ def match_rows_to_lines(picked, index):
                     hit = i
                     break
         if hit is not None:
-            out[row["id"]] = lines[hit][0]
+            out[row["id"]] = (pg, lines[hit][0])
             cursor[pg] = hit
     return out
 
 
-ROW_RX = re.compile(
-    r"\\ident\{(?P<id>.*?)\}\s*&\s*(?P<page>\d+)\s*&\s*"
-    r"\\confcell\{\w+\}\{(?P<conf>[\d.]+)\}\s*&.*?&\s*"
-    r"\\FitMath\{\$\\displaystyle (?P<math>.*?)\$\}\s*&\s*"
-    r".*?\\includegraphics\[width=[\d.]+mm\]\{(?P<crop>[^}]+)\}", re.S)
+#: pdfdrill's inline-span delimiters, verbatim from `inlinectx.INLINE`:
+#: `$...$` or `\( ... \)`, a `\$` being an escaped dollar.
+INLINE = re.compile(r"(?<!\\)\$(?!\$)(.+?)(?<!\\)\$|\\\((.+?)\\\)", re.S)
+
+
+def first_occurrence_lines(library, bibkey):
+    """latex -> (page, region) of its FIRST inline span in document order.
+
+    THIS IS PDFDRILL'S HOST-LINE RULE, reproduced so a rectangle drawn
+    here lands on the line pdfdrill cropped: `inlinectx.load_spans` then
+    `first_occurrences` (their 535). The model holds one Formula per
+    DISTINCT value, so a row is the value's first span -- page order,
+    then line order, then span order -- found by EQUALITY of the span
+    body, never by containment. `math` lines are display maths and are
+    skipped. Pages are numbered by POSITION in `lines.json`, as pdfdrill
+    numbers them.
+
+    A mark measured on any other line cannot be drawn on pdfdrill's
+    crop, so `formulamarks` refuses a row whose region differs from the
+    host region pdfdrill reports.
+    """
+    import json
+    lj = json.loads((library / bibkey / f"{bibkey}.lines.json").read_text(
+        encoding="utf-8", errors="replace"))
+    first = {}
+    for page, pg in enumerate(lj.get("pages") or [], 1):
+        for ln in pg.get("lines") or []:
+            if ln.get("type") == "math":
+                continue
+            for m in INLINE.finditer(ln.get("text") or ""):
+                body = (m.group(1) or m.group(2) or "").strip()
+                if body:
+                    first.setdefault(body, (page, ln.get("region") or {}))
+    return first
+
+
+def match_rows_first(picked, first):
+    """Row -> (host page, region) by pdfdrill's rule; see
+    `first_occurrence_lines`. The row's own page column is NOT used."""
+    return {r["id"]: first[r["math"].strip()] for r in picked
+            if r.get("math") and r["math"].strip() in first}
+
+
+def host_regions(library, bibkey, picked, rule="first"):
+    """The one switch between the two matchers. `first` is pdfdrill's
+    rule and the default: it is the line the published crop shows."""
+    if rule == "first":
+        return match_rows_first(picked, first_occurrence_lines(library, bibkey))
+    index, _, _ = line_index(library, bibkey)
+    return match_rows_to_lines(picked, index)
+
+
+def _group(s, i):
+    """The content of the `{...}` starting at s[i], nesting respected and
+    `\\{` / `\\}` skipped as the literal braces they are."""
+    if i >= len(s) or s[i] != "{":
+        return None, i
+    d, j = 0, i
+    while j < len(s):
+        c = s[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == "{":
+            d += 1
+        elif c == "}":
+            d -= 1
+            if d == 0:
+                return s[i + 1:j], j + 1
+        j += 1
+    return None, i
 
 
 def rows(tex_path):
-    body = tex_path.read_text(encoding="utf-8",
-                              errors="replace").split(r"\endhead", 1)[1]
-    for m in ROW_RX.finditer(body):
-        d = m.groupdict()
-        d["id"] = d["id"].replace(r"\allowbreak{}", "").replace("\\_", "_")
-        yield d
+    """One record per evidence row, parsed ROW BY ROW -- never across rows.
 
+    The first version matched the whole table body with one lazy regex
+    that demanded every cell, so wherever a row lacked one it matched ON
+    INTO THE NEXT ROW. Two ways, both silent:
+
+      * A row with no published crop (`---` in the image column) took the
+        NEXT row's picture and swallowed that row. In 0902.0431 FO0064
+        was paired with FO0065's image and FO0065 vanished -- seven rows
+        lost that way, and five of the "published crops of the wrong
+        size" reported on 2026-09-11 were this pairing, not pdfdrill.
+      * pdfdrill now writes `\\lowconf{...}` inside the id cell, and the
+        lazy id absorbed it: 35 ids in 1510.06699 read
+        `...FO0984}\\lowconf{0.000`.
+
+    Every `\\ident` now yields exactly one record. A missing cell is
+    `None` rather than a reason to borrow the neighbour's: `crop` is None
+    for a row with no published image, `conf` is None where the producer
+    gave none, `math` is None where there is no `\\FitMath`. A caller
+    decides what a missing cell means for it; this function never does.
+    """
+    body = tex_path.read_text(encoding="utf-8",
+                              errors="replace").split(r"\endhead", 1)[-1]
+    # A row runs from one `\ident` to the next. Splitting on the row
+    # terminator `\\ \hline` instead cut rows in half wherever the MATHS
+    # held one -- an `array` with `\hline` rules (johnston FO2040, FO2066)
+    # -- and lost both the math and the crop of that row.
+    starts = [m.start() for m in re.finditer(r"\\ident\{", body)] + [len(body)]
+    for a, b in zip(starts, starts[1:]):
+        chunk = body[a:b]
+        i = 0
+        ident, j = _group(chunk, i + len(r"\ident"))
+        if ident is None:
+            continue
+        rest = chunk[j:]
+        m = re.match(r"\s*(?:\\lowconf\{[^}]*\})?\s*&\s*(\d+)\s*&", rest)
+        conf = re.search(r"\\confcell\{\w+\}\{([\d.]+)\}", rest)
+        math = None
+        k = rest.find(r"\FitMath{")
+        if k >= 0:
+            g, _ = _group(rest, k + len(r"\FitMath"))
+            if g is not None:
+                mm = re.match(r"\$\\displaystyle (.*)\$\Z", g, re.S)
+                math = mm.group(1) if mm else g.strip().strip("$")
+        c = re.search(r"\\includegraphics\[[^\]]*\]\{([^}]+)\}", rest)
+        yield dict(id=ident.replace(r"\allowbreak{}", "").replace("\\_", "_").strip(),
+                   page=m.group(1) if m else None,
+                   conf=conf.group(1) if conf else None,
+                   math=math,
+                   crop=c.group(1) if c else None,
+                   lowconf=r"\lowconf{" in rest[:60])
 
 def render(math, out, dpi):
     """The expression alone, no page, no margin beyond the glyphs."""
@@ -375,6 +592,9 @@ def main() -> int:
                     default=True,
                     help="refit the scale per row within a band around the "
                          "document scale (out/644)")
+    ap.add_argument("--host", choices=("first", "cursor"), default="first",
+                    help="first: pdfdrill's host line (first span in document "
+                         "order); cursor: the row's page, walked forward")
     ap.add_argument("--refit-band", type=float, default=0.12)
     ap.add_argument("--refit-step", type=float, default=0.002)
     ap.add_argument("--min-gaps", type=int, default=2)
@@ -390,15 +610,25 @@ def main() -> int:
     scales = [args.smin + i * args.sstep
               for i in range(int((args.smax - args.smin) / args.sstep) + 1)]
 
-    picked = []
+    picked, dropped = [], collections.Counter()
     for row in rows(tex):
         short = row["id"].split("_")[-1]
         if want and short not in want and row["id"] not in want:
             continue
-        if (doc / row["crop"]).exists():
-            picked.append(row)
+        # A FILTER IS A DECISION, so what it drops is counted and printed.
+        # Fullres mode cuts its own crop from the page, so a row with no
+        # PUBLISHED image is still measurable; only report mode needs one.
+        if row["page"] is None:
+            dropped["no page"] += 1; continue
+        if row["math"] is None:
+            dropped["no rendered LaTeX"] += 1; continue
+        if args.crops == "report" and not (row["crop"] and (doc / row["crop"]).exists()):
+            dropped["no published crop"] += 1; continue
+        picked.append(row)
         if args.limit and len(picked) >= args.limit:
             break
+    if dropped:
+        print(f"rows not measured: {dict(dropped)}")
 
     if args.shard:
         i, n = (int(x) for x in args.shard.split("/"))
@@ -411,19 +641,17 @@ def main() -> int:
 
     fullres = args.crops == "fullres"
     crop_dpi = args.crop_dpi or (400.0 if fullres else 150.0)
-    regions = ratio = None
+    regions = frames = None
     if fullres:
-        index, raster_w, _ = line_index(args.library, args.bibkey)
-        probe = doc / "inspect" / "pages" / "p1.png"
-        pw = int(subprocess.run(["magick", "identify", "-format", "%w",
-                                 str(probe)], capture_output=True,
-                                text=True, check=True).stdout)
-        ratio = pw / raster_w
-        regions = match_rows_to_lines(picked, index)
+        frames, refused = page_frames(args.library, args.bibkey)
+        regions = host_regions(args.library, args.bibkey, picked, args.host)
+        inset = sum(1 for f in frames.values() if f[2] > 0.5 or f[3] > 0.5)
         print(f"crops: LOSSLESS, cut from inspect/pages at {crop_dpi:g} dpi")
-        print(f"  page raster {raster_w} px (MathPix) -> {pw} px (local), "
-              f"ratio {ratio:g}")
-        print(f"  {len(regions)} of {len(picked)} rows matched to a line\n")
+        print(f"  {len(frames)} page frames (MathPix CropBox -> MediaBox "
+              f"render), {inset} with a CropBox inset; {len(refused)} pages "
+              f"refused: {dict(collections.Counter(refused.values()))}")
+        print(f"  {len(regions)} of {len(picked)} rows matched to a line "
+              f"(host rule: {args.host})\n")
     else:
         print(f"crops: report-crops-b, DOWNSAMPLED q92 "
               f"(a publishing artefact -- see out/641)\n")
@@ -439,16 +667,18 @@ def main() -> int:
         t = pathlib.Path(td)
         for row in picked:
             if fullres:
-                reg = regions.get(row["id"])
-                if reg is None:
+                hit = regions.get(row["id"])
+                if hit is None:
                     print(f"{row['id'].split('_')[-1]:<8} NO LINE MATCH")
                     continue
+                hp, reg = hit
+                row["_host"] = (hp, reg, frames.get(hp))
                 # 2,067 distinct lines carry 3,163 rows, so a third of
                 # the crops are re-cutting a line already cut.
-                key = (row["page"], tuple(sorted(reg.items())))
+                key = (hp, tuple(sorted(reg.items())))
                 if key not in crop_cache:
                     if not fullres_crop(args.library, args.bibkey,
-                                        int(row["page"]), reg, ratio,
+                                        hp, reg, frames.get(hp),
                                         t / f"c{len(crop_cache)}.pgm"):
                         print(f"{row['id'].split('_')[-1]:<8} NO LINE MATCH")
                         continue
@@ -491,7 +721,6 @@ def main() -> int:
             scale = votes[len(votes) // 2]
         else:
             scale = None
-        import collections
         spread = collections.Counter(votes)
         print(f"predicted scale {expect:.4g} = {crop_dpi:g}/{args.dpi} dpi")
         print(f"document scale: {scale}  (median of {len(votes)} rows with "
@@ -528,7 +757,8 @@ def main() -> int:
             ok = (sc >= args.min_score and margin >= args.min_margin
                   and gaps >= args.min_gaps)
             rec = dict(id=row["id"], page=int(row["page"]),
-                       conf=float(row["conf"]), math=row["math"],
+                       conf=(float(row["conf"]) if row["conf"] is not None
+                             else None), math=row["math"],
                        crop_w=cm.width, crop_h=cm.height, scale=scale,
                        formula_blobs=len(fb), crop_blobs=len(cb), gaps=gaps,
                        score=round(sc, 4), margin=round(margin, 4),
@@ -537,6 +767,12 @@ def main() -> int:
                        edge_cuts=len(cut), crop=row["crop"],
                        refit=bool(args.refit), on_edge=bool(on_edge),
                        accepted=ok)
+            if row.get("_host"):
+                # WHERE the crop was cut, so a consumer can map `rect`
+                # back onto its own picture of the same line: host page,
+                # MathPix region, and the page frame used.
+                rec.update(host_page=row["_host"][0], region=row["_host"][1],
+                           frame=row["_host"][2], host_rule=args.host)
             out.append(rec)
             print(f"{row['id'].split('_')[-1]:<8} {sc:>6.3f} {margin:>7.3f} "
                   f"{gaps:>5} {f'{x0}-{x1}':>12} {f'{y0}-{y1}':>8} "

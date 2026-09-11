@@ -165,7 +165,18 @@ def classify(rows, cal, min_margin):
         # rows on the SAME LINE are given byte-identical copies of it --
         # 86 of the first 400 crops are shared. Grouping by path found
         # 0 shared lines and silently disabled both line-level rules.
-        by_crop[r.get("crop_hash") or r["crop"]].append(r)
+        # No published crop, no line key: rows without one are NOT grouped
+        # together -- a shared `None` would make every such row one line.
+        #
+        # THE HOST REGION FIRST, when the row carries one. A published
+        # crop can be STALE -- 0902.0431 FO0068's is the right rectangle
+        # cut from page 177 instead of page 4, left behind by a crop cache
+        # keyed by title -- and grouping by its hash puts the row on a
+        # line it is not on.
+        key = ((r.get("host_page"), tuple(sorted(r["region"].items())))
+               if r.get("region") else (r.get("crop_hash") or r.get("crop")))
+        if key:
+            by_crop[key].append(r)
 
     for r in rows:
         r["flags"] = []
@@ -183,7 +194,7 @@ def classify(rows, cal, min_margin):
                          or r["margin"] < MARK_MARGIN
                          or (r["gaps"] <= MARK_GAPS
                              and r["edge_cuts"] >= MARK_CUTS))
-        if r["conf"] < LOW_CONFIDENCE:
+        if r["conf"] is not None and r["conf"] < LOW_CONFIDENCE:
             r["flags"].append("LOW_CONFIDENCE")
         if r["gaps"] <= 1:
             r["flags"].append("UNPLACEABLE")
@@ -235,7 +246,7 @@ def main() -> int:
     rows = json.loads(args.json.read_text())
     doc = args.library / args.bibkey
     for r in rows:
-        f = doc / r["crop"]
+        f = doc / r["crop"] if r.get("crop") else doc / "__none__"
         if f.exists():
             r["crop_hash"] = hashlib.md5(f.read_bytes()).hexdigest()
     print(f"{len(rows)} rows\n")
@@ -293,7 +304,7 @@ def main() -> int:
     print(f"GREY {len(grey)} ({100*len(grey)/len(rows):.1f}%) "
           f"-- reported as not examined, never as wrong")
 
-    hi = [r for r in red if r["conf"] >= 0.99]
+    hi = [r for r in red if r["conf"] is not None and r["conf"] >= 0.99]
     print(f"\n{len(hi)} of the {len(red)} red rows carry a source confidence "
           f">= 0.99.")
     print("  THIS WAS ONCE CALLED 'the product'. IT IS NOT. 155 eye verdicts "
@@ -302,8 +313,9 @@ def main() -> int:
           "error. The disagreement is between the\n  producer and THIS "
           "INSTRUMENT, and the instrument has been the wrong one\n  every "
           "time it has been checked. See out/653, out/655, out/656.")
-    for r in sorted(red, key=lambda r: -r["conf"])[:args.show]:
-        print(f"   {r['id'].split('_')[-1]:<8} conf={r['conf']:.3f} "
+    for r in sorted(red, key=lambda r: -(r["conf"] or 0))[:args.show]:
+        print(f"   {r['id'].split('_')[-1]:<8} conf="
+              f"{(format(r['conf'], '.3f') if r['conf'] is not None else '---')} "
               f"{'+'.join(r['flags']):<22} blobs {r['formula_blobs']}->"
               f"{r['blobs_in_rect']} score {r['score']:.2f} margin {r['margin']:.2f}"
               f" {r['math'][:34]}")
