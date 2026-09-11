@@ -18,6 +18,15 @@ THE POLICY. A rectangle is drawn on an evidence row only when
 Implemented in `tools/formularesidual.py` as MARK_MARGIN / MARK_GAPS /
 MARK_CUTS with the pricing table beside them.
 
+  CORRECTION, 2026-09-11. When this file was written the FOURTH clause
+  -- the line-like crop -- was applied by an external filter and was
+  NOT in the tool, so "implemented" was true of three clauses out of
+  four. A caller running `formularesidual` alone would have marked
+  rows sitting on page-sized regions. It is now in the tool as
+  NON_LINE = 3, beside the other three, and reproduces the external
+  filter exactly: 1,474 of 3,163 rows marked either way, 0 of the 67
+  non-line rows marked.
+
 WHAT IT COSTS AND BUYS, priced on 2,240 placed rows carrying an
 estimated 20 real placement errors (out/654, out/655), against 155 eye
 verdicts:

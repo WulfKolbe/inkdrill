@@ -105,6 +105,8 @@ LOW_CONFIDENCE = 0.80
 MARK_MARGIN = 0.15
 MARK_GAPS = 7
 MARK_CUTS = 1
+#: A crop taller than this many median lines is not a line (out/651).
+NON_LINE = 3
 
 
 def calibrate(rows, min_margin):
@@ -144,6 +146,19 @@ def calibrate(rows, min_margin):
 
 def classify(rows, cal, min_margin):
     """One row -> its flags. Grey and red are kept apart."""
+    # THE FOURTH CLAUSE OF THE MARKING POLICY, which out/658 listed as
+    # implemented when it lived only in an external filter. `lines.json`
+    # carries regions that are not lines -- display blocks, figure
+    # areas -- and a small template found a comfortable spot inside a
+    # 1632x3131 page region and scored 0.94 for it (out/651). A crop
+    # taller than 3x the document's median line is not a line, and no
+    # mark is drawn on it. Kept HERE, beside the other three clauses,
+    # so a caller running this tool alone gets the whole policy.
+    hs = sorted(r["crop_h"] for r in rows if r.get("crop_h"))
+    line_h = hs[len(hs) // 2] if hs else 0
+    for r in rows:
+        r["line_like"] = (not line_h) or r.get("crop_h", 0) <= NON_LINE * line_h
+
     by_crop = collections.defaultdict(list)
     for r in rows:
         # BY CONTENT, NOT PATH. Every row names its own crop file, but
@@ -163,7 +178,8 @@ def classify(rows, cal, min_margin):
         # 0902.0431, four for four across two documents and 155
         # verdicts. Four rows is four rows, so it suppresses the mark
         # rather than raising a flag.
-        r["mark"] = not (r["gaps"] <= 1
+        r["mark"] = not (not r["line_like"]
+                         or r["gaps"] <= 1
                          or r["margin"] < MARK_MARGIN
                          or (r["gaps"] <= MARK_GAPS
                              and r["edge_cuts"] >= MARK_CUTS))
