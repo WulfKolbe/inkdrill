@@ -1,0 +1,165 @@
+661 - the junction angle: MathPix's harpoon readings are floors in the ink, on all 15 measured
+==============================================================================================
+
+pdfdrill's census (their out/682) found 30 instances where the ink is
+nearly identical and the junction angle is not: `⌋` (`\rfloor`) square
+against `⇃` (`\downharpoonleft`), an acute barb. Component counts, hole
+counts and ink distance all pass them, and on a SCAN there is no text
+layer and no `/Encoding` to appeal to. This is the ink half: can the
+angle be read off a real page, and does it separate?
+
+    python3 tools/glyphangle.py reference
+    python3 tools/glyphangle.py document "<mielke>" --out F.json --crops D
+
+====================================================================
+1. THE FEATURE
+====================================================================
+
+Two numbers, both read off the per-row spans of the run adjacency:
+
+    angle   the arm against the stem. 90 = a horizontal foot.
+    drift   how far the arm's outer edge moves per scan row.
+
+The STEM IS FOUND -- the widest contiguous band of columns carrying ink
+in at least 60% of the glyph's rows -- and the arm is what reaches past
+it at the bottom. Not the extreme columns: that is direction-blind and
+read a mirrored `⌊` as a `⌋`. See section 6.
+
+NOT FROM A SKELETON. A thinned skeleton gives the same angle in
+principle, and 496 measured 26% of glyphs changing their junction count
+with size; the instability would be inherited for nothing.
+
+====================================================================
+2. THE CONTROL: the glyphs themselves, at the sizes real ink comes in
+====================================================================
+
+Rendered through U9's chain (type1 -> charstring -> scan), which is why
+this could be checked against ground truth at all:
+
+    em px   ⌋ cmsy10/floorright          ⇃ msam10/harpoondownleft
+            angle  drift  arm   h        angle  drift  arm   h
+      34     90.0   0.0    1    34        59.0  1.33    4   30
+      40     83.7   0.0    2    40        50.2  1.00    6   35
+      46     84.3   0.0    2    46        58.0  1.20    6   41
+      52     85.2   0.0    2    52        56.3  1.17    7   46
+      58     85.6   0.0    2    58        51.3  1.00    9   52
+      64     82.4   1.0    3    64        57.5  1.14    8   57
+      80     84.0   0.5    3    80        54.5  1.10   11   71
+
+THE ANGLE SEPARATES AT EVERY SIZE -- 23 to 33 degrees apart, never
+closer. THE DRIFT DOES NOT: at 64 px the floor's own foot drifts 1.0,
+which is what the barb drifts. A rule resting on the drift would fail
+there, and the first draft of this file rested on it (section 6).
+
+At 34 px the foot is ONE row and the angle saturates at 90; below about
+40 px the feature stops being readable, so `stem_arm` returns the
+height and the caller decides (MIN_HEIGHT = 40).
+
+====================================================================
+3. THE INK, in the one book that reads the same glyph both ways
+====================================================================
+
+mielke-geometrodynamics uses `⌋` as the INTERIOR PRODUCT, an operator,
+not a delimiter: 75 of its rows carry `\rfloor` with no `\lfloor`, where
+every other document in the corpus is balanced (31 rows, both halves).
+Every harpoon reading in all 21 documents is in this book. So the two
+populations share a page, a font, a rasterisation and a dpi -- a control
+group no synthetic fixture can match.
+
+71 glyph instances measured on the LOSSLESS 400 dpi page:
+
+    MathPix's reading   n   places   angle          drift   arm   height
+    \rfloor            56     47     79.7 - 80.5     0.0     3    40 - 47
+    \downharpoonleft   15     11     80.5            0.0     3    47
+
+EVERY instance read as a harpoon measures as a floor, and not near the
+boundary: 80.5 degrees where a real barb at that size reads 50-58, and
+a drift of 0.0 where a real barb reads 1.0-1.33. The two label groups
+are not merely close -- they are identical, to the decimal.
+
+"places" counts distinct (page, line): the 15 are spread over 11 of
+them, not one line counted many times.
+
+LOOKED AT BY EYE, twice: 24 glyphs from the first extraction and 12
+from the corrected one (8 harpoon-read, 4 floor-read), enlarged 4x and
+set side by side. Every one is the same glyph -- a stem with a flat
+foot -- and the harpoon-read ones cannot be told from the floor-read
+ones. `--crops` writes them, so this is re-checkable.
+
+====================================================================
+4. WHAT WAS NOT MEASURED, AND WHY
+====================================================================
+
+87 places carry a symbol (57 display lines, 30 inline rows). The two
+passes dropped 87 occurrences:
+
+    48  the component under the mapped position is not a stem and arm
+    32  no component landed at the mapped position
+     4  the locator found a different number of stem-and-arm candidates
+        than the LaTeX has -- other glyphs of that shape (`£`, `]`, `L`)
+        are candidates too
+     2  would not render at all
+     1  no host line
+
+A drop is silence, not evidence. It also means the 71 are not a random
+sample: they are the ones the placement could reach, and a systematic
+difference between reached and unreached occurrences is not ruled out.
+
+THIS IS A BORN-DIGITAL PDF. One glyph renders to an identical bitmap
+everywhere, which is why the numbers repeat exactly rather than spread.
+On a scan they will spread, and the threshold has to be set on a scan
+population before it can be used there. The separation is wide, so
+there is room; that is an expectation, not a measurement.
+
+A SIDE FINDING. 2 of the 57 display lines cannot be rendered because
+MathPix emitted the Arabic letter ل (U+0644) inside a physics formula.
+A different defect, in the published corpus now.
+
+====================================================================
+5. THE RULE THIS SUPPORTS -- a residual, not a verdict
+====================================================================
+
+    the reading says harpoon AND the ink stands square
+    (angle > 75 deg, height >= 40 px)
+
+On this book that fires on 15 instances and on none of the 56 floors.
+The drift is reported beside it and is NOT part of the test, because
+section 2 shows it stops separating at 64 px.
+
+NOT in the marking policy, and nothing is auto-corrected: the finding
+is a disagreement between the producer and the ink, reported with both
+numbers, exactly as 658 settled for the placement flags.
+
+It generalises the way pdfdrill's census says: per component, the arms
+at each stem terminal with angle, length and drift, plus the corner's
+position along the stem. `+` vs `×` is the angle alone; `⊥` vs `⊢` is
+the corner position; `/` vs `↗` is the arm count at one end.
+
+====================================================================
+6. THE HARNESS, AND THE TWO DEFECTS ITS TESTS FOUND
+====================================================================
+
+`tools/glyphangle.py` -- `reference` (section 2) and `document
+<bibkey>` (section 3, with `--crops` writing each measured glyph for
+the eye). `tests/test_glyphangle.py` pins it on the REAL glyphs, both
+rendered once at 46 px and pasted in as fixtures.
+
+Three versions of this measurement were wrong before it was written up,
+and each was caught by a test rather than by reading the code:
+
+  a. A HAND-DRAWN barb, whose reach and row count were chosen by me,
+     failed its own separation test. Fixture dimensions from nowhere;
+     replaced by the rendered glyphs.
+  b. `stem_arm` took the extreme columns as stem and tip, so it was
+     DIRECTION-BLIND: a mirrored `⌊` measured exactly as a `⌋`, and the
+     docstring's "reaches left" was prose. The stem is now found. The
+     corrected version measures MORE of the barb (6 arm rows at 46 px
+     against 4) and separates wider.
+  c. The separation was claimed on the drift. The opt-in size sweep
+     showed the floor drifting 1.0 at 64 px -- the same as the barb --
+     so the rule was moved onto the angle and a test now RECORDS the
+     drift's failure rather than hiding it.
+
+NOT DONE. The overprint/containment test (bounding-box containment as
+evidence of an overlay) is pdfdrill's second proposal and is NOT
+measured here; it is next, on this same document.
