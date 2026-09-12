@@ -438,8 +438,16 @@ DECIDED (2026-09-11): publish as measured — 658 stands, the two
 limits are known and not acted on. The corpus marks and their work
 directories are in `~/inkdrill-marks/` (`index.json`, `README.md` for
 pdfdrill, `stale-crops.json`); re-emit with `formulamarks marks
-<bibkey> --work <dir>`. (2) MathPix errors:
-none found yet. (3) whitespace in large open expressions — with
+<bibkey> --work <dir>`. (2) MathPix errors: the first ones FOUND. 15
+instances in mielke read `\downharpoonleft` for the `⌋` interior
+product; the ink stands at 80.5 deg where a real barb at that size
+reads 50-58 (out/661, harness `tools/glyphangle.py`, the angle and
+drift of an arm against its stem, read off run spans). Two more in the
+same book: an Arabic ل (U+0644) and a CJK 十 (U+5341) emitted inside
+physics formulas. pdfdrill's containment/overprint test does NOT
+transfer to a raster -- it misses the composed arrow it was proved on
+and fires on radicals at 14% of display lines (out/662), so it stays a
+text-layer test on their side; parked 2026-09-12. (3) whitespace in large open expressions — with
 MathPix, who fixed a de-tokenizer bug inventing invisible brackets;
 re-run `tools/fuzzyalign.py` on their next build. (4) matrix-arrangement
 repair, for low-confidence equations only.

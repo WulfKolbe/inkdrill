@@ -1,0 +1,96 @@
+662 - bounding-box containment does NOT find overprints on a raster: it misses the real one and fires on radicals
+================================================================================================================
+
+pdfdrill's second geometric property: "a glyph whose extent encloses
+another's on the same baseline is an overprint -- proved on EQ0472, and
+the same book composes ⇐+⇒ into ⟺ that way. 13 rows corpus-wide carry
+an unaccounted overlay (mielke 9, gilmore 2, fong-spivak 2)." Checked
+on the ink of that same book before building anything on it.
+
+IT DOES NOT WORK ON A RASTER, and it fails in both directions.
+
+====================================================================
+1. FALSE NEGATIVE -- on the case it was proved on
+====================================================================
+
+EQ0472's display line is p155 line 18 of mielke-geometrodynamics. Its
+two `\Longleftrightarrow` are SINGLE connected components, 98 x 33 px,
+area 703 each. Over the book's three long-arrow display lines there are
+ZERO component pairs overlapping in both x and y.
+
+TeX composes a long arrow from `arrowdblleft` + a double bar +
+`arrowdblright`. On the page those pieces TOUCH, so the sweep sees one
+component: there are no two boxes for one to contain. Whatever the text
+layer records as an overlay, the ink has already merged.
+
+====================================================================
+2. FALSE POSITIVE -- at a rate that would drown the finding
+====================================================================
+
+Every 9th display line of the book, 128 lines, 4,082 components. Pairs
+overlapping by more than half the narrower one in x AND overlapping in
+y:
+
+    100 pairs on 18 of 128 lines (14%)
+
+Every example inspected is ordinary typesetting:
+
+    p24  a radical, 294 x 65 px, over the eight glyphs under its bar
+    p47  `\left( ... \right)`, 106 x 65, over its contents
+    p47  `\stackrel{*}{\pi}`, the accent over the letter
+    p86  `\left[ \begin{array}{c|c} ... \right]`, 114 x 137, over its cells
+
+A rule keyed on containment would flag a radical, a big delimiter or a
+stacked accent as an overlay on every second or third display line.
+
+====================================================================
+3. WHY THIS DOES NOT CONTRADICT PDFDRILL'S MEASUREMENT
+====================================================================
+
+Theirs runs on GLYPH RECORDS. There a radical is ONE record whose box
+legitimately spans its contents, and a composed arrow is SEVERAL
+records with overlapping boxes -- the two cases are distinguishable
+because the text layer kept them apart. On a raster they are not:
+the radical's box still contains its contents, and the arrow's pieces
+are no longer separate objects.
+
+So containment is a TEXT-LAYER property. It is worth having there, and
+it is exactly the evidence a scan does not carry -- which was the
+reason for looking at the ink in the first place.
+
+====================================================================
+4. WHAT THE INK CAN DO INSTEAD: width against the rendered reference
+====================================================================
+
+The composition is still visible, by size rather than by containment.
+Compare a component's width with the claimed glyph rendered from the
+font at the size its own height implies:
+
+    line          reading                ink width   cmsy10 reference
+    p155 (x2)     \Longleftrightarrow      98 px     short ⇔ = 56 px
+    p83           \Leftrightarrow          50 px     short ⇔ = 56 px
+
+Both readings agree with the ink, so there is no overprint error on
+these lines. The test that WOULD catch one -- a short ⇔ read where the
+page prints the long ⟺, or one glyph read where two are superimposed --
+is this width residual, and it is the machinery 661 already built:
+render the claimed glyph, measure the ink, report the disagreement.
+
+NOT BUILT. Parked at the user's direction, 2026-09-12.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * One book, every 9th DISPLAY line. Inline text lines were not
+    sampled, and they carry `\not`, `\stackrel` and accents in prose.
+  * 12 of the 100 pairs were judged by eye, not all of them. The
+    claim "every example inspected is legitimate" covers those 12.
+  * The pair test was x-overlap > 50% of the narrower component AND
+    y-overlap > 0. A different threshold gives a different rate; the
+    false NEGATIVE in section 1 does not depend on the threshold,
+    because there is only one component there.
+
+A BY-CATCH. On p155 line 18 MathPix read the `+` of `\stackrel{+}{\Omega}`
+as the CJK character 十 (U+5341) -- next to the Arabic ل (U+0644) that
+661 found on two other lines of the same book.

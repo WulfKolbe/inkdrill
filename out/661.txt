@@ -160,6 +160,8 @@ and each was caught by a test rather than by reading the code:
      so the rule was moved onto the angle and a test now RECORDS the
      drift's failure rather than hiding it.
 
-NOT DONE. The overprint/containment test (bounding-box containment as
-evidence of an overlay) is pdfdrill's second proposal and is NOT
-measured here; it is next, on this same document.
+THE OVERPRINT TEST, pdfdrill's second proposal, was measured next on
+this same book and DOES NOT WORK ON A RASTER -- it misses the composed
+arrow it was proved on (one component, nothing to contain) and fires on
+radicals and big delimiters at 14% of display lines. See 662; parked
+there at the user's direction.
