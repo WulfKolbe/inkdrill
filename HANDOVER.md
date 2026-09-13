@@ -458,7 +458,17 @@ and fires on radicals at 14% of display lines (out/662), so it stays a
 text-layer test on their side; parked 2026-09-12. (3) whitespace in large open expressions — with
 MathPix, who fixed a de-tokenizer bug inventing invisible brackets;
 re-run `tools/fuzzyalign.py` on their next build. (4) matrix-arrangement
-repair, for low-confidence equations only.
+repair, for low-confidence equations only. (5) page-wide table detection:
+MEASURED AND NOT BUILT (out/664). Three routes over 1,277 pages reproduce
+only 58% of MathPix's tables and 20% of its diagrams, and the misses
+are BLINDNESS, not disagreement about edges -- 927 of 1,422 missed
+diagrams have zero overlap with anything found, and 980 have nothing of
+ours inside them. `grid` fires on the glyph `⫫`, `rules` on an `=`.
+What survives is narrow and worth keeping: the `frame` route (a
+sprawling component holding under 5% ink in its box) finds boxes
+MathPix never labelled -- 10 of 10 judged by eye are real, including a
+ruled table and a captioned figure, and 41 of the 47 pages carrying a
+caption with no box carry one. `tools/pagetables.py`.
 
 ## Coordination
 

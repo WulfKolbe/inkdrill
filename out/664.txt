@@ -1,0 +1,147 @@
+664 - the table premise run: the routes do not reproduce MathPix's boxes, and the frame route finds boxes MathPix never had
+=========================================================================================================================
+
+The premise measurement before building a page-wide table detector.
+`tools/pagetables.py` over all 21 published documents, two page
+selectors -- the pages MathPix labels `table` or `diagram` (1,230) and
+the pages carrying a `figure_label` with no box at all (47) -- 29 jobs,
+1,277 pages, about 35 minutes of wall clock at 8 processes, roughly
+13 s per page on one core (nest + sweep + free_rules + table_lines over
+the 12 largest ink regions).
+
+Three routes, each for a shape a table really comes in (659-663):
+
+    grid    closed ruled table; the cells are holes (emit.table_lines)
+    rules   rules that do not touch (booktabs), clustered
+    frame   rules that TOUCH and close nothing: one sprawling component
+            with almost no ink in its box (measured 0.012-0.013 against
+            0.14 for a glyph)
+
+====================================================================
+1. COVERAGE OF MATHPIX'S OWN BOXES -- POOR, AND UNEVEN
+====================================================================
+
+A box counts as covered at IoU >= 0.5.
+
+    as measured        total   covered          by grid / frame / rules
+    table                348   208  (60%)           119 /   77 /   12
+    diagram            1,855   433  (23%)           297 /  106 /   30
+
+    with post-hoc floors (below)
+    table                348   203  (58%)           109 /   82 /   12
+    diagram            1,855   378  (20%)           225 /  123 /   30
+
+Per document it swings from complete to nil:
+
+    kohlhase-omdoc      tables 102/103      johnston      13/43
+    cardona              tables   7/8       lyche          0/7
+    fong-spivak x2      tables  67/131      gilmore       12/38
+    diagrams are poor everywhere: invitation 114/500, seven-sketches
+    114/499, voloshin 70/176, penev_A 0/14
+
+====================================================================
+2. "MISSED" MEANS UNSEEN, NOT BOXED DIFFERENTLY
+====================================================================
+
+The obvious objection to a coverage number is the threshold: the same
+object boxed a little differently fails IoU 0.5. It is not that.
+
+    missed      IoU 0.0    <0.1   0.1-0.3   0.3-0.5    median
+    diagram 1,422   927     123      211       161      0.000
+    table     140    90       9        32         9     0.000
+
+And by containment rather than overlap: 980 of the missed diagrams and
+101 of the missed tables have NOTHING of ours inside them at all; only
+213 diagrams and 7 tables have a part of ours covering a quarter or
+more. The shortfall is blindness, not disagreement about edges.
+
+The likeliest reason is in MathPix's vocabulary, not ours: a `diagram`
+need not have a drawn frame -- an inline picture, a spaced arrangement
+of glyphs, a plot with no box -- and no route here can find a box that
+was never drawn. That would explain most of the 1,855.
+
+====================================================================
+3. WHAT THE CANDIDATES ACTUALLY ARE -- 27 judged by eye
+====================================================================
+
+    grid    1,697 candidates, 1,277 unmatched (75%)
+    rules   1,014 candidates,   972 unmatched (96%)
+    frame     716 candidates,   383 unmatched (53%)
+
+Sampled and looked at, seeded, 4-5 per stratum:
+
+  BEFORE the floors
+    grid   3 of 4 are the glyph `⫫` in "X ⫫ Z" -- crossing strokes
+           enclose a lattice of holes -- and 1 a two-vertex graph
+    rules  4 of 4 are an `=` sign: two bars, 41 x 14 px, clustered
+    frame  4 of 4 are real: a framed plot (mielke p356, 16.7% of the
+           page), a diagram box (p359), a plot's data band (0707 p26),
+           and a REAL RULED TABLE MathPix never labelled (cardona p181,
+           "D = 3 CS Lagrangians | Characteristic classes | Groups")
+
+  AFTER the floors
+    grid   5 of 5 are real FIGURES -- a causal DAG in circles, a scatter
+           plot with a decision boundary, a scribble over text, a
+           numbered graph, a line plot. Real, but not tables.
+    frame  5 of 5 real: a boxed Bourbaki definition with its caption
+           (omdoc p49), a plot with error bars, two diagrams, a 3-D
+           vector figure
+    frame, on caption-but-no-box pages
+           5 of 5 real captioned figures
+
+THE FLOORS, proposed AFTER seeing that -- so a hypothesis, not a
+result: grid needs >= 1% of the page and >= 4 cells; rules needs >= 3
+rules or one spanning >= 25% of the page width; frame needs >= 0.5% of
+the page. They cut grid 1,697 -> 616 and rules 1,014 -> 183 while
+costing 5 covered tables and 55 covered diagrams.
+
+====================================================================
+4. THE RESIDUAL -- the reason to have any of this
+====================================================================
+
+47 pages carry a caption and NO table or diagram box. pdfdrill's census
+counts 13,129 such `figure_label` lines corpus-wide, and a caption with
+no box is where a box was likely missed.
+
+    41 of those 47 pages (87%) carry at least one candidate of ours
+    covering >= 0.5% of the page
+    371 unmatched frame candidates survive the floors corpus-wide
+    10 of 10 frame candidates judged by eye are real boxes
+
+====================================================================
+5. THE VERDICT
+====================================================================
+
+  * As a REPRODUCTION of MathPix's labelling: no. 58% of tables, 20% of
+    diagrams, and the misses are genuine blindness (section 2). Tuning
+    three routes toward that target is not worth building.
+  * As a RESIDUAL FINDER: yes, for the `frame` route. Every one of the
+    ten examined is a real box, including a ruled table and a captioned
+    figure MathPix has no record of, and 87% of the caption-only pages
+    carry one.
+  * `grid` and `rules` are unusable as written -- they fire on a glyph
+    with crossing strokes and on an `=` sign. With the floors `grid`
+    survives as a FIGURE detector, which is not what it was built for.
+
+So the thing worth having is narrow: "this page has a drawn box that
+MathPix did not label", from the frame route, on pages where a caption
+says there should be one. That is one route, one floor and an existing
+oracle -- not a page-wide table unit.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * IoU 0.5 is a first guess, and so is every constant in section 3.
+    The floors are POST-HOC: proposed after seeing the noise, applied
+    to the same run, never re-run against fresh data.
+  * 27 candidates of 790 surviving unmatched were judged, by me, not
+    blind, seeded samples of 4-5 per stratum.
+  * Nothing here measures a box that is DRAWN but that we find and
+    MathPix also found -- the agreement population is not examined
+    beyond the coverage count.
+  * penev_A's 14 diagrams (0 covered) and lyche's 7 tables (0 covered)
+    were not looked at individually; whether they are undrawn or simply
+    missed is unknown.
+  * Not wired into any report and no policy changed. Caption attachment
+    stays a `lines.json` job (662, and pdfdrill's own census).
