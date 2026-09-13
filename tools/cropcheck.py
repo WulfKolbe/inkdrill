@@ -5,9 +5,14 @@ This checks it against a second, independent cut of the same thing:
 the row's own `lines.json` region, cut from the lossless 400 dpi page
 render, resampled to the published crop's exact size, and correlated
 with it pixel for pixel. A correct crop correlates near 1 despite JPEG
-and resampling; a crop cut from somewhere else correlates near 0, and
-the two populations separate cleanly (0902.0431: 3,101 rows at
-0.7-1.0, 62 near 0, nothing in between).
+and resampling; a crop cut from somewhere else correlates near 0.
+
+THE TWO POPULATIONS DO NOT SEPARATE CLEANLY ON EVERY BUILD. They did on
+2026-09-11 (0902.0431: 3,101 rows at 0.7-1.0, 62 near 0, nothing
+between). On the 09-12 rebuild they do not: print quality and the
+per-document crop scale push correct rows down as far as 0.348, and
+`WRONG` had to be re-placed by eye. Re-check the boundary whenever the
+corpus is rebuilt -- see the note on `WRONG`.
 
 SIZE IS NOT ENOUGH, which is why this compares CONTENT. FO0068 of
 0902.0431 is the right rectangle cut from the wrong page: its published
@@ -44,17 +49,30 @@ sys.path.insert(0, str(ROOT))
 from tools.formulafind import (frame_rect, host_regions,  # noqa: E402
                                page_frames, rows)
 
-#: below this the published crop does not show its row's line. Placed
-#: BY EYE in the empty interval of the corpus-wide distribution
-#: (2026-09-11, 37,491 checked rows of 21 documents): the highest row
-#: judged a WRONG line was 0.262 (1510.06699 FO0719, the line above
-#: its host) and the lowest judged RIGHT was 0.413 (kohlhase-omdoc
-#: FO0266), with no row between. 5 of 5 wrong below, 10 of 10 right
-#: from 0.413 to 0.548 (penev_A, a scan, sits at 0.41-0.45).
-#: The first value, 0.5, came from 0902.0431 alone and called four
-#: correct crops wrong -- six rows from 0.41 to 0.55 were all the right
-#: line, low only through a sub-pixel shift on thin glyphs.
-WRONG = 0.35
+#: below this the published crop does not show its row's line.
+#:
+#: RECALIBRATED 2026-09-13 on pdfdrill's 09-12 rebuild (out/665), because
+#: a threshold is a claim about a POPULATION and the population changed.
+#: On the 09-11 build the two groups were separated by an empty interval
+#: (highest wrong 0.262, lowest right 0.413) and 0.35 sat inside it. On
+#: the rebuild that interval is full -- 599 rows lie between 0.30 and
+#: 0.50 -- because the crops are now scaled per document (1.0, 0.85,
+#: 0.6, 0.5, 0.42) and a heavily reduced, soft-printed crop correlates
+#: low while showing exactly the right line.
+#:
+#: Placed by eye again on this build: 8 of 8 rows examined from 0.002 to
+#: 0.299 are WRONG lines, 8 of 8 from 0.348 to 0.355 are RIGHT.
+#:
+#: THE POPULATIONS OVERLAP HERE, which they did not on 09-11. Of six
+#: rows examined in 0.30-0.35, five are right (blurred, reduced crops of
+#: the right expression) and ONE is wrong: johnston FO0086 at 0.304,
+#: whose crop reads `e_2 \in R^7` where the host line reads `e_3 \in
+#: R^7` -- the neighbouring row's expression. So no single threshold
+#: separates the two classes on this build, and a count taken at any
+#: cut is a FLOOR, not a total: wrong rows live above it. 0.30 sits
+#: below every verified-right row (lowest 0.302) and above the highest
+#: row verified wrong with a clear margin (0.299).
+WRONG = 0.30
 
 
 def _pgm(args):
@@ -84,13 +102,20 @@ def check(library: pathlib.Path, bib: str, shard=0, nshards=1, every=1,
     out = []
     for r in mine:
         hit = regs.get(r["id"])
-        page, reg = hit if hit else (int(r["page"]), None)
+        # A row can have NEITHER a host line NOR a page column -- the row
+        # column is `None` for a row the producer did not place. The first
+        # version wrote `int(r["page"])` here and died on it, losing a whole
+        # shard of mielke silently (out/665).
+        page = hit[0] if hit else (int(r["page"]) if r["page"] else None)
+        reg = hit[1] if hit else None
         rec = dict(id=r["id"], page=r["page"], host_page=page,
                    conf=float(r["conf"]) if r["conf"] is not None else None,
                    corr=None, why="")
         pub = doc / r["crop"] if r["crop"] else None
-        png = doc / "inspect" / "pages" / f"p{page}.png"
-        if pub is None or not pub.exists():
+        png = doc / "inspect" / "pages" / f"p{page}.png" if page else None
+        if page is None:
+            rec["why"] = "no host line and no page column"
+        elif pub is None or not pub.exists():
             rec["why"] = "no published crop"
         elif reg is None:
             rec["why"] = "no line match"

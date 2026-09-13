@@ -1,0 +1,155 @@
+665 - the crop check re-run: a threshold that stopped holding, a shard lost to my own crash, and 461 wrong crops
+===============================================================================================================
+
+pdfdrill asked for a finished measurement before republishing. The marks
+were ready; the STALE-CROP LIST WAS NOT, and checking why cost three of
+my own mistakes. All three are here.
+
+====================================================================
+1. WHAT WAS READY, AND WHAT WAS NOT
+====================================================================
+
+READY. All 21 documents' marks, verified on 2026-09-13 by re-emitting
+each one and comparing with the stored file: 0 refused, 0 readings
+changed, every file reproduced exactly. 8,408 marks over 36,715 rows.
+`index.json` and `table-rows.json` regenerated against the same build.
+
+NOT READY. `stale-crops.json` was measured on 2026-09-11, against a
+build that no longer exists. Re-checking its 159 ids on the 09-12
+rebuild: 99 are now CORRECT (pdfdrill re-rendered them) and 60 still
+wrong. Handing that file over would have had them re-render 99 crops
+that are already right -- and, worse, would have missed the ones the
+rebuild broke: the first finished shard of the re-run showed 10 wrong
+crops in 0707.4470, a document that had ZERO on 09-11.
+
+So the whole corpus was re-checked: 36,715 rows, 102 shards, ~40 min.
+
+====================================================================
+2. MY THREE MISTAKES, IN THE ORDER THEY WERE CAUGHT
+====================================================================
+
+a. A LOST SHARD, SILENTLY. `cropcheck.check` unpacked `int(r["page"])`
+   for a row with no host line, and a row can have no page column
+   either. One shard of mielke died, 101 of 102 files were written, and
+   the aggregate looked complete. Found by counting output files against
+   the job list, not by reading the totals. Fixed; the row is now
+   reported as "no host line and no page column".
+
+b. A TAXONOMY BUILT ON A FALSE PREMISE. I split the wrong crops into
+   "right rectangle, wrong content" and "cut from another region" by
+   comparing the crop's size with its host region -- assuming a crop is
+   cut 1:1. It is not: a crop is scaled PER DOCUMENT, and the correct
+   rows measure a single constant each (1.0 for eleven documents, 0.85
+   mielke, 0.6 for four, 0.5 for two, 0.42 seven-sketches). Withdrawn
+   and recomputed against each document's own constant.
+
+c. A THRESHOLD QUOTED ACROSS A REBUILD. `WRONG = 0.35` was placed by
+   eye on 09-11 inside an EMPTY interval: highest row judged wrong
+   0.262, lowest judged right 0.413, nothing between. On the 09-12
+   build that interval is full -- 599 rows lie between 0.30 and 0.50 --
+   because the per-document scaling above pushes correct crops down: a
+   0.42-scale, soft-printed crop of the right expression correlates
+   0.35. Re-placed by eye on THIS build (section 3).
+
+The general shape is the one HANDOVER already records: a result can be
+stale against the artifact it was measured on. A THRESHOLD IS A RESULT.
+Re-place it when the corpus is rebuilt, or it silently measures the
+wrong thing.
+
+====================================================================
+3. THE CUT, RE-PLACED -- AND IT NO LONGER SEPARATES CLEANLY
+====================================================================
+
+30 rows examined by eye on this build, published crop against the
+lossless cut of the row's host line:
+
+    0.002 - 0.299   8 of 8 WRONG        a bold running head for its
+                                        section line; a figure for its
+                                        caption line; a neighbouring line
+    0.302 - 0.344   5 of 6 RIGHT        blurred, reduced crops of the
+                                        right expression
+                    1 of 6 WRONG        johnston FO0086 at 0.304: the
+                                        crop reads `e_2 \\in R^7`, the
+                                        host line `e_3 \\in R^7`
+    0.336 - 0.497  10 of 10 RIGHT       nine documents, all correct
+    0.348 - 0.355   8 of 8 RIGHT
+
+`WRONG = 0.30`: below every verified-right row (lowest 0.302) and above
+the highest cleanly-verified wrong one (0.299).
+
+IT IS A FLOOR, NOT A TOTAL. The two populations OVERLAP: one verified
+wrong row sits at 0.304, above the cut. 15 of 16 rows examined between
+0.30 and 0.50 are right, so contamination above the cut is roughly 1 in
+16 near the boundary and falls off with height -- but it is not zero,
+and no single threshold separates the classes on this build.
+
+====================================================================
+4. THE RESULT: 461 WRONG CROPS OF 36,625 CHECKED (1.26%)
+====================================================================
+
+    gilmore              76      2010.14265        28      1605.05775    4
+    0902.0431            63      omdoc             22      mielke        4
+    penev_B              57      rph8-g15q         19      2106.07890    3
+    johnston             55      voloshin          19      bradley_s     2
+    lyche                43      seven-sketches    17      2501.06662    0
+    invitation           14      1510.06699        13      penev_A       0
+    0707.4470            10      cardona           12      BradleyG      0
+
+90 rows could not be checked: 31 have no published crop, 58 no host line
+inkdrill can find, 1 neither a host line nor a page column.
+
+WHAT THE WRONG CROP ACTUALLY SHOWS (`failure-modes.json`), by matching
+its size, at the document's own scale, against every line region on its
+host page -- SAME-PAGE matches only, because with thousands of regions
+a cross-page size match is coincidence:
+
+    240   the FIGURE on that page, not the caption line the maths is in
+     71   a NEIGHBOURING text line on the same page
+    150   unattributed
+
+The 240 are the 0707.4470 shape, confirmed by eye: page 14 has a
+`diagram` line 1263x606 and the maths `k=0,1,2,3` lives in a caption
+TEXT line beneath it; the published crop is 1263x606.
+
+====================================================================
+5. A THIRD OF THE RESIDUAL IS ABOUT TO DISAPPEAR BY YOUR OWN RULE
+====================================================================
+
+pdfdrill is moving to an additive structure where front matter, titles
+and repeating frames are EXCLUDED from formula transclusion. Of the 461
+wrong crops, the host line is:
+
+    text                     220
+    table_of_contents_item   115     <- excluded
+    table                     83
+    figure_label              31     <- excluded
+    section_header            10     <- excluded
+    table_of_contents_row      2     <- excluded
+
+158 of 461 (34%) sit on lines that exclusion removes -- 60 of them in
+0902.0431 (whose wrong crops cluster on its contents pages 2-4) and 43
+in lyche. Re-rendering those is wasted work if the rows go away. The
+83 hosted on `table` lines are the transclusion fault already reported
+in `table-rows.json`, and they go the same way.
+
+A useful order of work, then: exclude first, re-render second, and the
+list shrinks by a third before anyone touches a crop.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * 461 is a FLOOR (section 3). Neither the false-negative rate above
+    the cut nor the false-positive rate below it is measured; 30 eye
+    verdicts, mine, not blind, are all that stand behind the boundary.
+  * The 150 unattributed are not explained, only unexplained: no
+    same-page region matches their size at the document's scale.
+  * The host-line rule reproduces pdfdrill's own (first span in document
+    order). Where the two differ -- 58 rows with no host line inkdrill
+    can find, mostly a rewritten reading against MathPix's raw one --
+    the row is skipped, not guessed.
+  * This binds to a LINES.JSON-SHAPED FILE, not to MathPix: page
+    records with typed line regions and their text. When pdfminer.six
+    produces that file instead, every tool here reads it unchanged, and
+    the `type` vocabulary is what the exclusion rule and the marking
+    policy's "is this a line" clause both rest on.

@@ -414,6 +414,27 @@ pixel of pdfdrill's full-size crop), `rect_frac`, `host_page`,
 | **page frames per page and per axis, CropBox-aware** (`page_frames`, `frame_of`) | MathPix's page is the CropBox, `inspect/pages` the MediaBox. 4 of 21 documents are inset (cardona, voloshin, gilmore, kohlhase-omdoc); one width ratio cut the wrong strip there, correlation −0.014 against +0.924 once mapped |
 | **staleness: `lines.json` per document, the reading per ROW** — not the bytes of `evidence-formula.tex`, and not a digest over all rows | pdfdrill rewrites that file to insert the marks and to render rows it once could not; a byte hash, or a digest over every row, would refuse every mark for one corrected row. A changed row goes to `not_measured` as "reading changed"; each row carries the `math` it was measured on |
 
+**IT BINDS TO A `lines.json`-SHAPED FILE, NOT TO MATHPIX.** Every tool
+here reads page records with typed line regions and their text; the
+producer is incidental. pdfdrill is moving to pdfminer.six (or
+`pdftotext` with page separators) for exactly that file, and to an
+additive structure where front matter, titles and repeating frames are
+EXCLUDED from formula transclusion. Two things rest on the `type`
+vocabulary and will move with it: the exclusion rule, and the marking
+policy's "is this region a line" clause. Measured 2026-09-13: 158 of
+the 461 wrong crops sit on lines that exclusion removes (115
+`table_of_contents_item`, 31 `figure_label`, 10 `section_header`), so a
+third of that residual disappears by the rule change alone (out/665).
+
+**A THRESHOLD IS A RESULT, AND GOES STALE LIKE ONE.** `cropcheck.WRONG`
+was placed by eye on 09-11 inside an interval that was EMPTY on that
+build (highest wrong 0.262, lowest right 0.413). The 09-12 rebuild
+scaled crops per document (1.0, 0.85, 0.6, 0.5, 0.42), which pushes
+correct crops down to 0.30, and the interval filled with 599 rows. The
+constant had to be re-placed at 0.30 and the two classes now OVERLAP --
+one verified-wrong row sits at 0.304 -- so the count is a FLOOR. Re-place
+it whenever the corpus is rebuilt; do not quote it across one (out/665).
+
 **NOT INKDRILL'S: stale published crops.** pdfdrill's `render_crops`
 caches by TITLE (`if f.is_file() and f.stat().st_size > 500: cached`),
 so a crop rendered under the old host-line join (before their
