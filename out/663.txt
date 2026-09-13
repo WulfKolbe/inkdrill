@@ -1,0 +1,108 @@
+663 - the corpus moved under the marks, the 803 was true of a build that no longer exists, and the edges do not lean left
+=======================================================================================================================
+
+Three things at once, all on 2026-09-13.
+
+====================================================================
+1. PDFDRILL REBUILT THE CORPUS, AND THE MARKS SURVIVED IT
+====================================================================
+
+Every published document except `penev_A` was rebuilt on 2026-09-12
+(tex mtimes 11:49 to 12:42, mielke at 19:15), after the marks run of
+09-11. `lines.json` was NOT rebuilt anywhere -- every file still carries
+its August date -- so host regions are unchanged and only the row set
+moved.
+
+    evidence rows   37,610  ->  36,715   (-895)
+
+    gilmore -462   johnston -84   voloshin -69   0902.0431 -52
+    invitation -51   seven-sketches -45   cardona -32   1510.06699 -26
+    mielke -25   lyche -21   omdoc -20   penev_B -8   the rest 0
+
+Re-emitted all 21 documents from their stored work directories --
+`formulamarks marks`, no re-measurement:
+
+    documents refused                0
+    rows whose READING changed       0
+    marks    8,453  ->  8,408       (-45, every one on a row that is
+                                     no longer in the evidence at all)
+
+This is what the per-row staleness guard was built for four days ago,
+and it is the first time it has been exercised by a real rebuild: a
+whole-document digest would have refused all 21 and cost a two-hour
+re-measure. `~/inkdrill-marks` is now current for the 09-12 build.
+
+THE GENERAL SHAPE is already in HANDOVER -- "an artifact can be stale
+against its source and a RESULT can be stale against the artifact" --
+and this is its second instance. The first (out/102) had no guard and
+had to be held by a message between sessions.
+
+====================================================================
+2. THE 803 WAS TRUE OF THE OLD BUILD. IT IS 88 NOW
+====================================================================
+
+On 09-12 the rule "the row's HOST LINE is labelled type=table" counted
+803 rows corpus-wide, 460 of them gilmore's. Today the same rule over
+the same code gives 88, gilmore 25. Neither number is a mistake: the
+rows are gone.
+
+    gilmore rows carrying rendered maths   3,473  ->  3,011   (-462)
+
+-462 against -460: the rows that lost their maths in the rebuild ARE
+the table-hosted ones. pdfdrill's transclusion fix has already removed
+them, which is why the count collapsed.
+
+Checked before concluding, by running three matching rules side by side
+on today's file: first occurrence by span equality gives 25, the row's
+own page column by substring gives 4, first line anywhere by substring
+gives 25. None reproduces 460, so the difference is not in the rule.
+
+WHAT IS LEFT, in `~/inkdrill-marks/table-rows.json`:
+
+    88   the host line IS a table -- the crop shows a table. None of
+         these is marked: all are suppressed by the "host region is not
+         a line" clause, so no mark was ever drawn on one.
+    236  the expression also occurs inside a table SOMEWHERE, but its
+         host line is ordinary text. Not evidence of a fault; listed
+         because it is the number a looser rule would report.
+    30   the row's own LaTeX is a RULED or larger-than-4x4 array. The
+         other 519 array rows are plain matrices up to 4x4, which are
+         ordinary inline maths.
+
+====================================================================
+3. THE PLACEMENT EDGES DO NOT LEAN LEFT
+====================================================================
+
+HANDOVER has carried "the placement edges lean left (7 of 12 eye
+errors)" as an open item since 658. Measured directly: for a marked
+row, take the crop blobs whose centres fall inside the placed rectangle
+and compare the rectangle's edges with the ink extent of exactly those
+blobs.
+
+    250 marked rows (150 of 0902.0431, 100 of gilmore), 400 dpi
+
+    document      left edge - ink left      right edge - ink right
+    0902.0431     median +0.0, mean -0.4    median +0.0, mean +0.2
+    gilmore       median -1.0, mean -1.5    median +0.0, mean -0.2
+
+    both edges left of the ink: 27 of 150 and 28 of 100 -- about what
+    two independent signs would give.
+
+The ink spans are 499 and 454 px at the median, so a systematic lean of
+even a glyph would be visible. There is none. The 7-of-12 lean is a
+property of the TWELVE KNOWN ERRORS, not of the placed population, and
+the open item is re-worded accordingly.
+
+WHAT THIS DOES NOT MEASURE. Whether a placement is on the RIGHT glyphs:
+the rectangle is compared with the ink it covers, so a wholly misplaced
+rectangle sitting neatly on the wrong expression still reads 0. It
+refutes a systematic small lean, nothing else. The population is marked
+rows only -- the ones the policy already trusts.
+
+====================================================================
+WHAT IS RUNNING
+====================================================================
+
+The table premise run (tools/pagetables.py, three routes over the pages
+MathPix labels a table and the pages carrying a caption but no box) is
+in flight; its numbers are out/664.

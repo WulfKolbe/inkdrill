@@ -428,9 +428,11 @@ next row's picture and swallow that row, and let `\lowconf{…}` into
 ids; the width-only ratio above; rows split on `\\ \hline`, which an
 `array` in the maths holds too.
 
-**OPEN, in the four workstreams out/658 separated.** (1) marking: the
-placement edges lean left (7 of 12 eye errors); and out/660 found two
-limits the books expose. `margin` is blind when an expression fills
+**OPEN, in the four workstreams out/658 separated.** (1) marking: 663 measured the placement edges over 250 marked rows and
+found NO lean -- both edges sit on the ink they cover within a pixel
+(medians 0.0 to -1.0 px on spans of ~470 px), so the 7-of-12 left
+lean is a property of the twelve known ERRORS, not of the placed
+population. out/660 found two limits the books expose. `margin` is blind when an expression fills
 more than half its line (no non-overlapping rival fits, so margin =
 score), and one document scale cannot serve a book set in two type
 sizes (johnston's refit scales peak at 0.50 and 0.60). The user
@@ -438,7 +440,13 @@ DECIDED (2026-09-11): publish as measured — 658 stands, the two
 limits are known and not acted on. The corpus marks and their work
 directories are in `~/inkdrill-marks/` (`index.json`, `README.md` for
 pdfdrill, `stale-crops.json`); re-emit with `formulamarks marks
-<bibkey> --work <dir>`. (2) MathPix errors: the first ones FOUND. 15
+<bibkey> --work <dir>`.
+pdfdrill REBUILT every document on 2026-09-12 (lines.json untouched,
+so host regions still hold): the marks were re-emitted from their
+stored work directories -- 0 documents refused, 0 readings changed,
+8,453 -> 8,408 marks, every loss on a row no longer in the
+evidence (out/663). `table-rows.json` there lists the 88 rows whose
+host line is a table. (2) MathPix errors: the first ones FOUND. 15
 instances in mielke read `\downharpoonleft` for the `⌋` interior
 product; the ink stands at 80.5 deg where a real barb at that size
 reads 50-58 (out/661, harness `tools/glyphangle.py`, the angle and
