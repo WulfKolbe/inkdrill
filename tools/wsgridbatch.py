@@ -19,7 +19,12 @@ order, and the rule used is recorded per row:
                                                      -> "similar 0.xx"
   3. no page column: the ONE line on any page that equals the reading
                                                      -> "exact, any page"
-     (62 of 132 candidates had an empty page column; 60 resolve this way)
+
+Rule 3 was written for 62 candidates that appeared to have no page. They
+had one: `formulafind.rows` lost it behind the `~\eqnum{...}` suffix of
+the id cell (out/669). With the parser fixed, every evidence row carries
+a page and rule 3 is a fallback that should not fire. The reading is
+the rendered one, else the source cell of a not-rendered row.
 
 WHAT THE OUTPUT IS NOT (out/668): a count of blank cells. Eye-checked
 on 17 candidates chosen across outcomes, 5 grids were right, 5 partly
@@ -61,13 +66,18 @@ def norm(t: str) -> str:
     return re.sub(r"\s+", "", t)
 
 
+def reading(r):
+    """The rendered reading, else the source cell (a not-rendered row)."""
+    return r["math"] if r["math"] is not None else (r.get("source") or "")
+
+
 def display_hosts(dirname, picked):
     """id -> (page, region, rule). See the module docstring."""
     idx = line_index(LIB, dirname)[0]
     everywhere = [(p, reg, norm(t)) for p, lines in idx.items() for reg, t in lines]
     out = {}
     for r in picked:
-        want = norm(r["math"])
+        want = norm(reading(r))
         if not want:
             continue
         if r["page"]:
@@ -103,7 +113,7 @@ def one_document(dirname, ids, outdir):
     frames, refused = page_frames(LIB, dirname)
     res = []
     for r in picked:
-        rec = dict(id=r["id"], page=r["page"], reading_empties=reading_empties(r["math"]))
+        rec = dict(id=r["id"], page=r["page"], reading_empties=reading_empties(reading(r)))
         hit = hosts.get(r["id"])
         if not hit:
             rec["why"] = "no host line"
@@ -120,7 +130,7 @@ def one_document(dirname, ids, outdir):
                         f"{w}x{h}+{x}+{y}", "+repage", "-colorspace", "Gray", "-depth", "8",
                         str(pgm)], check=True, capture_output=True)
         g = wsgrid.measure(pnmio.load_mask(str(pgm), dpi=400))
-        g["reading"] = wsgrid.compare(g, r["math"] or "")
+        g["reading"] = wsgrid.compare(g, reading(r))
         g.update(page=page, region_mathpix_px=reg, host=rule)
         rd = g["reading"]
         rec.update(host_page=page, region=reg, host=rule, crop=[w, h],

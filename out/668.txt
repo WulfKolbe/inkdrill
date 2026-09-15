@@ -30,6 +30,13 @@ The display rule, in order:
 62 of the 132 rows have an EMPTY PAGE COLUMN in the evidence file, all
 29 of gilmore's among them.
 
+  [REFUTED, out/669: every row has a page. `formulafind.rows` lost it
+  behind the id cell's `~\eqnum{...}` suffix -- 3,745 equation rows
+  corpus-wide. Re-run with the fixed parser: 131 hosted on their own
+  page, the 129 hosted here on the same regions, verdicts unchanged.
+  The EQ0202 paragraph below is wrong the same way: its reading is the
+  source cell of a not-rendered row, not an empty one.]
+
 The one row the scratch run and the tool disagree on is fong-spivak-
 invitation EQ0202: its reading in `evidence-equation.tex` is EMPTY, and
 the scratch rule matched "" against the first of three empty-text lines

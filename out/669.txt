@@ -1,0 +1,87 @@
+669 - the row parser lost 3,745 pages, and FO0444's hooks measured in a table cell
+================================================================================
+
+Both from pdfdrill's messages on 2026-09-15, answering out/668.
+
+====================================================================
+1. formulafind.rows: THE PAGE BEHIND AN ID-CELL SUFFIX
+====================================================================
+
+out/668 reported 62 of 132 blank candidates with "an empty page column".
+pdfdrill checked their file: all 132 carry a page. The id cell holds a
+suffix after `\ident{...}` and before the page cell, and the parser's
+page match allowed only an optional `\lowconf{...}` there:
+
+    \ident{gilmore-lie-groups\_\allowbreak{}EQ0584}~\eqnum{(11.4)}\lowconf{0.001} & 188 & ...
+    \ident{mielke-geometrodynamics\_\allowbreak{}FO0431}~{\tiny\textbf{[refined: census]}} & 100 & ...
+
+Corpus-wide over the 21 published documents, before and after:
+
+                                 rows     no page before   no page after
+    evidence-equation.tex       8,718        3,745               0
+    evidence-formula.tex       36,715           23               0
+
+3,741 of the 3,745 are `\eqnum`; mielke lost 1,144 of its 1,149. The 23
+formula rows are `[refined: census]` (22 mielke, written today by
+pdfdrill's hook rewrite) and `[refined: source]` (0707.4470 FO0175).
+
+THE FIX: the page is the first cell after the id cell, whatever the id
+cell carries. New fields: `eqnum`, `refined`, and `source` -- the LaTeX
+source cell un-escaped in one pass (sequential replaces corrupt `\_` and
+`\{`). `source` is the only reading of a not-rendered row: 19 of the 29
+rows with no `\FitMath` have one (fong-spivak-invitation EQ0202, which
+out/668 wrongly called "an empty reading").
+
+AN INDEPENDENT CHECK: where both exist, the un-escaped source cell equals
+the rendered math on 8,657 of 8,695 equation rows and 36,644 of 36,709
+formula rows. The differences sampled are the `\[ ... \]` wrapper the
+source cell keeps.
+
+WHAT IT TOUCHED. The formula files never carried `\eqnum`, so the marks
+(out/660, 663) and the crop check (out/665) lost at most the rows tagged
+`[refined: ...]`; on the 09-12 build that is 0707.4470 FO0175, which is
+the one row out/665 reported as "no host line and no page column".
+Equation rows' pages were used only by `tools/wsgridbatch.py`.
+
+Tests: TF_1 gains real-row fixtures for `\eqnum` + `\lowconf`,
+`[refined: census]` and a not-rendered row with a source cell. Suite
+1,271, of which 37 skip.
+
+THE 132 CANDIDATES RE-RUN WITH TRUE PAGES:
+
+    hosted exactly on the row's own page       131
+    no host                                      1   gilmore EQ0474 (p145: no
+                                                     line resembles its reading,
+                                                     best ratio 0.28)
+    hosted in both runs, same page and region  129 of 129
+
+The any-page fallback of out/668 had found the right lines every time,
+so its 22 eye verdicts and the 12 handed-over grids stand. Newly
+measured: gilmore EQ0584 and fong-spivak-invitation EQ0202.
+
+====================================================================
+2. FO0444 -- THE HOOKS IN A TABLE CELL
+====================================================================
+
+pdfdrill held FO0444 (it fits the hook rule) because no line may host
+it. Its line, in mielke's lines.json:
+
+    page 102   `table` line 17, holding a `complex_cell` (line 31) and a
+               `math` line (32), both region (884,1081) 315x85 MathPix px
+
+Hook heights by `glyphangle.stem_arm`, pt:
+
+    printed (inspect/pages, 400 dpi)      7.20   7.20    body 4.32
+    MathPix reading, rendered             9.96   9.96    body 6.24
+    rewrite, rendered                     9.96   9.96    body 6.24
+
+The hooks are NOT enlarged here: each `\left(` closes on its own hook
+around `e_alpha` alone. Against body type the printed and rendered hook
+are the same (1.67 against 1.60); the cell is set in smaller type.
+What the rewrite changes is the parentheses: in the reading, each
+`\right)` closes a `\left.` spanning a stacked `R_beta^gamma` or the
+1/2, and stretches. By eye the rewrite's second line matches the page;
+its first line's parentheses stay tall because the reading stacks
+`R_{\beta}^{\gamma}` where the page staggers `R_\beta{}^\gamma` -- and
+`\Delta^{\beta} \gamma` is printed `\Delta^\beta{}_\gamma`. Reading
+errors the hook rule does not reach.

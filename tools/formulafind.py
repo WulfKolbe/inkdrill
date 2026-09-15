@@ -331,6 +331,20 @@ def rows(tex_path):
     for a row with no published image, `conf` is None where the producer
     gave none, `math` is None where there is no `\\FitMath`. A caller
     decides what a missing cell means for it; this function never does.
+
+    THE PAGE IS THE FIRST CELL AFTER THE ID CELL, whatever the id cell
+    carries after `\\ident{...}`. The page match used to allow only an
+    optional `\\lowconf{...}` there, and pdfdrill writes three suffixes:
+    `~\\eqnum{(11.4)}`, `\\lowconf{0.001}`, `~{\\tiny\\textbf{[refined:
+    census]}}`, alone or together. On 2026-09-15 that silently gave 3,745
+    of 8,718 equation rows no page (1,144 of mielke's 1,149) and 23
+    formula rows too -- found by pdfdrill, not by this suite. `eqnum`
+    and `refined` now carry those suffixes.
+
+    `source` is the LaTeX-source cell un-escaped. It is the reading where
+    the producer did not render one (`(not rendered)`, `---`): `math` is
+    None on those rows, which read as "no reading" to anything using
+    `math` alone.
     """
     body = tex_path.read_text(encoding="utf-8",
                               errors="replace").split(r"\endhead", 1)[-1]
@@ -346,8 +360,17 @@ def rows(tex_path):
         if ident is None:
             continue
         rest = chunk[j:]
-        m = re.match(r"\s*(?:\\lowconf\{[^}]*\})?\s*&\s*(\d+)\s*&", rest)
+        cell = rest.split("&", 1)[0]            # the rest of the id cell
+        m = re.match(r"[^&]*&\s*(\d+)\s*&", rest)
+        eqnum = re.search(r"\\eqnum\{([^{}]*)\}", cell)
+        refined = re.search(r"\[refined:\s*([^\]]*)\]", cell)
         conf = re.search(r"\\confcell\{\w+\}\{([\d.]+)\}", rest)
+        source = None
+        k = rest.find(r"{\ttfamily\footnotesize")
+        if k >= 0:
+            g, _ = _group(rest, k)
+            if g is not None:
+                source = _unescape(g[len(r"\ttfamily\footnotesize"):].strip())
         math = None
         k = rest.find(r"\FitMath{")
         if k >= 0:
@@ -360,8 +383,24 @@ def rows(tex_path):
                    page=m.group(1) if m else None,
                    conf=conf.group(1) if conf else None,
                    math=math,
+                   source=source,
                    crop=c.group(1) if c else None,
-                   lowconf=r"\lowconf{" in rest[:60])
+                   lowconf=r"\lowconf{" in cell,
+                   eqnum=eqnum.group(1) if eqnum else None,
+                   refined=refined.group(1).strip() if refined else None)
+
+
+_ESC = re.compile(r"\\(textbackslash|textasciicircum|textasciitilde|allowbreak)\{\}"
+                  r"|\\([{}_&$#%])")
+_ESC_TO = {"textbackslash": "\\", "textasciicircum": "^",
+           "textasciitilde": "~", "allowbreak": ""}
+
+
+def _unescape(s):
+    r"""The source cell back to LaTeX, in ONE pass. Sequential replaces
+    corrupt it: `\textbackslash{}\_` must become `\_`, and a later
+    `\_` -> `_` pass would eat the backslash the first pass produced."""
+    return _ESC.sub(lambda m: _ESC_TO[m.group(1)] if m.group(1) else m.group(2), s)
 
 def render(math, out, dpi):
     """The expression alone, no page, no margin beyond the glyphs."""

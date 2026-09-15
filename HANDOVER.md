@@ -152,6 +152,20 @@ last touched the file.
     measured against, or it goes stale silently when the standard field
     is re-pointed. Nothing here does that yet.
 
+14. **`formulafind.rows` lost the page of 3,745 equation rows and 23
+    formula rows** (out/669, fixed 2026-09-15, found by pdfdrill). The
+    page match allowed only `\lowconf{...}` between `\ident{...}` and
+    the page cell; pdfdrill also writes `~\eqnum{(11.4)}` and
+    `~{\tiny\textbf{[refined: census]}}`. The page is now the first
+    cell after the id cell whatever it carries; `eqnum`, `refined` and
+    `source` (the un-escaped source cell, the only reading of a
+    not-rendered row) are new fields. The formula files never had
+    `\eqnum`, so marks and the crop check lost at most the rows pdfdrill
+    tagged `[refined: ...]` -- 0707.4470 FO0175 on the 09-12 build.
+    **The shape: a producer adds a cell decoration, a parser keyed on the
+    old decoration returns None, and None reads as "the producer gave
+    none".** A missing page should have been counted, not trusted.
+
 ## Known failure classes — every one cost real time here
 
 - **A control group is only as good as the rule that built it.** The

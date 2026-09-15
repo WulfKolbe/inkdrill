@@ -74,6 +74,20 @@ FIXTURE = (_HEAD
            + _row(r"A\_FO0006", 6, "---",
                   r"{\ttfamily\footnotesize \textbackslash{}xrightarrow}",
                   r"{\ttfamily\footnotesize not rendered}", _img("A_FO0006"))
+           # the id-cell suffixes pdfdrill writes, copied from real rows:
+           # gilmore EQ0584 (eqnum + lowconf) and mielke FO0431 (refined).
+           # The page match allowed only a lone \lowconf and gave 3,745
+           # equation rows no page.
+           + _row(r"gilmore-lie-groups\_\allowbreak{}FO0007}~\eqnum{(11.4)}"
+                  r"\lowconf{0.001", 188, r"\confcell{confred}{0.001}",
+                  r"{\ttfamily\footnotesize \textbackslash{}left[\allowbreak{}"
+                  r"\textbackslash{}begin\{array\}\{cc\} 1 \& \textbackslash{}\_ "
+                  r"\allowbreak{}\textbackslash{}\{x\textasciicircum{}\{2\}}",
+                  r"\emph{(not rendered)}", _img("A_FO0007"))
+           + _row(r"A\_FO0008}~{\tiny\textbf{[refined: census]}", 100,
+                  r"\confcell{confamber}{0.590}",
+                  r"{\ttfamily\footnotesize \textbackslash{}xi \textbackslash{}rfloor D}",
+                  r"\FitMath{$\displaystyle \xi \rfloor D$}", _img("A_FO0008"))
            + r"\end{longtable}")
 
 
@@ -91,7 +105,25 @@ class TF_1_RowsParser(unittest.TestCase):
 
     def test_every_ident_is_one_record(self):
         self.assertEqual(sorted(self.rows),
-                         [f"A_FO000{i}" for i in range(1, 7)])
+                         [f"A_FO000{i}" for i in (1, 2, 3, 4, 5, 6, 8)]
+                         + ["gilmore-lie-groups_FO0007"])
+
+    def test_the_page_survives_every_id_cell_suffix(self):
+        r = self.rows["gilmore-lie-groups_FO0007"]
+        self.assertEqual((r["page"], r["eqnum"], r["lowconf"], r["conf"]),
+                         ("188", "(11.4)", True, "0.001"))
+        r = self.rows["A_FO0008"]
+        self.assertEqual((r["page"], r["refined"], r["eqnum"]), ("100", "census", None))
+        # and a row with no suffix at all still has none
+        r = self.rows["A_FO0001"]
+        self.assertEqual((r["page"], r["eqnum"], r["refined"]), ("3", None, None))
+
+    def test_the_source_cell_is_unescaped_in_one_pass(self):
+        r = self.rows["gilmore-lie-groups_FO0007"]
+        self.assertIsNone(r["math"])                 # not rendered
+        self.assertEqual(r["source"], r"\left[\begin{array}{cc} 1 & \_ \{x^{2}")
+        self.assertEqual(self.rows["A_FO0006"]["source"], r"\xrightarrow")
+        self.assertEqual(self.rows["A_FO0008"]["source"], r"\xi \rfloor D")
 
     def test_a_row_without_a_crop_does_not_take_the_next_rows(self):
         self.assertIsNone(self.rows["A_FO0002"]["crop"])
