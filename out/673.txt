@@ -1,0 +1,80 @@
+673 - the host-line rule drifted on 09-12: 515 rows hosted differently, 62 marks refused
+======================================================================================
+
+pdfdrill republished mielke, 0902.0431, johnston, cardona and gilmore
+(site 02e8d11) and reported marks its build would not draw: johnston 7,
+cardona 1, "host line differs". None came from today's work -- the
+marked rows are unchanged since the 09-13 run, and formulafind's own host
+rule finds the recorded line for every one. The difference is the rule.
+
+====================================================================
+1. WHAT pdfdrill CHANGED, AND WHEN
+====================================================================
+
+Their 674/676 (2026-09-12), in `inlinectx`:
+
+  * `first_occurrences` takes a span only on a line whose type can HOST
+    a transclusion: `docmodel.line_types.NO_TRANSCLUDE`, 17 types in five
+    families -- table (cells, rows, spanning cells ...), section_header,
+    title, toc (container, item, row, number), figure_label (label,
+    diagram_info, x_axis_tick_label). A reading that occurs only there has
+    NO host.
+  * `load_spans` reads `text_display or text`, the field their model
+    reads, where `formulafind.first_occurrence_lines` reads `text`.
+
+The second is not small: over the 21 documents' lines.json, 139,152
+non-math lines carry a `text_display` that differs from `text`; 1,828
+inline spans exist only in `text_display`, 960 only in `text`.
+
+====================================================================
+2. THE REACH -- measured with pdfdrill's own code
+====================================================================
+
+`tools/hostdrift.py` imports their `load_spans` / `first_occurrences`
+read-only and compares hosts per published formula row (looked up by
+MathPix's reading where the shown one is refined, as `formulamarks`
+does). It reproduces the two reported counts exactly: johnston 7,
+cardona 1.
+
+    formula rows with a reading       36,700
+    a different host line                515
+    no host by pdfdrill's rule            13   (penev_A)
+    no host by formulafind's rule         11
+    MARKS REFUSED by pdfdrill's rule      62
+
+    gilmore 12  0902.0431 11  penev_A 11  penev_B 8  johnston 7
+    2010.14265 3  voloshin 3  lyche 2  0707.4470 1  cardona 1  omdoc 1
+    seven-sketches 1  rph8-g15q 1        (and 0 in the other 8)
+
+These 62 have been measured on a line pdfdrill does not crop since its
+09-12 build, and refused ever since; only johnston's and cardona's were
+noticed, because only those builds were read closely today. None was
+drawn wrong. The loss is 62 rectangles of 7,700.
+
+====================================================================
+3. WHAT IT WOULD TAKE, NOT DONE
+====================================================================
+
+  * `first_occurrence_lines` made to match: skip NO_TRANSCLUDE line types
+    and read `text_display or text`. Either copied (and pinned by a test
+    that fails when the type set changes) or imported from pdfdrill.
+  * `update` taught a second trigger -- a row whose recorded host differs
+    from the rule's current host -- so the 515 are re-measured at the
+    stored scale and every other row stays identical (out/671's
+    guarantee).
+  * Each affected document's marks re-emitted, checked unchanged-rows-
+    identical, new rectangles drawn by eye, placed -- and republished.
+
+Not done: the five documents were republished minutes before this was
+measured, and a change to every document's delivered marks is the user's
+call.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * Which host is RIGHT for the 515 is pdfdrill's rule by construction
+    (it crops the line), not a judgment of either rule. No crop was looked
+    at.
+  * How many of the 62 would mark again on their pdfdrill host is unknown
+    until measured; out/670 says a mark depends on its line.
