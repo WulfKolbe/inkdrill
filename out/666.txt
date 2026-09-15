@@ -1,0 +1,120 @@
+666 - the whitespace premise on 0902.0431 EQ0756: two lattices, no blank cells, and a column MathPix dropped
+============================================================================================================
+
+The proposal (user, 2026-09-14): measure whitespace in large displayed
+maths as a table -- columns, rows, and per row which cells are empty --
+keyed by equation id, for a later program that overlays a symbol on the
+empty places with Ghostscript before MathPix reads the page. Premise
+first, on one expression, at three resolutions, before any overlay.
+
+Harness: `tools/wsgrid.py CROP.pgm --dpi N --key ID --reading TEX`.
+Population: ONE expression, 0902.0431 EQ0756 (page 125, conf 0.119, a
+13-column `array`), cut from MathPix region (575,1792) 1059x633 on the
+2125x2750 page: gs render at 300 and 600 dpi, `inspect/pages/p125.png`
+at 400. Every count below is identical at all three resolutions.
+
+====================================================================
+THE FOUR QUESTIONS
+====================================================================
+
+Q1  How many persistent X-gutters?
+    The crop is TWO BLOCKS, split at the largest leading (41 px against
+    35-36 at 400 dpi): six lines, then four centred lines. Gutters must
+    be counted per block -- a column blank in all ten lines is blank
+    only where neither block has ink.
+        upper block   21 X-gutters      (300, 400, 600 dpi alike)
+        lower block   14 X-gutters
+    The whole-crop figures I quoted earlier (30 runs, "8 wide") were
+    taken over both blocks at once and are withdrawn.
+
+Q2  Two width clusters, and is the wide one the canyon?
+    NOT TWO -- THREE, with the same membership at every dpi, widths
+    scaling with resolution (px at 300 / 400 / 600):
+        inter-symbol space   14-17 / 19-23 / 27-36     8 gutters
+        array column gap     45-50 / 60-65 / 89-97    12 gutters
+        the canyon           86    / 116   / 173       1 gutter, at 50%
+    The canyon is a class of its own, about twice a column gap. A
+    two-way split cannot isolate it: it either joins the column gaps or
+    takes the column gaps with it.
+
+Q3  Do the lower four rows reuse the upper X-gutters?
+    No. Upper column boundaries sit at 19-43% and 72-96% of the crop
+    width; lower at 51-76%. 2 of the 13 upper boundaries have a lower
+    one within one body-glyph width, and both are coincidence of a
+    shared pitch (~4.9% -- the same `\arraycolsep`, the same class of
+    width). The lower block is centred, so by construction it does not
+    register.
+
+Q4  How many empty slots, and does a human agree?
+    Per block: 6 x 14 and 4 x 7, ZERO empty cells at every dpi.
+    By eye, counted before the measurement: zero -- every line is an
+    expression, "= d", and six digits (twice in the upper block).
+    Forced onto the upper block's lattice, the lower rows report 20
+    "empty" cells (1 leading + 4 trailing per row). Those are MARGINS of
+    a centred block, not missing entries.
+
+====================================================================
+WHAT THE MEASUREMENT FOUND INSTEAD: MathPix dropped a column
+====================================================================
+
+Cells per row, ink against MathPix's reading:
+
+    row      reading cells   non-empty   ink cells
+    0-5           13             13          14      <- disagree
+    6-9           12              7           7
+
+Every upper row reads `... = 1 & 2 & 2 & 2 & 2 & 1` -- five digits on
+the right where the page shows six (`2 2 2 2 1 1`). The array was read
+with 13 columns and the 14th is gone, six digits in all. The lower rows
+agree on count; MathPix pads them with 2 empty cells before and 3 after
+to centre the block, which is its own convention, not blanks in the
+ink. Row 9 also lost its `\lambda_3` (reads `& & +\frac{1}{2}...`),
+which a cell count cannot see.
+
+So on this expression the grid is a RESIDUAL, not an overlay input: the
+count of ink columns per row against the reading's cells flags every
+row MathPix truncated, with no symbol identity.
+
+====================================================================
+THE PASS, AND WHAT EACH STEP COST
+====================================================================
+
+Reused: `sweep` (moments), `raster.stroke_mode`, `raster.profile`,
+`mathstruct.rows`. No new grouping.
+
+  * speck floor area < stem^2. The first floor, "both dims >= 2 px",
+    dropped 42 real components at 300 dpi -- every minus, equals bar and
+    fraction bar renders 1 px tall there.
+  * lines = rows of >= 3 members, shorter rows attached to the nearest.
+    Merging rows by small leading chained all four lower lines into
+    one, because each 1/2 bridges the leading.
+  * column boundary = gutter wider than the LARGEST RATIO JUMP in the
+    sorted widths, floor 2 x stem. Mode + gap failed at 400 dpi when the
+    widest class was the modal one; without the 2 x stem floor, 4 px
+    sidebearing gaps at 300 dpi made the largest jump 4 -> 14.
+  * occupancy by ink pixels (>= stem^2) in the cell. By centroid it
+    reported 18 empty cells in sliver columns whose ink belonged to a
+    glyph centred next door.
+
+Every one of those was placed on this expression. The overlay checked
+by eye (400 dpi): 13 boundaries in the upper block including the
+canyon, 6 in the lower, each between digit columns.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * ONE expression. It has no blank cells, so the class the overlay
+    exists for -- a genuinely empty entry -- has not fired once. Every
+    classifier test must see each class fire; this one has not. The
+    next premise needs an array with real blanks (an omitted-zero
+    matrix, a tableau with dots, a patent-style "***" place).
+  * Nothing says an overlaid symbol helps MathPix. The patent says the
+    approach works; this corpus has not measured it.
+  * The data structure needs BLOCKS: one equation can hold several
+    independent lattices, and a single (ncols, nrows, empty) record for
+    EQ0756 would report 20 empty cells that are margins.
+  * Two blocks at most: `blocks()` splits once, at the largest leading.
+    Three independently aligned parts would be read as two.
+  * The reading comparison maps ink lines to reading rows by order and
+    refuses when the counts differ; it reads the FIRST array only.

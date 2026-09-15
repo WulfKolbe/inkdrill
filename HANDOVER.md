@@ -119,6 +119,26 @@ last touched the file.
     9.4%. **Not acted on** — it moves every recorded distance in the
     corpus, and whether it moves them toward the scan is unmeasured.
 
+12. **The whitespace grid (`tools/wsgrid.py`) is a premise on ONE
+    expression** (out/666). For the planned Ghostscript overlay of
+    empty array cells before MathPix. On 0902.0431 EQ0756 it finds two
+    independently aligned blocks (6x14, 4x7), three gutter-width
+    classes rather than two, and ZERO empty cells at 300/400/600 dpi,
+    which agrees with an eye count. The class the overlay exists for has
+    not fired once. The output record must carry BLOCKS: forced onto one
+    lattice, EQ0756 reports 20 "empty" cells that are margins of a
+    centred block. What it did find is a residual: ink 14 cells per
+    upper row against MathPix's 13, so the last digit column is dropped in
+    six rows. Next premise: an array with genuinely blank entries.
+
+13. **More than one LaTeX reading per row** (user, 2026-09-14): the best
+    available reading takes the standard field name and every other one
+    is kept under its own field name; only the current best is copied
+    to the standard fields. pdfminer's reading, when it arrives, has
+    correct symbol names. So a residual must NAME the reading it was
+    measured against, or it goes stale silently when the standard field
+    is re-pointed. Nothing here does that yet.
+
 ## Known failure classes — every one cost real time here
 
 - **A control group is only as good as the rule that built it.** The
