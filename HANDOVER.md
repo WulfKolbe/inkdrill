@@ -181,6 +181,17 @@ last touched the file.
     shown reading is neither `latex` nor `latex_refined` (fong-spivak's
     `\mathbf` for `\boldsymbol`).
 
+16. **`\FitMath{\emph{(not rendered)}}` is not a reading** (out/672).
+    33 rows corpus-wide; `rows()` took it as maths and `update`
+    measured the words. Only `$...$` is a reading now (`placeholder`
+    keeps the rest), and `marks` says "not rendered" before looking for a
+    record. Re-emitting all 21 documents changed no mark. Also found: 15
+    of pdfdrill's 136 census-verified refinements do not compile where
+    MathPix's reading did -- bracket promotions across `&`, into a brace
+    group, or across over/underbrace -- so those rows print the
+    placeholder. Reported to pdfdrill; the repair is theirs. Cardona's
+    re-emit is not placed until its rebuild finishes.
+
 ## Known failure classes — every one cost real time here
 
 - **A control group is only as good as the rule that built it.** The

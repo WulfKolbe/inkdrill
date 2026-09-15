@@ -88,6 +88,10 @@ FIXTURE = (_HEAD
                   r"\confcell{confamber}{0.590}",
                   r"{\ttfamily\footnotesize \textbackslash{}xi \textbackslash{}rfloor D}",
                   r"\FitMath{$\displaystyle \xi \rfloor D$}", _img("A_FO0008"))
+           # the producer's placeholder INSIDE \FitMath, from johnston FO5033
+           + _row(r"A\_FO0009", 483, r"\confcell{confamber}{0.741}",
+                  r"{\ttfamily\footnotesize \textbackslash{}boldsymbol\{l\}}",
+                  r"\FitMath{\emph{(not rendered)}}", _img("A_FO0009"))
            + r"\end{longtable}")
 
 
@@ -105,8 +109,17 @@ class TF_1_RowsParser(unittest.TestCase):
 
     def test_every_ident_is_one_record(self):
         self.assertEqual(sorted(self.rows),
-                         [f"A_FO000{i}" for i in (1, 2, 3, 4, 5, 6, 8)]
+                         [f"A_FO000{i}" for i in (1, 2, 3, 4, 5, 6, 8, 9)]
                          + ["gilmore-lie-groups_FO0007"])
+
+    def test_a_placeholder_in_fitmath_is_not_a_reading(self):
+        r = self.rows["A_FO0009"]
+        self.assertIsNone(r["math"])
+        self.assertEqual(r["placeholder"], r"\emph{(not rendered)}")
+        self.assertEqual(r["source"], r"\boldsymbol{l}")
+        # and real maths is untouched
+        self.assertEqual(self.rows["A_FO0008"]["math"], r"\xi \rfloor D")
+        self.assertIsNone(self.rows["A_FO0008"]["placeholder"])
 
     def test_the_page_survives_every_id_cell_suffix(self):
         r = self.rows["gilmore-lie-groups_FO0007"]
@@ -527,6 +540,29 @@ json.dump(recs, open(a[a.index("--json") + 1], "w"))
         self.assertEqual(d["not_measured"]["X_FO0005"], "no line match")
         self.assertEqual(d["counts"]["reading_changed"], 0)
         self.assertEqual(len(d["rows"]), 9)
+
+    def test_a_placeholder_row_is_not_rendered_even_with_a_leftover_record(self):
+        """johnston FO5033: the Rendered cell became `\\emph{(not rendered)}`
+        and an update had measured those words. The row reports "not
+        rendered", never "reading changed", and no other row moves."""
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td)
+            doc, work = self._finished(
+                lib, lambda t: t.replace(r"\FitMath{$\displaystyle x_{3}+y$}",
+                                         r"\FitMath{\emph{(not rendered)}}"))
+            (work / "update.json").write_text(json.dumps([dict(
+                id="X_FO0003", page=3, host_page=3, math=r"\emph{(not rendered)}",
+                region=dict(top_left_x=100, top_left_y=180, width=125, height=46),
+                frame=[1.6, 1.6, 0.0, 0.0], rect=[20, 5, 70, 40], crop_w=200, crop_h=74,
+                conf=1.0, gaps=9, margin=0.3, score=0.95, edge_cuts=0,
+                blobs_in_rect=5, formula_blobs=5, crop=None)]))
+            (work / "update_meta.json").write_text(json.dumps(dict(ids=["X_FO0003"])))
+            rc, d = self._call(fm.marks, lib, "X", work)
+        self.assertEqual(d["not_measured"]["X_FO0003"],
+                         "not rendered by the producer (\\FitMath placeholder)")
+        self.assertEqual(d["counts"]["reading_changed"], 0)
+        self.assertEqual(sorted(r["id"] for r in d["rows"]),
+                         [f"X_FO{i:04d}" for i in range(1, 11) if i != 3])
 
 
 if __name__ == "__main__":

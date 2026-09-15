@@ -1,0 +1,102 @@
+672 - "(not rendered)" read as maths, and 15 refinements that no longer compile
+=============================================================================
+
+pdfdrill's 696 bracket repair changed four formula readings (mielke
+FO0901, FO1309; johnston FO1528; cardona FO0284). `formulamarks update`
+on mielke and johnston met out/671's rule -- every row not updated
+identical to pdfdrill's freshly built marks, scale and calibration equal
+-- but johnston's two updated rows were wrong in a way that rule cannot
+see.
+
+====================================================================
+1. THE PLACEHOLDER INSIDE \FitMath
+====================================================================
+
+johnston FO5033 and FO1528 print `\FitMath{\emph{(not rendered)}}`.
+`rows()` took any `\FitMath` content as the reading, so `update` looked
+the rows' host lines up by MathPix's reading and then RENDERED THE WORDS
+"(not rendered)" and measured them as a formula. FO5033 became a
+measured, unmarked record of that text; FO1528 "not placed".
+
+Every `\FitMath` in the 21 published documents, 2026-09-15:
+
+    $\displaystyle ...$         45,371
+    \emph{(not rendered)}           33   (10 formula rows, 23 equation rows)
+
+THE FIX: only `$...$` is a reading; anything else leaves `math` None and
+is kept as `placeholder`. `marks` now reports a row with no reading as
+"not rendered by the producer" BEFORE looking for a measured record, so
+a leftover record cannot surface as "reading changed". Tests: TF_1 (a
+placeholder row, and a `$...$` row untouched), TF_5 (a placeholder row
+with a leftover update record). Suite 1,278, 37 skip.
+
+WHAT IT HAD COST. Re-emitting every document's marks from its stored
+work after the fix: NO mark count changed anywhere and no marked row
+moved. Across both my files and pdfdrill's built ones, exactly one
+placeholder row had ever been measured (johnston FO5033, today's update)
+and none marked. The only differences are placeholder rows changing
+their stated reason:
+
+    fong-spivak-invitation  FO1478, FO1481        "no line match" -> not rendered
+    fong-spivak-seven-sk.   FO1471, FO1476, FO1478
+    kohlhase-omdoc          FO0004, FO0399, FO0400
+    johnston                FO1528 ("not placed"), FO5033 (measured) -> not rendered
+    cardona                 FO0284 (09-13 record)  -> not rendered   (NOT placed:
+                                                     pdfdrill is rebuilding cardona)
+
+Placed for the four documents whose only change is placeholder rows; each
+previous file kept as marks-before-672.json. gilmore EQ0474 -- out/668's
+one candidate with no host line -- is one of the 23 equation rows.
+
+====================================================================
+2. WHY THOSE ROWS SAY "(not rendered)": 15 REFINEMENTS DO NOT COMPILE
+====================================================================
+
+johnston FO1528 and cardona FO0284 are two of the 696 repair's own rows.
+Compiling every `latex_refined` in the 21 documents' tiddlers.json with
+formulafind's standalone preamble:
+
+    refined readings                          136
+    do not compile                             18
+      MathPix's `latex` compiles (a REGRESSION,
+      all census-verified)                     15
+      MathPix's `latex` does not compile either
+      (ink-verified, pre-existing)              3   0902.0431 EQ1032,
+                                                    mielke EQ0972, johnston EQ1276
+
+The 15 regressions:
+
+    0902.0431   EQ0594, EQ0704, EQ0946, EQ1091, EQ1095, EQ1211
+    cardona     FO0284, EQ0066
+    mielke      EQ0067, EQ0605, EQ0954
+    johnston    FO1528, EQ0909, EQ0936
+    gilmore     EQ0444
+
+The shapes visible in the readings. TeX pairs `\left`/`\right` only
+within one group and one alignment cell, and a per-type counter cannot
+see either:
+
+  * promoted across an alignment `&`:
+    `k_J^{-1}\left( & A(...)\right)`  (0902.0431 EQ0594, EQ0704, EQ1091, EQ1095)
+  * promoted INSIDE a brace group whose `\right` is outside it:
+    `\mathbb{Z}^{\left( } \mathbb{R}^d\right)` (cardona FO0284),
+    `{\left[11} \\ 22 ...\right]` (johnston FO1528), mielke EQ0605, EQ0954
+  * across `\overbrace`/`\underbrace` groups (johnston EQ0909, EQ0936)
+  * `\cancel{\right)}` -- a closer moved into a group (gilmore EQ0444)
+
+MathPix's `\left. ... \right]` in these rows is typographically wrong
+but COMPILES; the repair makes it right-looking and uncompilable, and
+the evidence shows the placeholder instead of either.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * Compilation is with formulafind's preamble (amsmath, amssymb,
+    stmaryrd, cancel, ...), not pdfdrill's `display_safe`; a reading
+    could compile in one and not the other. The evidence placeholder on
+    FO1528 and FO0284 agrees with it here.
+  * The shapes of EQ0946, EQ1211, EQ0066 and EQ0067 were not read
+    (readings truncated in the listing).
+  * Nothing here decides the fix. The repair and its gate are
+    pdfdrill's.

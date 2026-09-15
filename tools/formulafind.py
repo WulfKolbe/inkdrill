@@ -401,18 +401,29 @@ def rows(tex_path):
             g, _ = _group(rest, k)
             if g is not None:
                 source = _unescape(g[len(r"\ttfamily\footnotesize"):].strip())
-        math = None
+        math = placeholder = None
         k = rest.find(r"\FitMath{")
         if k >= 0:
             g, _ = _group(rest, k + len(r"\FitMath"))
             if g is not None:
+                # ONLY `$...$` IS A READING. pdfdrill also writes
+                # `\FitMath{\emph{(not rendered)}}` (33 rows corpus-wide on
+                # 2026-09-15, the only other form among 45,404), and taking
+                # it as maths made `update` measure the words "(not
+                # rendered)" as a formula (johnston FO5033, out/672).
                 mm = re.match(r"\$\\displaystyle (.*)\$\Z", g, re.S)
-                math = mm.group(1) if mm else g.strip().strip("$")
+                if mm:
+                    math = mm.group(1)
+                elif g.strip().startswith("$") and g.strip().endswith("$"):
+                    math = g.strip().strip("$")
+                else:
+                    placeholder = g.strip()
         c = re.search(r"\\includegraphics\[[^\]]*\]\{([^}]+)\}", rest)
         yield dict(id=ident.replace(r"\allowbreak{}", "").replace("\\_", "_").strip(),
                    page=m.group(1) if m else None,
                    conf=conf.group(1) if conf else None,
                    math=math,
+                   placeholder=placeholder,
                    source=source,
                    crop=c.group(1) if c else None,
                    lowconf=r"\lowconf{" in cell,

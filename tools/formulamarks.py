@@ -329,6 +329,16 @@ def marks(library, bib, work):
     out, not_measured = [], {}
     changed = 0
     for e in rows(doc / "evidence-formula.tex"):
+        # NOT RENDERED FIRST. A row the producer did not render has no
+        # reading to mark, whatever record an earlier run or update left:
+        # johnston FO5033's update measured the placeholder text
+        # `\emph{(not rendered)}` as a formula (out/672).
+        if e["math"] is None:
+            not_measured[e["id"]] = (
+                "not rendered by the producer (no \\FitMath)"
+                if not e.get("placeholder") else
+                "not rendered by the producer (\\FitMath placeholder)")
+            continue
         r = measured.get(e["id"])
         if r is not None and e["math"] != r["math"]:
             changed += 1
