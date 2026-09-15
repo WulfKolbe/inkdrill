@@ -1,0 +1,139 @@
+668 - wsgrid on pdfdrill's 132 blank candidates: 10 right of 22 checked, and the one gate that holds picks the grids least needed
+=================================================================================================================================
+
+pdfdrill (692) sent 132 display equations whose MathPix reading has at
+least one empty cell in a flat array (>= 2 rows, >= 3 columns), across 8
+published documents, with the caveat that a reading's empty cell can be
+a real blank OR dropped content. Their confirmation of out/667's mapping
+came first: Johnston EQ0486's 8 empty cells land exactly on the blanks
+of page 196, and all 47 filled cells land on ink.
+
+Harness: `tools/wsgridbatch.py CANDIDATES.json --out DIR`. Population:
+the 132 rows as sent, read from `evidence-equation.tex` as it stood at
+11:35-11:42 on 2026-09-15 (none of the 8 files changed during a run;
+pdfdrill's rebuild was touching Mielke only). The committed tool
+reproduces the scratch run on 131 of 132 rows; the 132nd is below.
+
+====================================================================
+1. HOSTING -- formulafind's rule places no display equation
+====================================================================
+
+First run: 132 of 132 "no host line". `host_regions` places INLINE
+spans and skips `math` lines, which is where a display equation lives.
+The display rule, in order:
+
+    exact body match on the row's page          69
+    ratio >= 0.8 on the row's page               0
+    empty page column, ONE exact match anywhere 60
+    no host                                      3
+
+62 of the 132 rows have an EMPTY PAGE COLUMN in the evidence file, all
+29 of gilmore's among them.
+
+The one row the scratch run and the tool disagree on is fong-spivak-
+invitation EQ0202: its reading in `evidence-equation.tex` is EMPTY, and
+the scratch rule matched "" against the first of three empty-text lines
+on page 291 -- a false host, measured as a 6x6 grid. The tool refuses
+an empty reading. (pdfdrill's candidate list has 9 reading empties for
+that row, so their list reads a different field than the evidence file.)
+
+====================================================================
+2. WHAT CAME OUT, BEFORE ANY EYE
+====================================================================
+
+Of 129 measured, the per-row comparison of ink cells against the
+reading's non-empty cells:
+
+    refused (line counts differ)   84
+    disagree                       37
+    agree                           8
+
+Split by the reading's own shape (first 70 measured):
+
+    bare array                 line count matches the reading on 22 of 36
+    array inside an expression                                  4 of 21
+    nested arrays                                               0 of 13
+
+Ink empty cells summed to 1,165 against 278 in the readings. That
+number is not a result -- section 3.
+
+====================================================================
+3. BY EYE: 22 GRIDS DRAWN ON THE LOSSLESS CUT
+====================================================================
+
+17 chosen to span outcomes and sizes (NOT random), then the 5 remaining
+`agree` rows so that stratum is complete.
+
+    RIGHT (10)     gilmore EQ0542, EQ0128, EQ0132, EQ0152 (the table),
+                   0902.0431 EQ0365, EQ0558, EQ0870 (commutative diagrams:
+                   the blanks under the arrows), johnston EQ0510 (an LP
+                   tableau, all 17), EQ1058, EQ1059
+    PARTLY (5)     johnston EQ0005 (right cells, a split line counts them
+                   twice), EQ0543 and EQ0562 (label blanks right, blanks
+                   INSIDE the inequalities missed), EQ1040 (right cells,
+                   12 lines for 3), gilmore EQ0583 (omitted zeros found,
+                   diagonal-dot rows split and double-count)
+    WRONG (7)      lyche EQ0834, EQ0010, 0902.0431 EQ1178, cardona EQ0441,
+                   johnston EQ0735, EQ0524, 0902.0431 EQ1033
+
+    agree          8 of 8 right
+    everything else 2 right, 5 partly, 7 wrong, of 14
+
+THE SIX WAYS IT FAILS, each seen on a drawn grid:
+
+  F1 THE REGION IS THE DISPLAY LINE, NOT THE ARRAY. `A :=` before a
+     matrix and `\in R^{n x n}` after it sit on ONE of its rows, so every
+     other row reads empty there (lyche EQ0834, EQ0010; 0902.0431 EQ1178).
+  F2 LINES FRAGMENT. `c_{1,1}` has three components and becomes a line
+     of its own; a diagonal-dot row splits; tall sums and brackets shred
+     a display into 23 lines (johnston EQ1040, EQ0005; gilmore EQ0583;
+     lyche EQ0010).
+  F3 ONE CONTINUOUS WIDTH CLASS. With no 1.5x jump every gutter is a
+     column, so a `\cdots` and a `\otimes 1^0` are cut apart
+     (cardona EQ0441). The rule came from johnston EQ0486, where all
+     gutters really were columns.
+  F4 MARGINS READ AS EMPTY. Two alignments that share a column pitch
+     pass the registration test and merge; the shorter one's margin
+     becomes 48 empty cells (0902.0431 EQ1033). The EQ0756 shape again,
+     now on the wrong side of the test.
+  F5 THE HOST LINE IS ONE ROW OF THE DISPLAY. lines.json splits a tall
+     matrix into several lines; the cut holds one of them
+     (johnston EQ0735).
+  F6 AN UNALIGNED ROW KILLS THE COLUMNS. A gutter must be blank in every
+     row of a block, so `minimize: 3y1 + 3y2 + ...` set without alignment
+     erases the columns of the constraints under it, and the blanks
+     inside them are never seen (johnston EQ0543, EQ0524, EQ0562).
+
+====================================================================
+4. THE GATE, AND WHY IT IS NOT WHAT THE OVERLAY NEEDS
+====================================================================
+
+`agree` -- ink cells per row equal the reading's non-empty cells per
+row -- selected 8 grids and all 8 are right. It is the only automatic
+selection here that held.
+
+It selects exactly the rows where MathPix ALREADY read the cells right.
+The overlay exists for the others: johnston EQ0486 (8 columns read for
+11) and 0902.0431 EQ0756 (13 for 14) both fail the gate by construction.
+So `agree` validates the GRID; it cannot choose overlay TARGETS. Choosing
+targets needs F1, F2 and F6 fixed, so that a disagreement means MathPix
+and not the grid.
+
+`~/inkdrill-marks/whitespace/grids.json` now holds the 12 grids verified
+by eye (the 10 above plus EQ0756 and johnston EQ0486), each with how it
+was verified -- 51 empty cells in all. Nothing else from this run is
+handed over.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * 22 verdicts, mine, not blind; 17 of them chosen across outcomes.
+    The right/partly/wrong split describes that sample, not the 129.
+  * Nothing is measured about whether a stamped cell changes MathPix's
+    reading.
+  * F1-F6 are named from drawn grids, not counted. Their frequencies over
+    the 129 are unknown.
+  * FO0444 (pdfdrill's note on out/667): it is not in
+    `evidence-formula.tex` as of 11:34, so the hook file could not list
+    it. It fits the rule.

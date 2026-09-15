@@ -128,7 +128,17 @@ last touched the file.
     system) it finds one 5x11 block and 8 empty cells, the same 8 as by
     eye -- and that expression exposed two defects (a split taken at
     any leading; a width cut inside one class), both fixed. No suite
-    test yet. The output record must carry BLOCKS: forced onto one
+    test yet.
+    **Then 132 pdfdrill candidates (out/668, `tools/wsgridbatch.py`):
+    22 checked by eye, 10 right, 5 partly, 7 wrong.** Six failure
+    shapes, named not counted: the region is the display line rather
+    than the array (F1), lines fragment on subscripts and dots (F2), one
+    continuous width class cuts symbols (F3), merged alignments turn
+    margins into empties (F4), the host line is one row of a split
+    display (F5), an unaligned row erases the columns under it (F6).
+    The `agree` gate held 8 of 8 but selects rows MathPix already reads
+    right, so it cannot choose overlay targets. F1, F2 and F6 are the
+    next work; only eye-verified grids are handed over. The output record must carry BLOCKS: forced onto one
     lattice, EQ0756 reports 20 "empty" cells that are margins of a
     centred block. What it did find is a residual: ink 14 cells per
     upper row against MathPix's 13, so the last digit column is dropped in
