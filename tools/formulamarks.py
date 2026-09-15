@@ -217,7 +217,15 @@ def update(library, bib, work):
         if r is not None:
             if r["math"] != e["math"]:
                 todo.append(e["id"])
-        elif e["id"] not in attempted:
+        elif e["id"] in attempted:
+            # ATTEMPTED BEFORE AND LEFT NO RECORD -- unplaceable then, or a
+            # placeholder then. Its reading may have changed since: johnston
+            # FO1528 was `(not rendered)` at one update and MathPix's reading
+            # again after pdfdrill withdrew the refinement (out/672). The
+            # merge drops its original record, so skipping it here would
+            # report the old reason forever.
+            todo.append(e["id"])
+        else:
             hm = mathpix.get(e["id"])
             if hm and hm.strip() != e["math"].strip():
                 todo.append(e["id"])

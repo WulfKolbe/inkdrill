@@ -541,6 +541,26 @@ json.dump(recs, open(a[a.index("--json") + 1], "w"))
         self.assertEqual(d["counts"]["reading_changed"], 0)
         self.assertEqual(len(d["rows"]), 9)
 
+    def test_an_attempted_row_with_no_record_is_attempted_again(self):
+        """johnston FO1528: an earlier update left no record (placeholder),
+        then the reading came back. It must be measured, not reported with
+        the stale reason."""
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td)
+            doc, work = self._finished(lib, lambda t: t.replace("x_{3}+y", "x_{3}+z"))
+            (work / "update_meta.json").write_text(json.dumps(dict(ids=["X_FO0003"])))
+            (work / "update.log").write_text("FO0003   NO LINE MATCH\n")
+            finder = lib / "finder.py"; finder.write_text(self.FINDER)
+            old, fm.FINDER = fm.FINDER, finder
+            try:
+                rc, d = self._call(fm.update, lib, "X", work)
+            finally:
+                fm.FINDER = old
+            argv = json.loads((lib / "finder.py.argv").read_text())
+        self.assertEqual(argv[argv.index("--ids") + 1], "X_FO0003")
+        self.assertEqual({r["id"]: r for r in d["rows"]}["X_FO0003"]["math"], "x_{3}+z")
+        self.assertNotIn("X_FO0003", d["not_measured"])
+
     def test_a_placeholder_row_is_not_rendered_even_with_a_leftover_record(self):
         """johnston FO5033: the Rendered cell became `\\emph{(not rendered)}`
         and an update had measured those words. The row reports "not

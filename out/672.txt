@@ -100,3 +100,31 @@ WHAT THIS DOES NOT SAY
     (readings truncated in the listing).
   * Nothing here decides the fix. The repair and its gate are
     pdfdrill's.
+
+====================================================================
+ADDENDUM, same day: after pdfdrill withdrew the 15 refinements
+====================================================================
+
+pdfdrill withdrew the 15 (14 bracket repairs + gilmore EQ0444), fixed the
+bracket rule to key each delimiter on its group and alignment cell, and
+rebuilt all five documents. Confirmed per document by re-emitting marks
+from the stored work against the rebuilt evidence:
+
+    mielke       189 marks, 0 rows and 0 not_measured entries differ from
+                 pdfdrill's build or the placed file; update would measure 0
+    0902.0431    1,471, the same, update 0
+    gilmore      571, the same, update 0
+    cardona      1,068, the same; FO0284 back on MathPix's reading is its
+                 09-13 record again, update 0
+    johnston     1,586; FO1528 needed the fix below
+
+A SECOND GAP IN `update`, found by reading FO1528 through before running
+it: an earlier update had attempted the row (then a placeholder) and left
+no record. `merge` drops an attempted row's original record, and `update`
+skipped every attempted row without a record, so once the reading came
+back FO1528 would have kept "not placed" forever -- which is exactly what
+pdfdrill's build showed. Now an attempted row with no record and a real
+reading is attempted again. Test: TF_5. Suite 1,279, 37 skip.
+
+After the fix FO1528 measures as its 09-13 record did (unmarked: host
+region is not a line); the other 5,041 rows identical; placed.
