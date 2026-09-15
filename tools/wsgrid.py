@@ -29,22 +29,27 @@ THE PASS, reusing what exists -- no third nest:
    shorter row (a fraction's numerator or denominator, a lone script)
    attaches to the nearest line. Merging rows by leading instead chains
    every line of a block together wherever a 1/2 bridges the leading.
-3. BLOCKS: split at the largest leading between lines. An array set as
-   two independently aligned parts (EQ0756: six lines, then four
-   centred lines) has two lattices, not one.
+3. BLOCKS: the largest leading between lines is a CANDIDATE split, kept
+   only when the two parts' column boundaries do not register (fewer
+   than half of the smaller part's within one median glyph width of the
+   other's). EQ0756, six lines then four centred ones: 2 of 6 register,
+   two lattices. Johnston EQ0486, one five-line system: 10 of 10
+   register, one lattice -- the leading alone had cut it 3 + 2.
 4. X-GUTTERS per block: columns blank across EVERY row of the block
    (`raster.profile` run_count == 0), interior, at least 2 x stem wide.
-5. COLUMN BOUNDARIES: gutter widths are cut at the LARGEST RATIO JUMP;
-   gutters above it are column boundaries, below it are inter-symbol
-   space. A cut at mode + gap failed when the widest class was modal.
+5. COLUMN BOUNDARIES: gutter widths are cut at the LARGEST RATIO JUMP,
+   if that jump is >= 1.5x; gutters above it are column boundaries,
+   below it inter-symbol space. With no such jump every gutter is a
+   boundary. A cut at mode + gap failed when the widest class was
+   modal; a cut at the largest jump regardless split one 47-48 px class.
 6. OCCUPANCY: a cell is empty iff it holds fewer than stem^2 ink pixels.
    Centroids were tried first and invented 18 empty cells in sliver
    columns whose ink belongs to a glyph centred next door.
 
-MEASURED ON ONE EXPRESSION (out/666). Every constant above was placed on
-EQ0756 of 0902.0431 at 300/400/600 dpi, where all counts agree across
-the three resolutions. Nothing here is tested on a second expression or
-on an array with genuinely blank cells -- EQ0756 has none.
+MEASURED ON TWO EXPRESSIONS (out/666, out/667). EQ0756 of 0902.0431 at
+300/400/600 dpi (all counts agree; no blank cells) and Johnston EQ0486
+at 400 dpi (one 5 x 11 lattice, 8 empty cells, agreeing with an eye
+count). No suite test yet; every constant is placed on those two.
 """
 from __future__ import annotations
 
@@ -108,12 +113,22 @@ def gutters(m: InkMask, y0: int, y1: int, stem: int):
     return [(a, b) for a, b in runs if a > 0 and b < W - 1 and b - a + 1 >= 2 * stem]
 
 
+JUMP = 1.5              # a width class ends where the next width is this much wider
+
+
 def ratio_cut(widths):
+    """Cut at the largest ratio jump, if it is a class boundary at all.
+
+    Returns 0 when there is no jump of JUMP: every gutter is one class
+    and every gutter is a column boundary. Johnston EQ0486's ten gutters
+    are all 47-48 px; cutting at the largest jump anyway put the cut
+    between 47 and 48 and threw half the columns away.
+    """
     ws = sorted(widths)
     if len(ws) < 2:
-        return None
+        return 0
     i = max(range(len(ws) - 1), key=lambda j: ws[j + 1] / ws[j])
-    return (ws[i] + ws[i + 1]) / 2
+    return (ws[i] + ws[i + 1]) / 2 if ws[i + 1] >= JUMP * ws[i] else 0
 
 
 def classes(widths, jump=1.5):
@@ -124,17 +139,45 @@ def classes(widths, jump=1.5):
     return [[min(c), max(c), len(c)] for c in out]
 
 
+def lattice(m: InkMask, grp, stem: int):
+    """(gutters, column boundaries incl. both crop edges) of one block."""
+    g = gutters(m, int(grp[0][0]), int(grp[-1][1]), stem)
+    cut = ratio_cut([b - a + 1 for a, b in g])
+    cols = [(a, b) for a, b in g if cut is not None and b - a + 1 > cut]
+    return g, [0] + [(a + b) // 2 for a, b in cols] + [m.width]
+
+
+def registered(m: InkMask, parts, stem: int, tol: float):
+    """How many of the SMALLER part's column boundaries have one of the
+    other part's within `tol` px: (hits, of)."""
+    a, b = (lattice(m, p, stem)[1][1:-1] for p in parts)
+    small, big = sorted((a, b), key=len)
+    if not small or not big:
+        return 0, len(small)
+    return sum(1 for x in small if min(abs(x - y) for y in big) <= tol), len(small)
+
+
 def measure(m: InkMask):
     W, H = m.width, m.height
     stem, _ = raster.stroke_mode(m, "row")
     out = dict(crop=[W, H], stem=stem, blocks=[], gutter_classes=[])
-    for grp in blocks(lines(components(m, stem))):
-        y0, y1 = int(grp[0][0]), int(grp[-1][1])
-        g = gutters(m, y0, y1, stem)
+    comps = components(m, stem)
+    bands = lines(comps)
+    parts = blocks(bands)
+    if len(parts) == 2:
+        # The largest leading is only a CANDIDATE split. Johnston EQ0486
+        # (one 5-line system) was cut 3 + 2 by it; EQ0756's real split is
+        # 41 px against 35-36. What separates them is whether the two
+        # parts' columns line up (out/667).
+        tol = statistics.median(mo.width for mo in comps)
+        hits, of = registered(m, parts, stem, tol)
+        out["split"] = dict(lines=[len(p) for p in parts], registered=[hits, of],
+                            tolerance_px=tol)
+        if of and 2 * hits >= of:
+            parts = [bands]
+    for grp in parts:
+        g, xb = lattice(m, grp, stem)
         widths = [b - a + 1 for a, b in g]
-        cut = ratio_cut(widths)
-        cols = [(a, b) for a, b in g if cut is not None and b - a + 1 > cut]
-        xb = [0] + [(a + b) // 2 for a, b in cols] + [W]
         empty = [[sum(m.data[y * W + c0:y * W + c1].count(255)
                       for y in range(int(t), int(bt))) < stem * stem
                   for c0, c1 in zip(xb, xb[1:])] for t, bt in grp]
@@ -152,7 +195,7 @@ def reading_cells(latex: str):
     if not m:
         return None
     rows_ = [r for r in re.split(r"\\\\", m.group(1)) if r.strip()]
-    cells = [r.split("&") for r in rows_]
+    cells = [c for c in (r.split("&") for r in rows_) if any(x.strip() for x in c)]
     return [len(c) for c in cells], [sum(1 for x in c if x.strip()) for c in cells]
 
 

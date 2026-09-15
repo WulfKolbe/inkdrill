@@ -1,0 +1,132 @@
+667 - an array with real blanks (Johnston EQ0486), and why Mielke's repaired hooks grew (EQ0579)
+===============================================================================================
+
+Two requests from the user, 2026-09-15: check the open system of
+equations johnston-linear-matrix-algebra_EQ0486, and look at
+mielke-geometrodynamics_EQ0579, whose "improved" floor symbols are much
+larger than the printed ones -- "the floor sign is used like the second
+character of a variable, not like a symbol with an index or value".
+
+====================================================================
+1. JOHNSTON EQ0486 -- THE EMPTY-CELL CLASS FIRES
+====================================================================
+
+Page 196, MathPix region (977,2092) 551x172, cut lossless from
+inspect/pages at 400 dpi through `page_frames` (882x275). MathPix conf
+0.011. Five equations in v, w, x, y, z with terms left out and the rest
+kept in their columns:
+
+      v  +  w  +  x  +  y  -  z  -  1
+      v  - 2w  + 2x  + 2y  + 2z  +  2
+     -v  +  w  +  x           +  z
+           2w  -  x  +  y  - 3z  +  3
+     2v  +  w           - 2y  +  z  -  4
+
+`tools/wsgrid.py`: ONE block, 5 rows x 11 columns, all ten gutters in
+one width class (47-48 px). 8 empty cells:
+
+    row 3   columns 5, 6, 9, 10     (+ y)  and  (- 1)
+    row 4   columns 0, 1            (v +)
+    row 5   columns 3, 4            (+ x)
+
+By eye the same 8, the same places. The first case this harness has
+seen where the class the overlay exists for is non-empty, and it agrees.
+
+MathPix's reading is a different table: `{rrrrrrrr}`, 8 columns, 7 rows
+-- row 3 split across two rows, an all-empty last row, and `z - 1`,
+`+ 2`, `+ 3`, `- 4` lost. Dropping the all-empty row still leaves 6
+reading rows against 5 ink lines, so the per-row comparison refuses,
+and the refusal is itself the residual: 11 columns in the ink, 8 in the
+reading.
+
+TWO DEFECTS IN wsgrid THIS EXPRESSION FOUND, both fixed:
+
+  a. The largest leading always split the lines into two blocks. It
+     cut this one five-line system 3 + 2. A split is now kept only when
+     the two parts' column boundaries do NOT register: here 10 of 10
+     register (one block); EQ0756 2 of 6 (two blocks, as before).
+  b. With every gutter in one width class, "cut at the largest ratio
+     jump" still cut -- between 47 and 48 px -- and dropped four
+     columns (7 instead of 11, 4 empty cells instead of 8). A cut is
+     now made only at a jump of >= 1.5x; otherwise every gutter is a
+     column boundary.
+
+EQ0756 re-run after both fixes: unchanged (6x14 and 4x7, 0 empty).
+
+Grids for both: ~/inkdrill-marks/whitespace/grids.json.
+
+====================================================================
+2. MIELKE EQ0579 -- THE HOOK IS AN OPERATOR, THE READING MAKES IT A DELIMITER
+====================================================================
+
+Page 186, region (272,830) 866x93. The printed glyph is the interior
+product hook, `e^beta ⌋ DH`: a small closed shape set between symbols.
+
+MathPix raw (lines.json):
+  \left.\left.\left.2 D\left(e^{\beta}\right\rfloor D H_{\alpha\beta}
+  -\frac{1}{4}\vartheta_\alpha\wedge e^\gamma\right\rfloor e^\delta
+  \right\lrcorner D H_{\gamma\delta}\right)-E_\alpha=...
+Published: the same, with the `\right\lrcorner` repaired to
+`\right\rfloor`.
+
+Every hook is a `\right` delimiter closing an invisible `\left.`. A
+delimiter STRETCHES to the height of what it closes, and the pairing is
+wrong as well: `\left(` closes on the first hook, so the opening
+parenthesis shrinks while `\right)` closes on a `\left.` and stays large.
+
+Measured with `glyphangle.stem_arm` (stem right, foot left, >= 70 deg),
+heights in pt:
+
+    printed ink (400 dpi page)          8.46   8.46   8.46
+    published reading, rendered        11.88  23.94  23.94
+    MathPix raw, rendered              11.88  23.94   (+ one \lrcorner)
+    \left. removed, plain \rfloor       9.90   9.90   9.90
+
+WHY THE REPAIR MADE IT WORSE: `\lrcorner` and `\downharpoonleft` are not
+extensible, so under `\right` they stay glyph-sized. `\rfloor` IS
+extensible. Renaming the glyph and keeping `\right` turns a small wrong
+symbol into a large right one. Plain `\rfloor` is 9.9 pt against the
+printed 8.46 -- Computer Modern against the book's Times-like face, the
+same size class.
+
+THE REWRITE, over every Mielke row with a `\right`-hook
+(evidence-equation.tex and evidence-formula.tex):
+
+    delete every \left.
+    \right\rfloor | \right\lrcorner | \right\downharpoonleft -> \rfloor
+    a ^ or _ directly after the hook -> \rfloor {}^{...}
+
+    applies when #\left. == #\right-hooks         61 rows
+    compile, before and after                     61 of 61
+    rows with an enlarged hook (> 10.5 pt)        23   (33 hooks, up to 23.88 pt)
+    hook height after the rewrite                 9.96 pt, every one of 116
+    rows where a script hung on the hook           7
+    skipped                                        2   (EQ0515, FO1309)
+
+THE SCRIPT RULE IS FROM INK, NOT FROM TASTE. EQ0486 p160 prints
+`e_beta ⌋ *H^{alpha beta}`: the star is the Hodge dual in front of H,
+spaced away from the hook. The reading `\right\rfloor^{*} H` hangs it
+on the hook. Seven rows carry that shape.
+
+The two skipped rows have two `\left.` for one hook, because the second
+`\left.` is closed by a `\right)` whose `(` is a plain parenthesis:
+`\frac14\operatorname{Tr}(\check\gamma\rfloor\Theta\right)`. The rule
+does not reach them; they need a hand edit.
+
+Per row, published and proposed reading with both hook heights:
+~/inkdrill-marks/<Mielke>/hook-rewrite.json.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * Ink heights are measured on ONE row (EQ0579, three hooks, all
+    8.46 pt). The corpus comparison is render against render, published
+    against proposed; it does not look at the page for the other 60.
+  * `stem_arm` found fewer hooks than the reading names in one row
+    (FO0894, 1 of 2) and more in eight (rows that also carry plain
+    `\rfloor`). The heights are of what it found.
+  * Johnston EQ0486 is one expression. The overlay's value -- does a
+    symbol in those 8 cells make MathPix read 11 columns -- is unmeasured.
+  * The rewrite is proposed, not applied: the readings are pdfdrill's.
+    Rows with plain `\rfloor` already (18 + 7) are untouched and fine.
