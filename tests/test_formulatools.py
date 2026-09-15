@@ -401,5 +401,133 @@ class TF_4_MarksContract(unittest.TestCase):
         self.assertFalse([r for r in rows[2:] if "OVERLAP" in r["flags"]])
 
 
+class TF_5_Update(unittest.TestCase):
+    """A refined row is hosted by MathPix's reading, and `update` measures
+    it at the stored scale without moving any row it did not measure
+    (out/670: a re-vote 0.64 -> 0.65 flipped 8 unchanged mielke marks)."""
+
+    def test_a_refined_row_is_hosted_by_the_mathpix_reading(self):
+        first = TF_2_HostLineRule.first
+        A = TF_2_HostLineRule.A
+        refined = dict(id="r1", page="1", math=r"G'", host_math="G")
+        self.assertEqual(ff.match_rows_first([refined], first), {"r1": (1, A)})
+        # without MathPix's reading the shown one is looked up, and misses
+        self.assertEqual(ff.match_rows_first([dict(refined, host_math=None)], first), {})
+
+    def test_mathpix_readings_come_from_exactly_one_tiddlers_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td); (lib / "X").mkdir()
+            t = [{"title": "X_FO0001", ff.MATHPIX_FIELD: r"\left.a\right\rfloor b",
+                  "latex_refined": r"a\rfloor b"}, {"title": "X_FO0002"}]
+            (lib / "X" / "x.tiddlers.json").write_text(json.dumps(t))
+            self.assertEqual(ff.mathpix_readings(lib, "X"),
+                             {"X_FO0001": r"\left.a\right\rfloor b"})
+            (lib / "X" / "y.tiddlers.json").write_text("[]")
+            self.assertEqual(ff.mathpix_readings(lib, "X"), {})
+
+    def test_a_pinned_line_height_decides_line_like(self):
+        base = dict(conf=1.0, blobs_in_rect=5, formula_blobs=5, score=0.95,
+                    rect=[0, 0, 10, 10], crop=None, gaps=9, margin=0.3, edge_cuts=0)
+        rows = ([dict(base, id=f"s{i}", crop_h=74) for i in range(3)]
+                + [dict(base, id=f"t{i}", crop_h=300) for i in range(5)])
+        cal, _ = fr.calibrate(rows, fm.MIN_MARGIN)
+        fr.classify(rows, cal, fm.MIN_MARGIN)                  # median 300
+        self.assertTrue(all(r["line_like"] for r in rows))
+        fr.classify(rows, cal, fm.MIN_MARGIN, line_h=74)       # pinned
+        self.assertFalse(any(r["line_like"] for r in rows if r["crop_h"] == 300))
+        self.assertTrue(all(r["line_like"] for r in rows if r["crop_h"] == 74))
+
+    def _finished(self, lib, tex_edit=None, finder=None):
+        doc, work = lib / "X", lib / "work"
+        doc.mkdir(); work.mkdir()
+        tex = _HEAD + "".join(
+            _row(rf"X\_FO{i:04d}", 3, r"\confcell{confgreen}{1.000}", "s",
+                 rf"\FitMath{{$\displaystyle x_{{{i}}}+y$}}", _img(f"X_FO{i:04d}"))
+            for i in range(1, 11)) + r"\end{longtable}"
+        (doc / "evidence-formula.tex").write_text(tex)
+        (doc / "X.lines.json").write_text('{"pages": []}')
+        recs = [dict(id=f"X_FO{i:04d}", page=3, host_page=3, math=f"x_{{{i}}}+y",
+                     region=dict(top_left_x=100, top_left_y=60 * i, width=125, height=46),
+                     frame=(1.6, 1.6, 0.0, 0.0), rect=[10, 5, 60, 40], crop_w=200,
+                     crop_h=74, conf=1.0, gaps=9, margin=0.3, score=0.95,
+                     edge_cuts=0, blobs_in_rect=5, formula_blobs=5, crop=None)
+                for i in range(1, 11)]
+        (work / "shard0.json").write_text(json.dumps(recs))
+        (work / "meta.json").write_text(json.dumps(dict(
+            measured_against=fm._inputs(doc, "X"), jobs=1, scale=0.665,
+            inkdrill="test")))
+        if tex_edit:
+            (doc / "evidence-formula.tex").write_text(tex_edit(tex))
+        return doc, work
+
+    def _call(self, fn, *a):
+        import contextlib, io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            rc = fn(*a)
+        return rc, json.loads(out.getvalue().splitlines()[-1])
+
+    # the stand-in finder records its argv and places each asked row at
+    # x 20..70 with the evidence's CURRENT reading
+    FINDER = r'''import json, sys
+a = sys.argv
+open(sys.argv[0] + ".argv", "w").write(json.dumps(a))
+ids = a[a.index("--ids") + 1].split(",")
+new = {"X_FO0003": "x_{3}+z"}
+recs = [dict(id=i, page=3, host_page=3, math=new[i],
+             region=dict(top_left_x=100, top_left_y=180, width=125, height=46),
+             frame=[1.6, 1.6, 0.0, 0.0], rect=[20, 5, 70, 40], crop_w=200, crop_h=74,
+             conf=1.0, gaps=9, margin=0.3, score=0.95, edge_cuts=0,
+             blobs_in_rect=5, formula_blobs=5, crop=None) for i in ids if i in new]
+for i in ids:
+    if i not in new:
+        print(i.split("_")[-1] + "   NO LINE MATCH")
+json.dump(recs, open(a[a.index("--json") + 1], "w"))
+'''
+
+    def test_update_measures_only_the_changed_row_at_the_stored_scale(self):
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td)
+            doc, work = self._finished(lib)
+            _, plain = self._call(fm.marks, lib, "X", work)
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td)
+            doc, work = self._finished(lib, lambda t: t.replace("x_{3}+y", "x_{3}+z"))
+            finder = lib / "finder.py"; finder.write_text(self.FINDER)
+            old, fm.FINDER = fm.FINDER, finder
+            try:
+                rc, d = self._call(fm.update, lib, "X", work)
+            finally:
+                fm.FINDER = old
+            argv = json.loads((lib / "finder.py.argv").read_text())
+            _, again = self._call(fm.marks, lib, "X", work)
+        self.assertEqual((rc, d["refused"], len(d["rows"])), (0, None, 10))
+        self.assertEqual(argv[argv.index("--ids") + 1], "X_FO0003")
+        self.assertEqual(argv[argv.index("--scale") + 1], "0.665")
+        by = {r["id"]: r for r in d["rows"]}
+        self.assertEqual(by["X_FO0003"]["math"], "x_{3}+z")
+        self.assertNotEqual(by["X_FO0003"]["rect"], {r["id"]: r for r in plain["rows"]}["X_FO0003"]["rect"])
+        # every row the update did not measure is exactly what `marks` gave
+        for r in plain["rows"]:
+            if r["id"] != "X_FO0003":
+                self.assertEqual(by[r["id"]], r, r["id"])
+        self.assertEqual(again["rows"], d["rows"])     # a re-emit is stable
+        self.assertEqual(d["updated"], dict(rows=1, attempted=1))
+
+    def test_an_attempted_row_the_update_cannot_place_says_why(self):
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td)
+            doc, work = self._finished(lib, lambda t: t.replace("x_{5}+y", "x_{5}+w"))
+            finder = lib / "finder.py"; finder.write_text(self.FINDER)
+            old, fm.FINDER = fm.FINDER, finder
+            try:
+                rc, d = self._call(fm.update, lib, "X", work)
+            finally:
+                fm.FINDER = old
+        self.assertEqual(d["not_measured"]["X_FO0005"], "no line match")
+        self.assertEqual(d["counts"]["reading_changed"], 0)
+        self.assertEqual(len(d["rows"]), 9)
+
+
 if __name__ == "__main__":
     unittest.main()

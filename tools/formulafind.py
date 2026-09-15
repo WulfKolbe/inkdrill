@@ -275,9 +275,39 @@ def first_occurrence_lines(library, bibkey):
 
 def match_rows_first(picked, first):
     """Row -> (host page, region) by pdfdrill's rule; see
-    `first_occurrence_lines`. The row's own page column is NOT used."""
-    return {r["id"]: first[r["math"].strip()] for r in picked
-            if r.get("math") and r["math"].strip() in first}
+    `first_occurrence_lines`. The row's own page column is NOT used.
+
+    The lookup is by `host_math` when the row carries one -- MathPix's
+    reading, which is the text `lines.json` holds -- and by `math`
+    otherwise. A row pdfdrill REFINED shows a reading MathPix never
+    wrote, so looking it up by what it shows finds no line: 21 mielke
+    rows lost their marks that way after the hook rewrite (out/670)."""
+    out = {}
+    for r in picked:
+        key = (r.get("host_math") or r.get("math") or "").strip()
+        if key and key in first:
+            out[r["id"]] = first[key]
+    return out
+
+
+#: The tiddler field holding MathPix's own reading. pdfdrill will move it to
+#: `latex_mathpix` when field promotion lands (their spec 2026-09-14); keyed
+#: on the NAME so that switch is this one line.
+MATHPIX_FIELD = "latex"
+
+
+def mathpix_readings(library, bibkey):
+    """row id -> MathPix's reading, from the document's `*.tiddlers.json`.
+
+    Empty when there is not exactly one such file: a guess between two
+    would put a row on the wrong line."""
+    import json
+    found = list((library / bibkey).glob("*.tiddlers.json"))
+    if len(found) != 1:
+        return {}
+    items = json.loads(found[0].read_text(encoding="utf-8", errors="replace"))
+    return {t["title"]: t[MATHPIX_FIELD] for t in items
+            if isinstance(t, dict) and t.get("title") and t.get(MATHPIX_FIELD)}
 
 
 def host_regions(library, bibkey, picked, rule="first"):
@@ -686,6 +716,15 @@ def main() -> int:
     regions = frames = None
     if fullres:
         frames, refused = page_frames(args.library, args.bibkey)
+        mathpix = mathpix_readings(args.library, args.bibkey)
+        for row in picked:
+            hm = mathpix.get(row["id"])
+            if hm and hm.strip() != row["math"].strip():
+                row["host_math"] = hm
+        print(f"host lookup by MathPix's reading ({MATHPIX_FIELD!r}, "
+              f"{len(mathpix)} in tiddlers.json): "
+              f"{sum(1 for r in picked if r.get('host_math'))} of {len(picked)} "
+              f"rows show a different reading")
         regions = host_regions(args.library, args.bibkey, picked, args.host)
         inset = sum(1 for f in frames.values() if f[2] > 0.5 or f[3] > 0.5)
         print(f"crops: LOSSLESS, cut from inspect/pages at {crop_dpi:g} dpi")
@@ -814,7 +853,8 @@ def main() -> int:
                 # back onto its own picture of the same line: host page,
                 # MathPix region, and the page frame used.
                 rec.update(host_page=row["_host"][0], region=row["_host"][1],
-                           frame=row["_host"][2], host_rule=args.host)
+                           frame=row["_host"][2], host_rule=args.host,
+                           host_math=row.get("host_math"))
             out.append(rec)
             print(f"{row['id'].split('_')[-1]:<8} {sc:>6.3f} {margin:>7.3f} "
                   f"{gaps:>5} {f'{x0}-{x1}':>12} {f'{y0}-{y1}':>8} "

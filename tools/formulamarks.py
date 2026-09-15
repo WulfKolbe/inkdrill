@@ -7,13 +7,25 @@ that convention: one JSON document on stdout, progress on stderr, a
 refusal NAMED in the JSON rather than guessed around, and nothing
 written into the library.
 
-    python3 tools/formulamarks.py run   <bibkey> --work DIR [--jobs N]
-    python3 tools/formulamarks.py marks <bibkey> --work DIR
+    python3 tools/formulamarks.py run    <bibkey> --work DIR [--jobs N]
+    python3 tools/formulamarks.py marks  <bibkey> --work DIR
+    python3 tools/formulamarks.py update <bibkey> --work DIR
 
 `run` measures -- `formulafind` on LOSSLESS crops cut from
 `inspect/pages`, refit, the document scale voted on a sample of rows --
 and then emits. `marks` re-emits from a finished run. Measuring is
 minutes per book, so it is a step a caller schedules, not a lookup.
+
+`update` measures ONLY the rows whose reading changed since the run (and
+rows the run never placed whose MathPix reading differs from the one
+shown), at the run's STORED scale, and emits. It exists because a fresh
+`run` re-votes the scale, and on mielke a 0.64 -> 0.65 re-vote flipped 8
+marks on rows that had not changed (out/670). Every row `update` did not
+measure keeps its record, and the merge calibrates and takes the median
+line from the ORIGINAL run only, so an unchanged row's mark and rect
+cannot move. The host line of a refined row is found by MathPix's
+reading from `*.tiddlers.json` (`formulafind.MATHPIX_FIELD`); its
+rendering is still the reading the evidence file shows.
 
 WHAT A ROW SAYS
 
@@ -162,6 +174,80 @@ def run(library, bib, work, jobs):
     return marks(library, bib, work)
 
 
+def _run_records(work):
+    """(original records, update records, ids an update attempted)."""
+    res = []
+    for f in sorted(work.glob("shard*.json")):
+        res += json.loads(f.read_text())
+    upd_f, um_f = work / "update.json", work / "update_meta.json"
+    upd = json.loads(upd_f.read_text()) if upd_f.exists() else []
+    attempted = set(json.loads(um_f.read_text())["ids"]) if um_f.exists() else set()
+    return res, upd, attempted
+
+
+def merge(original, updated, attempted):
+    """Original records minus every id an update ATTEMPTED, plus the
+    update's records. An attempted row the update could not place keeps
+    no stale record: it is reported with the update's own reason."""
+    return [r for r in original if r["id"] not in attempted] + list(updated)
+
+
+def update(library, bib, work):
+    from tools.formulafind import mathpix_readings
+    doc = library / bib
+    meta_f = work / "meta.json"
+    if not meta_f.exists():
+        return _refuse(bib, f"no finished run in {work}; `run` first")
+    meta = json.loads(meta_f.read_text())
+    lines_key = f"{bib}.lines.json"
+    if _inputs(doc, bib)[lines_key] != meta["measured_against"].get(lines_key):
+        return _refuse(bib, f"stale: {lines_key} changed since the run; `run` "
+                            f"again -- every host region may have moved",
+                       measured_against=meta["measured_against"])
+    if len(list(work.glob("shard*.json"))) != meta["jobs"]:
+        return _refuse(bib, "incomplete run; `run` first")
+    res, upd, attempted = _run_records(work)
+    measured = {r["id"]: r for r in merge(res, upd, attempted)}
+    mathpix = mathpix_readings(library, bib)
+    todo = []
+    for e in rows(doc / "evidence-formula.tex"):
+        if e["math"] is None:
+            continue
+        r = measured.get(e["id"])
+        if r is not None:
+            if r["math"] != e["math"]:
+                todo.append(e["id"])
+        elif e["id"] not in attempted:
+            hm = mathpix.get(e["id"])
+            if hm and hm.strip() != e["math"].strip():
+                todo.append(e["id"])
+    _log(f"{bib}: update -- {len(todo)} rows to measure at the stored scale "
+         f"{meta['scale']}")
+    if todo:
+        new_f = work / "update_new.json"
+        new_f.unlink(missing_ok=True)
+        cmd = [sys.executable, str(FINDER), "--library", str(library),
+               "--bibkey", bib, *FIND_ARGS, "--scale", str(meta["scale"]),
+               "--ids", ",".join(todo), "--json", str(new_f)]
+        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        with open(work / "update.log", "a") as log:
+            log.write(f"\n==== update {time.strftime('%Y-%m-%dT%H:%M:%S')} "
+                      f"{len(todo)} rows\n{p.stdout}{p.stderr}")
+        if p.returncode != 0:
+            return _refuse(bib, f"the update crashed (rc={p.returncode}); see "
+                                f"update.log", work=str(work))
+        new = json.loads(new_f.read_text()) if new_f.exists() else []
+        done = set(todo)
+        upd = [r for r in upd if r["id"] not in done] + new
+        (work / "update.json").write_text(json.dumps(upd, indent=1))
+        (work / "update_meta.json").write_text(json.dumps(dict(
+            ids=sorted(attempted | done), scale=meta["scale"],
+            inkdrill=version.resolve(),
+            last=time.strftime("%Y-%m-%dT%H:%M:%S"))))
+        new_f.unlink(missing_ok=True)
+    return marks(library, bib, work)
+
+
 def why_no_mark(r):
     """The clause of out/658's policy that suppressed this row's mark, or
     None. `formularesidual.classify` holds the policy; this names it, and
@@ -220,17 +306,21 @@ def marks(library, bib, work):
     if len(shards) != meta["jobs"]:
         return _refuse(bib, f"incomplete run: {len(shards)} of {meta['jobs']} "
                             f"shards")
-    res = []
-    for f in shards:
-        res += json.loads(f.read_text())
-    cal, ref = fr.calibrate(res, MIN_MARGIN)
+    original, upd, attempted = _run_records(work)
+    # CALIBRATED ON THE ORIGINAL RUN ONLY, and the median line taken from
+    # it: both are population statistics, and an update must not move a
+    # row it did not measure.
+    cal, ref = fr.calibrate(original, MIN_MARGIN)
     if cal is None:
         return _refuse(bib, f"only {len(ref)} confidently placed rows; the "
                             f"flag thresholds cannot be calibrated")
-    fr.classify(res, cal, MIN_MARGIN)
+    res = merge(original, upd, attempted)
+    fr.classify(res, cal, MIN_MARGIN, line_h=fr.median_line_h(original))
 
     logged = {}
-    for f in work.glob("shard*.log"):
+    for f in list(work.glob("shard*.log")) + [work / "update.log"]:
+        if not f.exists():
+            continue
         for line in f.read_text(errors="replace").splitlines():
             m = re.match(r"(FO\d+)\s+(NO LINE MATCH|RENDER FAILED)", line)
             if m:
@@ -288,6 +378,7 @@ def marks(library, bib, work):
         calibration={k: cal[k] for k in ("n_ref", "blob_diff_max",
                                          "edge_cut_max", "score_min")},
         rect_frame="MathPix page px relative to the host region's top-left",
+        updated=dict(rows=len(upd), attempted=len(attempted)) if attempted else None,
         counts=counts, rows=out, not_measured=not_measured)))
     _log(f"{bib}: {counts['marked']} of {counts['evidence_rows']} rows marked; "
          f"{len(not_measured)} not measured")
@@ -297,7 +388,7 @@ def marks(library, bib, work):
 def main() -> int:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("run", "marks"):
+    for name in ("run", "marks", "update"):
         a = sub.add_parser(name)
         a.add_argument("bibkey")
         a.add_argument("--library", type=pathlib.Path,
@@ -308,6 +399,8 @@ def main() -> int:
     args = ap.parse_args()
     if args.cmd == "run":
         return run(args.library, args.bibkey, args.work, args.jobs)
+    if args.cmd == "update":
+        return update(args.library, args.bibkey, args.work)
     return marks(args.library, args.bibkey, args.work)
 
 

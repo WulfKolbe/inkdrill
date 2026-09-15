@@ -1,0 +1,87 @@
+671 - `formulamarks update`: the 21 rewritten mielke rows marked at the stored scale, 1,746 unchanged rows identical
+===================================================================================================================
+
+out/670 left mielke with 179 marks: pdfdrill's hook rewrite changed 21
+readings, a changed reading drops its row, and a fresh `run` could not
+put it back (host lookup by equality with MathPix's text) while its
+re-vote flipped 8 unchanged marks. pdfdrill then named the missing input:
+`<slug>.tiddlers.json`, field `latex`, is MathPix's reading and is never
+overwritten; `latex_refined` holds the refinement the evidence shows.
+
+====================================================================
+1. WHAT WAS BUILT
+====================================================================
+
+  formulafind   `mathpix_readings()` reads `*.tiddlers.json` (exactly one,
+                else nothing); field name in ONE constant, `MATHPIX_FIELD`,
+                because pdfdrill will rename it `latex_mathpix` (their spec
+                2026-09-14). A row whose shown reading differs carries
+                `host_math`; `match_rows_first` looks it up by that and
+                renders the shown reading as before. Recorded per row.
+  formularesidual  `classify(..., line_h=)` pins the median line. Left to
+                the population, `line_like` -- and so the mark -- of every
+                row depends on which other rows are present.
+  formulamarks  `update <bibkey> --work DIR`: measures only rows whose
+                reading changed, plus never-placed rows whose MathPix
+                reading differs, with `--scale` = the stored scale (no
+                vote). `marks` merges: original records minus every id an
+                update attempted, plus the update's records; calibration
+                AND median line from the original run only.
+
+Tests: TF_5 (6) -- host by MathPix reading, both sides; tiddlers file
+exactly-one rule; pinned line height, both sides; update sends only the
+changed row at the stored scale and every other row equals a plain
+`marks`, a re-emit is stable; an attempted row the update cannot place
+reports its own reason. Suite 1,276, 37 skip.
+
+Scope, corpus-wide over the 21 published documents' formula rows: the
+evidence reading equals `latex` on 36,627, `latex_refined` on 23 (mielke
+22, 0707.4470 FO0175), neither on 65 (fong-spivak 59 -- the evidence
+shows `\mathbf` where MathPix wrote `\boldsymbol` -- kohlhase-omdoc 4,
+johnston 1, lyche 1). `update` reaches the 23; the 65 are a display
+normalisation, not a recorded refinement, and are not handled.
+
+====================================================================
+2. MIELKE
+====================================================================
+
+On a copy of the stored work, then placed:
+
+    measured by update     22   (the 21 rewritten rows + FO0431, the
+                                 22nd `[refined: census]` row)
+    scale                  0.64 stored = 0.64 used; calibration identical
+    rows not updated       1,746, IDENTICAL field for field to pdfdrill's
+                           current 179-mark file
+    not measured           0 (was 22)
+    marked                 189 (was 179)
+
+The updated rows:
+
+    marks restored         FO0437, FO0571, FO0612, FO0805, FO0811  (all 5)
+    newly marked           FO0464, FO0506, FO0616, FO0623, FO0684
+    suppressed             12, all "position not unique" (margin < 0.15)
+
+The 5 newly marked were suppressed on 09-13 under the old reading;
+the rewritten one (a glyph-sized `\rfloor` instead of a stretched
+`\right\rfloor`) now places uniquely.
+
+BY EYE, all 10 new rectangles on the lossless host line: 9 RIGHT, 1 OFF.
+FO0805's rectangle starts at the arrow and leaves the reading's leading
+`\Gamma_\alpha{}^\beta` outside -- one symbol short on the left. The same
+class out/660 accepted (25 checks: 2 wrong, 1 off). FO0464 is right for
+its reading, and shows a MathPix omission beside it: the page prints a
+trailing hook after `Dy` that the reading does not have.
+
+Placed in ~/inkdrill-marks/<mielke>/ (work/update.json, update_meta.json,
+update.log; marks.json re-emitted from the placed work and checked equal
+to the trial; the 09-13 file kept as marks-2026-09-13.json).
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * 10 eye verdicts, mine, not blind.
+  * The 65 "neither" rows elsewhere are unchanged and still unmarked
+    where their host lookup fails.
+  * An update after a lines.json change is refused; that needs `run`,
+    and a re-vote, and out/670's flip rate comes with it.

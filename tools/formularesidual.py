@@ -144,8 +144,19 @@ def calibrate(rows, min_margin):
                 edge_cut_spread=dict(sorted(collections.Counter(cuts).items()))), ref
 
 
-def classify(rows, cal, min_margin):
-    """One row -> its flags. Grey and red are kept apart."""
+def median_line_h(rows):
+    hs = sorted(r["crop_h"] for r in rows if r.get("crop_h"))
+    return hs[len(hs) // 2] if hs else 0
+
+
+def classify(rows, cal, min_margin, line_h=None):
+    """One row -> its flags. Grey and red are kept apart.
+
+    `line_h` pins the document's median line height. Left None it is the
+    median over `rows`, which makes every row's `line_like` -- and so its
+    MARK -- depend on which other rows are present. `formulamarks update`
+    adds rows to a finished run and passes the original run's median, so
+    no unchanged row can flip (out/671)."""
     # THE FOURTH CLAUSE OF THE MARKING POLICY, which out/658 listed as
     # implemented when it lived only in an external filter. `lines.json`
     # carries regions that are not lines -- display blocks, figure
@@ -154,8 +165,8 @@ def classify(rows, cal, min_margin):
     # taller than 3x the document's median line is not a line, and no
     # mark is drawn on it. Kept HERE, beside the other three clauses,
     # so a caller running this tool alone gets the whole policy.
-    hs = sorted(r["crop_h"] for r in rows if r.get("crop_h"))
-    line_h = hs[len(hs) // 2] if hs else 0
+    if line_h is None:
+        line_h = median_line_h(rows)
     for r in rows:
         r["line_like"] = (not line_h) or r.get("crop_h", 0) <= NON_LINE * line_h
 

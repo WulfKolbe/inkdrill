@@ -166,6 +166,21 @@ last touched the file.
     old decoration returns None, and None reads as "the producer gave
     none".** A missing page should have been counted, not trusted.
 
+15. **A refined reading needs `formulamarks update`, never `run`**
+    (out/670, out/671). The host line is found by equality with
+    MathPix's text, so a row pdfdrill refined is looked up by MathPix's
+    reading from `*.tiddlers.json` (`formulafind.MATHPIX_FIELD`, today
+    `latex`; pdfdrill will rename it `latex_mathpix` -- change that one
+    constant when they say it landed). `update` measures only changed
+    rows at the STORED scale; a fresh `run` re-votes, and on mielke a
+    0.64 -> 0.65 re-vote flipped 8 of 184 marks on rows that had not
+    changed. A mark is a function of the vote as well as of the row.
+    `classify` takes a pinned `line_h` for the same reason. mielke after
+    update: 189 marks, 1,746 unchanged rows identical, 10 new rectangles
+    9 right and 1 off by eye. Not handled: 65 rows corpus-wide whose
+    shown reading is neither `latex` nor `latex_refined` (fong-spivak's
+    `\mathbf` for `\boldsymbol`).
+
 ## Known failure classes — every one cost real time here
 
 - **A control group is only as good as the rule that built it.** The
