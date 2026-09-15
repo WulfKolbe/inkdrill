@@ -1,0 +1,68 @@
+670 - a fresh marks run cannot mark a rewritten row, and a 0.01 scale change flips 8 marks
+=========================================================================================
+
+After pdfdrill applied the hook rewrite (out/667) to mielke and re-measured
+(READY on six gates, 2026-09-15T09:47:50Z), its re-emitted `marks.json`
+listed 21 rows "reading changed since the run; re-run to mark it" --
+exactly the 21 formula rows of `hook-rewrite.json`. Marks 184 -> 179; the
+five lost: FO0437, FO0571, FO0612, FO0805, FO0811.
+
+A fresh `formulamarks run` was made in scratch to restore them. The rule
+stated before running: place it in ~/inkdrill-marks only if every row
+whose reading did not change reproduces its 09-13 mark. It does not, and
+it restores nothing.
+
+====================================================================
+1. THE REWRITTEN ROWS STAY UNMARKED -- BY CONSTRUCTION
+====================================================================
+
+    fresh run    1,768 rows, 181 marked, 22 not measured: "no line match"
+                 21 of the 22 are the rewritten rows; the 22nd is FO0431,
+                 also a `[refined: census]` row
+
+The host line is found by EQUALITY of the row's reading with an inline
+span of MathPix's text in lines.json (`first_occurrence_lines`, pdfdrill's
+own rule). A refined reading is not MathPix's text, so it has no host.
+README already recorded 58 rows lost this way; every refinement pdfdrill
+applies adds to that count, and no re-run can take it back.
+
+The fix is a host lookup by the MATHPIX reading while rendering and
+measuring the CHOSEN one. It needs MathPix's reading per formula row,
+which the evidence file does not show (its source cell equals the chosen
+reading). Asked of pdfdrill; not built.
+
+====================================================================
+2. THE RE-VOTE MOVES ROWS THAT DID NOT CHANGE
+====================================================================
+
+    scale        0.64 (09-13)  ->  0.65 (fresh)
+    vote rows    601            ->  584   (readings changed, so the
+                                           population the scale is voted on
+                                           changed)
+
+Over rows whose reading is identical in both runs:
+
+    identical in mark, rect, region, host page, why_no_mark   1,601
+    rect moved (all < 1 px)                                       19
+    why_no_mark text only (a margin figure changed)              118
+    MARK FLIPPED                                                   8
+        gained   FO0298, FO0851, FO0949, FO1056, FO1145
+        lost     FO0731, FO0942, FO1701
+
+8 of 184 marks, 4.3%, change with a 0.01 move of the document scale and
+no change to the row. They sit on the policy's margin and gap edges;
+out/660 already recorded 356 of johnston's marks at the refit band edge.
+A mark is a function of the vote as well as of the row.
+
+====================================================================
+WHAT FOLLOWS
+====================================================================
+
+  * The fresh run is not placed. pdfdrill keeps its re-emit (179 marks),
+    which reproduces every unchanged row by construction: `marks`
+    re-emits from the stored work and never re-votes.
+  * To mark rewritten rows without disturbing the rest: re-emit against
+    the STORED scale, looking up hosts by MathPix's reading. A fresh vote
+    should only happen when lines.json changes.
+  * Not measured: whether the flipped marks were right or wrong in either
+    run. The flip rate is the finding, not which side is correct.
