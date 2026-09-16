@@ -198,7 +198,15 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
-18. **The fit score is the channel the marking policy lacks** (out/675,
+18. **DECIDED AND IMPLEMENTED 2026-09-16 at 0.60** (out/677):
+    `formularesidual.MARK_SCORE`, the policy's fifth clause, verified on
+    27 of the 132 rows it suppresses (9 right, 7 off, 11 wrong).
+    NOT PLACED yet -- pdfdrill's host set changes next (diagram, chart,
+    page_info, qed_symbol, equation_number, pseudocode out; footnote
+    stays), and ONE re-emit per document will carry both.
+    The measurement that decided it:
+
+18a. **The fit score is the channel the marking policy lacks** (out/675,
     `tools/marksample.py`). 45 marked rows, banded by score, drawn on
     their host line and judged with the score hidden: every WRONG mark
     is below 0.60, every off-by-a-token below 0.70, and 24 of 24 at
