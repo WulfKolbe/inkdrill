@@ -193,7 +193,7 @@ def merge(original, updated, attempted):
 
 
 def update(library, bib, work):
-    from tools.formulafind import mathpix_readings
+    from tools.formulafind import first_occurrence_lines, mathpix_readings
     doc = library / bib
     meta_f = work / "meta.json"
     if not meta_f.exists():
@@ -209,15 +209,29 @@ def update(library, bib, work):
     res, upd, attempted = _run_records(work)
     measured = {r["id"]: r for r in merge(res, upd, attempted)}
     mathpix = mathpix_readings(library, bib)
+    first = first_occurrence_lines(library, bib)
     todo = []
     for e in rows(doc / "evidence-formula.tex"):
         if e["math"] is None:
             continue
+        hm = mathpix.get(e["id"])
+        look = (hm if hm and hm.strip() != e["math"].strip() else e["math"]).strip()
         r = measured.get(e["id"])
         if r is not None:
             if r["math"] != e["math"]:
                 todo.append(e["id"])
-        elif e["id"] in attempted:
+            else:
+                # THE SECOND TRIGGER: the host line moved. A mark is
+                # measured on one line and drawn on pdfdrill's crop of
+                # that line, so a row whose host changed -- or has none
+                # now -- is measured again, whatever its reading says.
+                # pdfdrill's rule changed on 2026-09-12 and 515 rows
+                # moved with it (out/673).
+                hit = first.get(look)
+                now = (hit[0], hit[1]) if hit else None
+                if now != (r.get("host_page"), r.get("region")):
+                    todo.append(e["id"])
+        elif e["id"] in attempted:      # noqa: E501 -- see the comment below
             # ATTEMPTED BEFORE AND LEFT NO RECORD -- unplaceable then, or a
             # placeholder then. Its reading may have changed since: johnston
             # FO1528 was `(not rendered)` at one update and MathPix's reading
@@ -225,10 +239,8 @@ def update(library, bib, work):
             # merge drops its original record, so skipping it here would
             # report the old reason forever.
             todo.append(e["id"])
-        else:
-            hm = mathpix.get(e["id"])
-            if hm and hm.strip() != e["math"].strip():
-                todo.append(e["id"])
+        elif hm and hm.strip() != e["math"].strip():
+            todo.append(e["id"])
     _log(f"{bib}: update -- {len(todo)} rows to measure at the stored scale "
          f"{meta['scale']}")
     if todo:

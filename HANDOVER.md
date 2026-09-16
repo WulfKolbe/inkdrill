@@ -181,6 +181,26 @@ last touched the file.
     shown reading is neither `latex` nor `latex_refined` (fong-spivak's
     `\mathbf` for `\boldsymbol`).
 
+17. **The host-line rule is pdfdrill's and DRIFTED for four days**
+    (out/673, out/674). Their 09-12 change -- a span counts only on a
+    line that can host a transclusion, and the scan reads
+    `text_display or text` -- was not followed here, so 515 rows were
+    measured on a line pdfdrill does not crop and it refused 62 marks
+    rather than drawing them wrong. Now matched
+    (`formulafind.NON_PROSE_HOSTS`, 17 types in their five families) and
+    pinned by a test against `docmodel.line_types` when
+    `INKDRILL_PDFDRILL_SRC` names their src. `update` gained a host-moved
+    trigger; without it a re-hosting cannot be applied, because the
+    reading is unchanged. All 21 documents re-emitted and placed: 8,413
+    -> 8,383 marks, 0 refused, 29 of 31 new rectangles right by eye.
+    **A rule reproduced from another program is a dependency with no
+    version.** Only their refusal count made the drift visible.
+    Exposed and NOT acted on: the marking policy never looks at the fit
+    score (1,850 of 8,383 marks are below 0.80; fong-spivak FO2204 is
+    marked at 0.47 on a `diagram` line), and `page_info` is not in their
+    excluded set, so a running head can host a formula (8 rows, 4
+    marked).
+
 16. **`\FitMath{\emph{(not rendered)}}` is not a reading** (out/672).
     33 rows corpus-wide; `rows()` took it as maths and `update`
     measured the words. Only `$...$` is a reading now (`placeholder`

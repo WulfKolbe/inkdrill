@@ -20,7 +20,9 @@ cardona-qft-methods p94 and 0902.0431.
 
 import importlib.util
 import json
+import os
 import pathlib
+import sys
 import tempfile
 import unittest
 
@@ -178,11 +180,19 @@ class TF_2_HostLineRule(unittest.TestCase):
         M = dict(top_left_x=10, top_left_y=90, width=300, height=80)
         Bx = dict(top_left_x=10, top_left_y=20, width=500, height=40)
         cls.A, cls.Bx = A, Bx
+        T = dict(top_left_x=10, top_left_y=200, width=300, height=40)
+        cls.T = T
         (lib / "B" / "B.lines.json").write_text(json.dumps({"pages": [
             {"page": 1, "lines": [
+                # a table cell and a heading come FIRST and host nothing
+                {"type": "simple_cell", "region": T, "text": r"\(K\) and \(G\)"},
+                {"type": "section_header", "region": T, "text": r"\(S\)"},
                 {"type": "text", "region": A,
                  "text": r"see \(G\) and $x$, costs \$5 and \$6"},
-                {"type": "math", "region": M, "text": r"\(H\)"}]},
+                {"type": "math", "region": M, "text": r"\(H\)"},
+                # the span pdfdrill sees is in `text_display` (their 676)
+                {"type": "diagram", "region": T, "text": "",
+                 "text_display": r"\(D\)"}]},
             {"page": 2, "lines": [
                 {"type": "text", "region": Bx,
                  "text": r"\(G\) again, \(H\) and \( y \)"}]}]}))
@@ -200,6 +210,30 @@ class TF_2_HostLineRule(unittest.TestCase):
 
     def test_an_escaped_dollar_is_not_a_delimiter(self):
         self.assertFalse([k for k in self.first if "5" in k])
+
+    def test_a_line_that_cannot_host_a_transclusion_is_not_a_host(self):
+        """pdfdrill's 674/676: `G` occurs in a table cell on page 1 before
+        the sentence, and the sentence is the host. A reading that occurs
+        ONLY on such a line has no host at all (out/673)."""
+        self.assertEqual(self.first["G"], (1, self.A))     # not the cell
+        self.assertNotIn("K", self.first)                  # cell only
+        self.assertNotIn("S", self.first)                  # heading only
+
+    def test_a_span_only_in_text_display_is_found(self):
+        self.assertEqual(self.first["D"], (1, self.T))
+
+    def test_the_forbidden_set_is_pdfdrills(self):
+        src = os.environ.get("INKDRILL_PDFDRILL_SRC")
+        if not src or not pathlib.Path(src, "docmodel", "line_types.py").exists():
+            self.skipTest("INKDRILL_PDFDRILL_SRC does not name pdfdrill's src")
+        sys.path.insert(0, src)
+        try:
+            from docmodel import line_types
+        finally:
+            sys.path.remove(src)
+        self.assertEqual(ff.NO_TRANSCLUDE, line_types.NO_TRANSCLUDE)
+        self.assertEqual({k: set(v) for k, v in ff.NON_PROSE_HOSTS.items()},
+                         {k: set(v) for k, v in line_types.NON_PROSE_HOSTS.items()})
 
     def test_rows_match_by_equality_and_ignore_their_page_column(self):
         got = ff.match_rows_first(
@@ -419,6 +453,23 @@ class TF_5_Update(unittest.TestCase):
     it at the stored scale without moving any row it did not measure
     (out/670: a re-vote 0.64 -> 0.65 flipped 8 unchanged mielke marks)."""
 
+    def test_a_row_ghostscript_refuses_is_false_not_an_exception(self):
+        """kohlhase-omdoc (out/674): pdflatex wrote a pdf gs would not
+        rasterise, and `check=True` ended the whole update."""
+        import subprocess as sp
+        real = ff.subprocess.run
+        def fake(cmd, *a, **kw):
+            if cmd and cmd[0] == "gs":
+                return sp.CompletedProcess(cmd, 1, b"", b"gs: error")
+            return real(cmd, *a, **kw)
+        ff.subprocess.run = fake
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                ok = ff.render("x+y", pathlib.Path(td) / "f.pgm", 72)
+        finally:
+            ff.subprocess.run = real
+        self.assertFalse(ok)
+
     def test_a_refined_row_is_hosted_by_the_mathpix_reading(self):
         first = TF_2_HostLineRule.first
         A = TF_2_HostLineRule.A
@@ -450,7 +501,22 @@ class TF_5_Update(unittest.TestCase):
         self.assertFalse(any(r["line_like"] for r in rows if r["crop_h"] == 300))
         self.assertTrue(all(r["line_like"] for r in rows if r["crop_h"] == 74))
 
-    def _finished(self, lib, tex_edit=None, finder=None):
+    @staticmethod
+    def _region(i):
+        return dict(top_left_x=100, top_left_y=60 * i, width=125, height=46)
+
+    def _lines(self, types=None, regions=None):
+        """Three pages; page 3 carries one hosting line per row, so the
+        host trigger sees the hosts the records name."""
+        types, regions = types or {}, regions or {}
+        return json.dumps({"pages": [
+            {"page": 1, "lines": []}, {"page": 2, "lines": []},
+            {"page": 3, "lines": [
+                {"type": types.get(i, "text"),
+                 "region": regions.get(i, self._region(i)),
+                 "text": rf"before \(x_{{{i}}}+y\) after"} for i in range(1, 11)]}]})
+
+    def _finished(self, lib, tex_edit=None, finder=None, lines=None):
         doc, work = lib / "X", lib / "work"
         doc.mkdir(); work.mkdir()
         tex = _HEAD + "".join(
@@ -458,9 +524,9 @@ class TF_5_Update(unittest.TestCase):
                  rf"\FitMath{{$\displaystyle x_{{{i}}}+y$}}", _img(f"X_FO{i:04d}"))
             for i in range(1, 11)) + r"\end{longtable}"
         (doc / "evidence-formula.tex").write_text(tex)
-        (doc / "X.lines.json").write_text('{"pages": []}')
+        (doc / "X.lines.json").write_text(lines or self._lines())
         recs = [dict(id=f"X_FO{i:04d}", page=3, host_page=3, math=f"x_{{{i}}}+y",
-                     region=dict(top_left_x=100, top_left_y=60 * i, width=125, height=46),
+                     region=self._region(i),
                      frame=(1.6, 1.6, 0.0, 0.0), rect=[10, 5, 60, 40], crop_w=200,
                      crop_h=74, conf=1.0, gaps=9, margin=0.3, score=0.95,
                      edge_cuts=0, blobs_in_rect=5, formula_blobs=5, crop=None)
@@ -540,6 +606,49 @@ json.dump(recs, open(a[a.index("--json") + 1], "w"))
         self.assertEqual(d["not_measured"]["X_FO0005"], "no line match")
         self.assertEqual(d["counts"]["reading_changed"], 0)
         self.assertEqual(len(d["rows"]), 9)
+
+    def _update_with(self, lines):
+        """`update` over the finished run, with these lines.json contents."""
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td)
+            self._finished(lib, lines=lines)
+            finder = lib / "finder.py"
+            finder.write_text(self.FINDER.replace(
+                'new = {"X_FO0003": "x_{3}+z"}',
+                'new = {"X_FO%04d" % i: "x_{%d}+y" % i for i in range(1, 11)}'))
+            old, fm.FINDER = fm.FINDER, finder
+            try:
+                rc, d = self._call(fm.update, lib, "X", work := lib / "work")
+            finally:
+                fm.FINDER = old
+            argv_f = lib / "finder.py.argv"
+            ids = (json.loads(argv_f.read_text())[
+                json.loads(argv_f.read_text()).index("--ids") + 1].split(",")
+                if argv_f.exists() else [])
+        return d, ids
+
+    def test_a_row_whose_host_line_moved_is_measured_again(self):
+        """out/673: pdfdrill's host rule changed and 515 rows moved with
+        it. The reading is untouched, so only the host can trigger this."""
+        moved = dict(self._region(4)); moved["top_left_y"] += 500
+        d, ids = self._update_with(self._lines(regions={4: moved}))
+        self.assertEqual(ids, ["X_FO0004"])
+        by = {r["id"]: r for r in d["rows"]}
+        # the row now carries the UPDATE's record (the stand-in finder
+        # places every row it measures at its own fixed region), and the
+        # rows it did not measure keep theirs
+        self.assertEqual(by["X_FO0004"]["region"]["top_left_y"], 180)
+        self.assertEqual(by["X_FO0005"]["region"], self._region(5))
+        self.assertEqual(d["counts"]["marked"], 10)
+
+    def test_a_row_whose_host_line_can_no_longer_host_is_measured_again(self):
+        d, ids = self._update_with(self._lines(types={7: "simple_cell"}))
+        self.assertEqual(ids, ["X_FO0007"])
+
+    def test_unchanged_hosts_trigger_nothing(self):
+        d, ids = self._update_with(self._lines())
+        self.assertEqual(ids, [])
+        self.assertEqual(d["counts"]["marked"], 10)
 
     def test_an_attempted_row_with_no_record_is_attempted_again(self):
         """johnston FO1528: an earlier update left no record (placeholder),

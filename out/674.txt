@@ -1,0 +1,120 @@
+674 - the host rule matched to pdfdrill's, every document re-hosted: 8,413 -> 8,383 marks, 0 refused
+===================================================================================================
+
+out/673 measured the drift and did not act on it; the user said go on.
+
+====================================================================
+1. WHAT CHANGED IN THE TOOLS
+====================================================================
+
+  formulafind   `first_occurrence_lines` now skips a line whose type
+                cannot host a transclusion and reads `text_display or
+                text`, as pdfdrill's `inlinectx` does. The 17 types are
+                copied as `NON_PROSE_HOSTS`, in pdfdrill's five named
+                families; a test compares the set with their
+                `docmodel.line_types` when `INKDRILL_PDFDRILL_SRC` names
+                their src (skipped otherwise), so a change on their side
+                fails here rather than drifting again.
+  formulamarks  `update` gained its second trigger: a measured row whose
+                host line MOVED -- or has none now -- is measured again at
+                the stored scale, whatever its reading says. Without it a
+                re-hosting cannot be applied at all: the reading is
+                identical, so nothing else notices.
+  formulafind   `render` no longer dies when ghostscript refuses a pdf
+                pdflatex wrote. It returns False and the row reports
+                "render failed", as a missing pdf already did. One
+                kohlhase-omdoc row ended a whole update this way.
+
+Tests: 42 in the formula module (host rule both sides, the text_display
+span, the pdfdrill parity check, three host-trigger cases, the gs
+refusal), suite 1,286, 37 skip (38 without the parity env).
+
+====================================================================
+2. THE RE-HOSTING, DOCUMENT BY DOCUMENT
+====================================================================
+
+Each trialled on a copy of the stored work, compared with the reference
+marks, then placed. In EVERY document the rows the update did not
+measure are identical field for field, and the scale and calibration are
+unchanged.
+
+    document                rows measured   marks before -> after
+    gilmore                       74            571 -> 563
+    0902.0431                     68          1,471 -> 1,470
+    johnston                      57          1,586 -> 1,581
+    penev_B                       57             50 -> 42
+    penev_A                       52             90 -> 80
+    lyche                         43          1,107 -> 1,105
+    fong-spivak-invitation        43            614 -> 617
+    fong-spivak-seven-sketches    41            450 -> 452
+    mielke                        28            189 -> 189
+    2010.14265                    28             51 -> 48
+    kohlhase-omdoc                21             53 -> 60
+    voloshin                      19            498 -> 495
+    rph8-g15q                     19             96 -> 95
+    cardona                       11          1,068 -> 1,068
+    0707.4470                     10              9 -> 8
+    1510.06699                     9            255 -> 255
+    1605.05775                     4             26 -> 26
+    2106.07890                     3            100 -> 100
+    bradley_spring22               2             23 -> 23
+    2501.06662, BradleyGastaldi    0            unchanged
+
+    TOTAL                        589          8,413 -> 8,383
+
+THE COUNT THAT MATTERS IS NOT "marked". A mark pdfdrill will not draw is
+worth nothing, and it refused 62 of the 8,413. Marks by host line type,
+before and after:
+
+    before   text 7,516  list_item 856  table_of_contents_item 18
+             equation_number 5  pseudocode 5  figure_label 5  footnote 5
+             page_info 3
+    after    text 7,502  list_item 861  equation_number 5  pseudocode 5
+             footnote 5  page_info 4  diagram 1
+
+The 23 marks on TOC entries and figure labels are gone: those rows are
+now measured on the prose line that hosts them, or on none. `hostdrift`
+re-run against the placed files: 0 rows hosted differently, 0 marks
+refused, over 36,700 rows.
+
+BY EYE, 31 new rectangles on their lossless host lines: 29 right, 1 off
+by one token (kohlhase-omdoc FO0041 takes `FMP>` before its `X+0=0`), 1
+WRONG -- fong-spivak-seven-sketches FO2204, below.
+
+====================================================================
+3. TWO THINGS THE RE-HOSTING EXPOSED, NEITHER FIXED
+====================================================================
+
+a. THE MARKING POLICY NEVER LOOKS AT THE FIT SCORE. FO2204's reading
+   `\eta: I \rightarrow X` is placed on a `diagram` line -- a 143x36
+   figure region -- with score 0.4713, 6 template blobs against 1 in the
+   rectangle, and it is MARKED: out/658's four clauses test line
+   likeness, gaps, margin and edge cuts, and nothing else. Its old host
+   suppressed it by the edge-cut clause, which is why it surfaces now.
+   It is not a regression: 1,850 of the 8,383 marks (22%) have a score
+   below 0.80, and 1,851 of 8,413 did before. `formularesidual` flags
+   them POOR_FIT; pdfdrill draws them anyway. Changing the policy needs
+   fresh eye verdicts (out/658), so this is recorded, not acted on.
+
+b. A RUNNING HEAD CAN BE A HOST. pdfdrill's set excludes tables,
+   headings, titles, TOC entries and figure labels -- not `page_info`.
+   gilmore FO0001 (`U(2) \rightarrow H_{4}`) now hosts on the running
+   head of page 225 instead of a body line on page 10, and its mark is
+   correct THERE. 8 rows corpus-wide host on a `page_info` line, 4 of
+   them marked; also 37 on `footnote`, 11 on `qed_symbol`, 11 on
+   `equation_number`, 8 on `code`, 236 on `diagram`. Their own
+   transclusion rule excludes repeating frames, so `page_info` looks
+   like an omission in their set -- reported, theirs to decide.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * 31 eye verdicts, mine, not blind, on the NEW rectangles only. The
+    30 marks that disappeared were not examined one by one; they are
+    rows whose host line changed under pdfdrill's rule.
+  * Whether pdfdrill's rule picks the right line is its own claim -- it
+    crops that line. No crop was compared with a page here.
+  * The 13 penev_A rows with no host under their rule now report "no
+    line match" rather than a mark; that is the rule saying a reading
+    occurs only on lines that cannot host it.

@@ -242,17 +242,51 @@ def match_rows_to_lines(picked, index):
 INLINE = re.compile(r"(?<!\\)\$(?!\$)(.+?)(?<!\\)\$|\\\((.+?)\\\)", re.S)
 
 
+#: Line types that may not host a transcluded formula, copied from
+#: pdfdrill's `docmodel.line_types.NON_PROSE_HOSTS` (their 674/676,
+#: 2026-09-12) and kept in their five NAMED families so the set can be
+#: checked against the requirement rather than against a flat list.
+#: `tests/test_formulatools.py` compares it with their module when
+#: `INKDRILL_PDFDRILL_SRC` names their `src`.
+NON_PROSE_HOSTS = {
+    "table": frozenset({"table", "table_row", "table_column", "simple_cell",
+                        "complex_cell", "table_spanning_cell",
+                        "table_split_cell"}),
+    "section_header": frozenset({"section_header"}),
+    "title": frozenset({"title"}),
+    "toc": frozenset({"table_of_contents_container", "table_of_contents_item",
+                      "table_of_contents_row", "table_of_contents_number"}),
+    "figure_label": frozenset({"figure_label", "diagram_info",
+                               "x_axis_tick_label"}),
+}
+NO_TRANSCLUDE = frozenset().union(*NON_PROSE_HOSTS.values())
+
+
 def first_occurrence_lines(library, bibkey):
-    """latex -> (page, region) of its FIRST inline span in document order.
+    """latex -> (page, region) of its FIRST inline span on a line that can
+    HOST a transclusion.
 
     THIS IS PDFDRILL'S HOST-LINE RULE, reproduced so a rectangle drawn
     here lands on the line pdfdrill cropped: `inlinectx.load_spans` then
-    `first_occurrences` (their 535). The model holds one Formula per
-    DISTINCT value, so a row is the value's first span -- page order,
-    then line order, then span order -- found by EQUALITY of the span
-    body, never by containment. `math` lines are display maths and are
-    skipped. Pages are numbered by POSITION in `lines.json`, as pdfdrill
-    numbers them.
+    `first_occurrences`. The model holds one Formula per DISTINCT value,
+    so a row is the value's first span -- page order, then line order,
+    then span order -- found by EQUALITY of the span body, never by
+    containment. Pages are numbered by POSITION in `lines.json`, as
+    pdfdrill numbers them.
+
+    TWO THINGS THIS MISSED UNTIL 2026-09-16, both from their 674/676
+    (out/673). `math` lines were the only ones skipped, and the scan read
+    `text`:
+
+      * a line whose type cannot host a transclusion -- any table part, a
+        heading, a title, a TOC entry, a figure label -- is not a host,
+        and a reading occurring ONLY there has none. 515 of 36,700
+        published formula rows were hosted on a line pdfdrill does not
+        crop, and pdfdrill refused 62 of their marks rather than drawing
+        them wrong.
+      * the span scan reads `text_display or text`, the field their model
+        reads. 139,152 non-math lines carry a differing `text_display`,
+        1,828 spans live only in it.
 
     A mark measured on any other line cannot be drawn on pdfdrill's
     crop, so `formulamarks` refuses a row whose region differs from the
@@ -264,9 +298,10 @@ def first_occurrence_lines(library, bibkey):
     first = {}
     for page, pg in enumerate(lj.get("pages") or [], 1):
         for ln in pg.get("lines") or []:
-            if ln.get("type") == "math":
+            if ln.get("type") == "math" or ln.get("type") in NO_TRANSCLUDE:
                 continue
-            for m in INLINE.finditer(ln.get("text") or ""):
+            text = ln.get("text_display") or ln.get("text") or ""
+            for m in INLINE.finditer(text):
                 body = (m.group(1) or m.group(2) or "").strip()
                 if body:
                     first.setdefault(body, (page, ln.get("region") or {}))
@@ -455,9 +490,17 @@ def render(math, out, dpi):
                                            # mielke's 0xa3 crashed a whole vote
         if not (t / "f.pdf").exists():
             return False
-        subprocess.run(["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=pgmraw",
-                        f"-r{dpi}", f"-sOutputFile={out}", str(t / "f.pdf")],
-                       capture_output=True, check=True)
+        # A ROW THAT WILL NOT RASTERISE IS A ROW, NOT A CRASH. pdflatex
+        # can write a pdf ghostscript then refuses; with `check=True` that
+        # ended the whole run (kohlhase-omdoc, out/674) where a missing
+        # pdf two lines up is just `False` and the caller reports "render
+        # failed" for that row.
+        gs = subprocess.run(["gs", "-q", "-dNOPAUSE", "-dBATCH",
+                             "-sDEVICE=pgmraw", f"-r{dpi}",
+                             f"-sOutputFile={out}", str(t / "f.pdf")],
+                            capture_output=True)
+        if gs.returncode != 0:
+            return False
     return True
 
 
