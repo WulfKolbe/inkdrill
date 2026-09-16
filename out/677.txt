@@ -1,0 +1,71 @@
+677 - the 0.60 score cut, verified on the rows it suppresses before it ships
+===========================================================================
+
+The user took the cut (relayed by pdfdrill, 2026-09-16) on the condition
+out/675 proposed: re-measure the suppressed rows first. 14 more marks
+below 0.60 were sampled -- seed 677, at most two per document, none of
+them among out/675's 13 -- drawn on the lossless cut of their host line
+and judged with the score hidden.
+
+====================================================================
+1. WHAT THE CUT REMOVES
+====================================================================
+
+    rows below 0.60 judged, out/675 + this      27 of 132
+        RIGHT                                    9   (33%)
+        OFF by a token                           7   (26%)
+        WRONG                                   11   (41%)
+
+Scaled to the 132 the cut suppresses: about 44 right marks lost against
+about 54 wrong and 34 off removed.
+
+The five wrong ones this round, with what the rectangle covered:
+
+    0.571  lyche FO0658        misses its leading `\max_{1<=i<=n}|x_i| =`
+    0.580  johnston FO4664     swallows "We then repeat: if"
+    0.590  voloshin FO1784     starts at "H = (X, C, D), where"
+    0.590  kohlhase FO0263     a third of the reading
+    0.593  fong-spivak FO1667  swallows "We also have three inclusions:"
+
+The six right ones are display matrices, an index entry (`SU(1,1), 187`)
+and long residue/limit expressions -- the same shape out/675 found: a
+template whose rendering differs from the print, placed correctly.
+
+That is the trade the policy's own principle settles: "a mark in the
+wrong place is worse than no mark -- it sends a reader to the wrong
+glyphs and looks authoritative doing it" (`formularesidual`).
+
+====================================================================
+2. WHAT IS IN THE CODE
+====================================================================
+
+  formularesidual  `MARK_SCORE = 0.60`, a fifth clause in `classify`.
+                   The constant carries its evidence: every wrong mark
+                   below 0.60, margin == score in all of them, 132 of
+                   8,383 suppressed.
+  formulamarks     `why_no_mark` names it: "the fit is not a match
+                   (score 0.590 < 0.6)", ordered after the margin clause
+                   because a bad fit is the stronger statement.
+  tests            the fixture gains a low-fit row with lyche FO0540's
+                   real numbers (gaps 14, margin 0.590, score 0.5899),
+                   and TF_4 asserts the clause fires, names itself, and
+                   agrees with `classify`. Suite 1,286, 38 skip.
+
+NOT PLACED. pdfdrill asked to hold marks updates: their host set is
+about to change too (diagram, chart, page_info, qed_symbol,
+equation_number, pseudocode excluded; footnote stays), which moves 230
+rows on its own. The placed `marks.json` files still carry the old
+policy, and pdfdrill is publishing that round now. When their change
+lands, ONE re-emit per document applies both the new host rule and this
+clause, and the 132 -- including out/675's six wrong marks -- go then.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * 27 verdicts of 132 suppressed rows, mine, not blind to the band.
+    The right/off/wrong split is that sample's, not a census.
+  * The cut is not claimed to catch every wrong mark: 0 of 32 sampled
+    above 0.60 were wrong, which bounds that rate only loosely (out/675).
+  * Nothing says a suppressed row is unplaceable -- only that this
+    measurement does not place it well enough to draw.

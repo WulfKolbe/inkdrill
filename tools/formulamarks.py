@@ -280,6 +280,9 @@ def why_no_mark(r):
     if r["margin"] < fr.MARK_MARGIN:
         return (f"position not unique (margin {r['margin']:.3f} < "
                 f"{fr.MARK_MARGIN})")
+    if r["score"] < fr.MARK_SCORE:
+        return (f"the fit is not a match (score {r['score']:.3f} < "
+                f"{fr.MARK_SCORE})")
     if r["gaps"] <= fr.MARK_GAPS and r["edge_cuts"] >= fr.MARK_CUTS:
         return (f"short expression cut by a rectangle edge (gaps "
                 f"{r['gaps']} <= {fr.MARK_GAPS}, edge cuts {r['edge_cuts']})")

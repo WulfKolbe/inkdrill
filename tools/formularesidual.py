@@ -102,6 +102,20 @@ LOW_CONFIDENCE = 0.80
 #: is the right way round: a mark in the wrong place sends a reader to
 #: the wrong glyphs and looks authoritative doing it, while a missing
 #: one costs only that the reader finds the expression themselves.
+#: A POSITION THAT IS NOT A MATCH AT ALL. `margin` asks how much better
+#: the best position is than the next; `score` asks whether the best one
+#: matches. They are different channels: in all six wrong marks found by
+#: eye (out/675) MARGIN EQUALS SCORE, because the template matched nothing
+#: else on the line either, so the margin clause passed them.
+#:
+#: 0.60 comes from 45 eye verdicts on marks banded by score: every WRONG
+#: mark was below 0.60, every off-by-a-token below 0.70, and 24 of 24 at
+#: 0.70+ were right. It suppresses 132 of 8,383 marks (1.6%), of which
+#: roughly a quarter are right -- small display matrices whose rendered
+#: template does not look like the print. Decided by the user on
+#: 2026-09-16; re-verified on the suppressed rows in out/677.
+MARK_SCORE = 0.60
+
 MARK_MARGIN = 0.15
 MARK_GAPS = 7
 MARK_CUTS = 1
@@ -203,6 +217,7 @@ def classify(rows, cal, min_margin, line_h=None):
         r["mark"] = not (not r["line_like"]
                          or r["gaps"] <= 1
                          or r["margin"] < MARK_MARGIN
+                         or r["score"] < MARK_SCORE
                          or (r["gaps"] <= MARK_GAPS
                              and r["edge_cuts"] >= MARK_CUTS))
         if r["conf"] is not None and r["conf"] < LOW_CONFIDENCE:

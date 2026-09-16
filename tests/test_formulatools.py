@@ -416,7 +416,11 @@ class TF_4_MarksContract(unittest.TestCase):
             dict(base, id="short", gaps=1, margin=0.30, edge_cuts=0),
             dict(base, id="notunique", gaps=9, margin=0.12, edge_cuts=0),
             dict(base, id="cut", gaps=5, margin=0.30, edge_cuts=1),
-            dict(base, id="longcut", gaps=8, margin=0.30, edge_cuts=1)]
+            dict(base, id="longcut", gaps=8, margin=0.30, edge_cuts=1),
+            # out/675: the wrong marks all had margin == score, so only
+            # the score sees them. lyche FO0540's numbers.
+            dict(base, id="lowfit", gaps=14, margin=0.590, edge_cuts=0,
+                 score=0.5899)]
 
     def test_every_suppression_clause_fires_and_agrees_with_classify(self):
         rows = self._rows()
@@ -427,7 +431,8 @@ class TF_4_MarksContract(unittest.TestCase):
             self.assertEqual(fm.why_no_mark(r) is None, r["mark"], r["id"])
         want = {"tall": "host region is not a line",
                 "short": "too short", "notunique": "position not unique",
-                "cut": "short expression cut"}
+                "cut": "short expression cut",
+                "lowfit": "the fit is not a match"}
         for rid, reason in want.items():
             self.assertFalse(by[rid]["mark"], rid)
             self.assertTrue(fm.why_no_mark(by[rid]).startswith(reason), rid)
