@@ -258,6 +258,17 @@ NON_PROSE_HOSTS = {
                       "table_of_contents_row", "table_of_contents_number"}),
     "figure_label": frozenset({"figure_label", "diagram_info",
                                "x_axis_tick_label"}),
+    # The user's decision of 2026-09-16 (pdfdrill 699): inline maths in
+    # tables, titles, citations, figure text and annotations, and in TikZ
+    # figures, is never transcluded. The FIGURE ITSELF joins its label --
+    # which reverses what both sides assumed before, that a `diagram`
+    # line is an image region whose maths is its content.
+    "figure": frozenset({"diagram", "chart"}),
+    # The page's own furniture, repeating or marginal: the running head,
+    # the equation's number, the end-of-proof mark. out/674 found gilmore
+    # FO0001 hosted on the running head of page 225 rather than a body
+    # line on page 10, which is what put `page_info` on the list.
+    "annotation": frozenset({"page_info", "equation_number", "qed_symbol"}),
 }
 NO_TRANSCLUDE = frozenset().union(*NON_PROSE_HOSTS.values())
 
@@ -279,11 +290,15 @@ def first_occurrence_lines(library, bibkey):
     `text`:
 
       * a line whose type cannot host a transclusion -- any table part, a
-        heading, a title, a TOC entry, a figure label -- is not a host,
-        and a reading occurring ONLY there has none. 515 of 36,700
-        published formula rows were hosted on a line pdfdrill does not
-        crop, and pdfdrill refused 62 of their marks rather than drawing
-        them wrong.
+        heading, a title, a TOC entry, a figure label, and since
+        2026-09-16 the figure itself (`diagram`, `chart`) and the page's
+        furniture (`page_info`, `equation_number`, `qed_symbol`) -- is
+        not a host, and a reading occurring ONLY there has none. 515 of
+        36,700 published formula rows were hosted on a line pdfdrill does
+        not crop, and pdfdrill refused 62 of their marks rather than
+        drawing them wrong. `code`, `pseudocode` and `footnote` are NOT
+        excluded: the first two carry 4,634 readings and the third is
+        prose.
       * the span scan reads `text_display or text`, the field their model
         reads. 139,152 non-math lines carry a differing `text_display`,
         1,828 spans live only in it.

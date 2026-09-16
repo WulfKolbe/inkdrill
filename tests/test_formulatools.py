@@ -190,9 +190,16 @@ class TF_2_HostLineRule(unittest.TestCase):
                 {"type": "text", "region": A,
                  "text": r"see \(G\) and $x$, costs \$5 and \$6"},
                 {"type": "math", "region": M, "text": r"\(H\)"},
-                # the span pdfdrill sees is in `text_display` (their 676)
+                # the span pdfdrill sees is in `text_display` (their 676):
+                # a line whose `text` is empty carries its content there
+                {"type": "list_item", "region": T, "text": "",
+                 "text_display": r"\(D\)"},
+                # the figure ITSELF hosts nothing since 2026-09-16, and a
+                # reading printed only inside one has no host at all
                 {"type": "diagram", "region": T, "text": "",
-                 "text_display": r"\(D\)"}]},
+                 "text_display": r"\(F\)"},
+                {"type": "chart", "region": T, "text": r"\(C\)"},
+                {"type": "page_info", "region": T, "text": r"\(P\)"}]},
             {"page": 2, "lines": [
                 {"type": "text", "region": Bx,
                  "text": r"\(G\) again, \(H\) and \( y \)"}]}]}))
@@ -221,6 +228,13 @@ class TF_2_HostLineRule(unittest.TestCase):
 
     def test_a_span_only_in_text_display_is_found(self):
         self.assertEqual(self.first["D"], (1, self.T))
+
+    def test_a_figure_or_an_annotation_hosts_nothing(self):
+        """2026-09-16: the figure itself (`diagram`, `chart`) and the
+        page's furniture (`page_info`, ...) joined the excluded set."""
+        for reading in ("F", "C", "P"):
+            self.assertNotIn(reading, self.first, reading)
+        self.assertEqual(self.first["D"], (1, self.T))   # the list item still hosts
 
     def test_the_forbidden_set_is_pdfdrills(self):
         src = os.environ.get("INKDRILL_PDFDRILL_SRC")
