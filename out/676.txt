@@ -1,0 +1,72 @@
+676 - anti-aliasing: off already, now said out loud -- and two of the books are scans
+====================================================================================
+
+A side question from the user: do our ghostscript calls turn
+anti-aliasing off (`-dTextAlphaBits=1 -dGraphicsAlphaBits=1`, before the
+input file)? Checked rather than assumed, because every correlation in
+the formula work compares a RENDERED template with a RENDERED page.
+
+====================================================================
+1. THE ANSWER: OFF BY DEVICE DEFAULT, AND NOW BY OUR OWN SAYING
+====================================================================
+
+`formulafind.render` writes `pgmraw` and passed no alpha flags. The
+output is BYTE-IDENTICAL with and without them:
+
+    300 dpi   default c2a2be18...  explicit `=1` c2a2be18...  SAME
+              anti-aliased `=4` 284d7644...                   differs
+    600 dpi   default 1d13b050...  explicit `=1` 1d13b050...  SAME
+              anti-aliased `=4` ad8ba1cc...                   differs
+    gs 10.07.1
+
+By level count on one rendered formula: default and `=1` both give 5
+grey levels with 3 mid-tone pixels in the whole image; `=4` gives 18
+levels and 1,075 mid-tone pixels.
+
+THE FLAGS ARE NOW PASSED ANYWAY. The default belongs to the DEVICE, not
+to us -- `pngalpha` anti-aliases by default -- and a template rendered
+with grey edges correlates differently against a hard-edged page. The
+change cannot move a measurement: the bytes are the same today.
+
+Deliberate exceptions, left alone: `scriptink.py` and two calls in
+`premise/measure.py` ask for `=4` on purpose, and `dpialias.py` exists to
+compare aliased against anti-aliased.
+
+====================================================================
+2. WHAT THE PAGES WE MEASURE ACTUALLY CONTAIN
+====================================================================
+
+The crops come from `inspect/pages/p<N>.png`, pdfdrill's renders, not
+ours. Five pages sampled per document over the 21 published books, grey
+levels and the share of mid-tone pixels (10 < v < 245):
+
+    two-level ink, as expected      0902.0431, 1510.06699, 2010.14265,
+                                    2106.07890, 2501.06662, kohlhase-omdoc,
+                                    bradley_spring22, voloshin, lyche,
+                                    cardona, mielke, gilmore (2-4 levels
+                                    away from their cover page)
+    GREY ON EVERY SAMPLED PAGE      penev_A (84-95 levels), penev_B (93-96)
+    grey on some pages              0707.4470, 1605.05775, fong-spivak x2,
+                                    johnston, rph8-g15q, BradleyGastaldi
+
+    26 of 105 sampled pages carry real grey (> 16 levels)
+
+penev_A and penev_B are SCANS, not renders of a digital PDF; several
+other documents' first pages are scanned covers, and single interior
+pages carry embedded raster figures. So "inkdrill measures two-level
+ink" is true of most of this corpus and FALSE for those two books --
+their crops reach `binarize` as real greyscale, and the threshold does
+the work.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * 5 pages per document, evenly spaced, 105 of ~2,900 -- a sample, not
+    a census; the per-document verdicts above are from those 5.
+  * Nothing here re-opens HANDOVER item 11: anti-aliasing ON took hole
+    instability from 75.0% to 9.4% on the RENDERED column, and that is
+    still measured, still not acted on, and still about a different
+    pipeline (pdfdrill's page renders, not our templates).
+  * No measurement changed. The byte-identity is the whole point: this
+    is a guard against a device default, not a correction.

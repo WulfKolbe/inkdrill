@@ -495,8 +495,15 @@ def render(math, out, dpi):
         # ended the whole run (kohlhase-omdoc, out/674) where a missing
         # pdf two lines up is just `False` and the caller reports "render
         # failed" for that row.
+        # ANTI-ALIASING OFF, SAID RATHER THAN INHERITED. `pgmraw` already
+        # defaults to no anti-aliasing -- the output here is BYTE-IDENTICAL
+        # with and without these two flags at 300 and 600 dpi on gs 10.07.1
+        # -- but the default is the DEVICE's, not ours: `pngalpha` turns it
+        # on, and a template rendered with grey edges correlates
+        # differently against the hard-edged page (out/676).
         gs = subprocess.run(["gs", "-q", "-dNOPAUSE", "-dBATCH",
-                             "-sDEVICE=pgmraw", f"-r{dpi}",
+                             "-sDEVICE=pgmraw", "-dTextAlphaBits=1",
+                             "-dGraphicsAlphaBits=1", f"-r{dpi}",
                              f"-sOutputFile={out}", str(t / "f.pdf")],
                             capture_output=True)
         if gs.returncode != 0:

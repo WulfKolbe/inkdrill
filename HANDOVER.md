@@ -181,6 +181,23 @@ last touched the file.
     shown reading is neither `latex` nor `latex_refined` (fong-spivak's
     `\mathbf` for `\boldsymbol`).
 
+19. **Anti-aliasing is off on the marks path, and the page renders are
+    two-level -- except where they are scans** (out/676). `gs` with
+    `pgmraw`/`png16m` defaults to no anti-aliasing: `formulafind.render`'s
+    output is BYTE-IDENTICAL with and without `-dTextAlphaBits=1
+    -dGraphicsAlphaBits=1` (300 and 600 dpi, gs 10.07.1), and both differ
+    from `=4`. The flags are now passed anyway, because the default
+    belongs to the DEVICE (`pngalpha` anti-aliases) and a template with
+    grey edges correlates differently against a hard-edged page.
+    `scriptink.py` and two calls in `premise/measure.py` turn it ON
+    deliberately; `dpialias.py` compares both.
+    THE POPULATION, sampled 5 pages per document over the 21: 26 of 105
+    carry real grey. penev_A and penev_B are grey on EVERY sampled page
+    (84-96 levels) -- they are SCANS, not renders -- and many first pages
+    are scanned covers. "We measure two-level ink" is true of most
+    documents and false for those. Item 11's open question (AA on took
+    hole instability 75.0% -> 9.4%) is still open and still not acted on.
+
 18. **The fit score is the channel the marking policy lacks** (out/675,
     `tools/marksample.py`). 45 marked rows, banded by score, drawn on
     their host line and judged with the score hidden: every WRONG mark
