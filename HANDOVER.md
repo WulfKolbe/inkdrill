@@ -198,6 +198,17 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+20. **An eye verdict can remove one mark, by id** (out/679).
+    `work/suppressed.json` maps a row id to what was SEEN, and `marks`
+    reports `suppressed by eye verdict (...)` and draws nothing. Two
+    rows carry one: gilmore FO2420 (reading `\alpha`, rectangle over
+    `alpha -> Z alpha`) and fong-spivak-seven-sketches FO2524 (half its
+    reading). **FO2420 scores 0.9338**, above every threshold in the
+    policy, which is the argument for the instrument: moving a constant
+    to catch two rows is tuning, a verdict is evidence and travels with
+    the mark set for a reader to disagree with. The policy's five
+    clauses stay measurements.
+
 18. **DECIDED AND IMPLEMENTED 2026-09-16 at 0.60** (out/677):
     `formularesidual.MARK_SCORE`, the policy's fifth clause, verified on
     27 of the 132 rows it suppresses (9 right, 7 off, 11 wrong).

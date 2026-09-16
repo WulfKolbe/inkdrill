@@ -646,6 +646,31 @@ json.dump(recs, open(a[a.index("--json") + 1], "w"))
                 if argv_f.exists() else [])
         return d, ids
 
+    def test_an_eye_verdict_suppresses_one_row_and_says_so(self):
+        """out/679: two marks were SEEN to be wrong (gilmore FO2420 scores
+        0.9338, so no threshold reaches it). The verdict travels with the
+        mark set and touches nothing else."""
+        with tempfile.TemporaryDirectory() as td:        # the baseline: no verdict
+            lib = pathlib.Path(td)
+            self._finished(lib)
+            _, plain = self._call(fm.marks, lib, "X", lib / "work")
+        with tempfile.TemporaryDirectory() as td:
+            lib = pathlib.Path(td)
+            doc, work = self._finished(lib)
+            (work / "suppressed.json").write_text(json.dumps(
+                {"X_FO0002": "out/679 eye verdict: boxes the wrong glyphs"}))
+            rc, d = self._call(fm.marks, lib, "X", work)
+        by = {r["id"]: r for r in d["rows"]}
+        self.assertFalse(by["X_FO0002"]["mark"])
+        self.assertEqual(by["X_FO0002"]["why_no_mark"],
+                         "suppressed by eye verdict (out/679 eye verdict: "
+                         "boxes the wrong glyphs)")
+        self.assertIsNone(by["X_FO0002"]["rect"])
+        self.assertEqual(d["counts"]["marked"], plain["counts"]["marked"] - 1)
+        for r in plain["rows"]:
+            if r["id"] != "X_FO0002":
+                self.assertEqual(by[r["id"]], r, r["id"])
+
     def test_a_row_whose_host_line_moved_is_measured_again(self):
         """out/673: pdfdrill's host rule changed and 515 rows moved with
         it. The reading is untouched, so only the host can trigger this."""

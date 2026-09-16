@@ -1,0 +1,116 @@
+679 - both rules applied to all 21 documents: 8,383 -> 8,258 marks, every difference named
+==========================================================================================
+
+The user's two decisions of 2026-09-16 (out/677, out/678) landed
+together, in one re-emit per document, after pdfdrill rebuilt evidence
+across the 20 published books:
+
+  * the host set widened to 7 families / 21 types -- the figure itself
+    (`diagram`, `chart`) and the page's furniture (`page_info`,
+    `equation_number`, `qed_symbol`) host nothing;
+  * `MARK_SCORE = 0.60` became the marking policy's fifth clause.
+
+====================================================================
+1. THE ROUND
+====================================================================
+
+    document              marked   rows        document           marked  rows
+    johnston               1,492   5,015       fong-inv             612   4,003
+    0902.0431              1,469   3,116       gilmore              563   2,970
+    lyche                  1,086   4,597       voloshin             489   2,477
+    cardona                1,066   3,720       fong-7s              444   3,979
+    1510.06699               255   1,034       mielke               189   1,767
+    2106.07890               100     318       rph8-g15q             95     476
+    2501.06662                93     385       penev_A               84     674
+    kohlhase-omdoc            59     437       2010.14265            50     352
+    penev_B                   42     438       1605.05775            26     138
+    bradley_spring22          23     181       BradleyGastaldi       13     211
+    0707.4470                  8     203
+    TOTAL                  8,258 marks (was 8,383)
+
+EVERY DIFFERENCE AGAINST THE PREVIOUS FILES IS NAMED, per document, by
+`classify.py`: host-moved rows re-measured at the stored scale,
+score-suppressed marks, reason-text changes on rows that were never
+marked (the score clause reports before the edge-cut clause), and rows
+pdfdrill's rebuild dropped because their only host was a figure or the
+page's furniture. No unexplained difference in any of the 21. Scale and
+calibration unchanged everywhere; `reading_changed` 0 everywhere.
+
+Two documents GAINED marks -- penev_A 80 -> 84 and 2010.14265 48 -> 50 --
+because a row whose only host had been a figure moved to the prose line
+that also carries it, and placed there.
+
+====================================================================
+2. THE EYE CHECK, AND A UNIT MISTAKE IT NEARLY HID
+====================================================================
+
+16 marks corpus-wide gained a new or moved rectangle. All 16 drawn on
+the lossless cut of their host line:
+
+    13 right, 1 off by a token, 2 WRONG
+
+    off    penev_A FO0008   leaves the reading's leading `1` outside
+    wrong  gilmore FO2420   the reading is a single `\alpha`; the box
+                            spans `alpha -> Z alpha`
+    wrong  fong-7s FO2524   covers `p = (x` of `p=(x,y) \in U`
+
+THE FIRST DRAWING WAS WRONG AND THE VERDICTS WITH IT. `marksample.draw`
+takes a MARKS row, whose `rect` is in MathPix page pixels, and multiplies
+by the frame scale. I handed it `formulafind`'s own record, whose `rect`
+is already in CROP pixels -- so every box came out 1.6x too large and
+shifted, and 12 of 14 looked wrong. Nothing was placed on that reading;
+redrawn from the marks rows, the same 16 are 13 right. The tell was the
+shape of the error: every box wrong the SAME way (too wide, shifted
+right) is a units bug, not a measurement.
+
+A COUNTEREXAMPLE WORTH KEEPING. gilmore FO2420 scores 0.9338. out/675
+found 24 of 24 sampled at 0.70+ right, and this is a wrong mark far above
+that -- so the 0.60 cut is a floor on badness, not a guarantee of
+goodness, exactly as out/675's "does not prove the upper 8,251 marks are
+clean" said. The two wrong marks are reported to pdfdrill by id; they can
+be suppressed individually if the user wants them out before publishing,
+which is not the same as moving a threshold.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * 16 eye verdicts, mine, not blind. Only marks whose RECTANGLE changed
+    were examined; a mark that merely disappeared was not re-examined
+    here (out/677 sampled that class).
+  * The 21 rows whose only host was a figure and which have no prose
+    occurrence now carry no mark at all. Whether their formula deserves
+    one somewhere else is not a question this measures.
+  * pdfdrill has not rebuilt marks or republished at the time of
+    writing; these files are what its next `marks --build` will read.
+
+====================================================================
+ADDENDUM, same day: the two wrong marks removed by verdict
+====================================================================
+
+pdfdrill put the two back to the user's own principle -- a rectangle on
+the wrong glyphs misleads a reader, a missing one leaves the row as most
+rows already are -- and asked for an id-level suppression rather than a
+threshold change, with the verdicts recorded as evidence.
+
+    tools/formulamarks.py   `work/suppressed.json`: row id -> the eye
+                            verdict. `marks` reports `why_no_mark =
+                            "suppressed by eye verdict (...)"` and draws
+                            nothing. Tested both sides: the named row
+                            loses its mark and names its verdict, every
+                            other row equals a run without the file.
+
+    gilmore FO2420          score 0.9338 -- reading `\alpha`, rectangle
+                            over `alpha -> Z alpha`
+    fong-7s FO2524          score 0.6349 -- covers `p = (x` of
+                            `p=(x,y) \in U`
+
+    gilmore 563 -> 562, fong-7s 444 -> 443; exactly one row differs in
+    each document. Corpus 8,258 -> 8,256 marks.
+
+WHY NOT A CONSTANT. FO2420 sits above every threshold the policy has;
+a cut that removed it would remove thousands of correct marks. The
+policy's five clauses stay MEASUREMENTS, and this is the other kind of
+evidence -- one rectangle, looked at, written down where a reader can
+disagree with it. penev_A FO0008 (off by a leading `1`) was left alone:
+that is not the class being removed.

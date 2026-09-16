@@ -268,6 +268,22 @@ def update(library, bib, work):
     return marks(library, bib, work)
 
 
+def suppressed(work):
+    """id -> the EYE VERDICT that removed this row's mark, from
+    `work/suppressed.json`.
+
+    The policy's four clauses (out/658) and its fifth (out/677) are
+    measurements; this is the other kind of evidence -- a rectangle
+    somebody LOOKED AT and found wrong. gilmore FO2420 scores 0.9338 and
+    still boxes `alpha -> Z alpha` for a reading of `\\alpha` (out/679),
+    so no threshold reaches it and moving one to fit two rows would be
+    tuning. The verdict travels WITH the mark set: each entry names what
+    was seen, so a reader can disagree with it.
+    """
+    f = work / "suppressed.json"
+    return json.loads(f.read_text()) if f.exists() else {}
+
+
 def why_no_mark(r):
     """The clause of out/658's policy that suppressed this row's mark, or
     None. `formularesidual.classify` holds the policy; this names it, and
@@ -349,6 +365,7 @@ def marks(library, bib, work):
             if m:
                 logged[m.group(1)] = m.group(2).lower()
     measured = {r["id"]: r for r in res}
+    eye = suppressed(work)
     out, not_measured = [], {}
     changed = 0
     for e in rows(doc / "evidence-formula.tex"):
@@ -381,6 +398,10 @@ def marks(library, bib, work):
         if (why is None) != r["mark"]:
             raise SystemExit(f"POLICY DRIFT on {r['id']}: formularesidual "
                              f"says mark={r['mark']}, why_no_mark={why!r}")
+        verdict = eye.get(r["id"])
+        if verdict and r["mark"]:
+            r["mark"] = False
+            why = f"suppressed by eye verdict ({verdict})"
         px, frac, y_from = to_region(r)
         out.append(dict(
             id=r["id"], page=r["page"], host_page=r["host_page"],
