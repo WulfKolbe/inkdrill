@@ -181,6 +181,20 @@ last touched the file.
     shown reading is neither `latex` nor `latex_refined` (fong-spivak's
     `\mathbf` for `\boldsymbol`).
 
+18. **The fit score is the channel the marking policy lacks** (out/675,
+    `tools/marksample.py`). 45 marked rows, banded by score, drawn on
+    their host line and judged with the score hidden: every WRONG mark
+    is below 0.60, every off-by-a-token below 0.70, and 24 of 24 at
+    0.70+ are right. In all six wrong rows MARGIN EQUALS SCORE -- the
+    template matches nothing else on the line either, so out/658's
+    "position not unique" clause passes them by construction. Margin
+    asks how much better the best position is; score asks whether it is
+    a match at all. A cut at 0.60 would suppress 132 of 8,383 marks
+    (1.6%) and remove every wrong one sampled, costing ~3 right per 13
+    (small display matrices, whose rendered template differs from the
+    print). NOT ACTED ON: out/658's constants change only with eye
+    verdicts, these are 45 of them, and the decision is the user's.
+
 17. **The host-line rule is pdfdrill's and DRIFTED for four days**
     (out/673, out/674). Their 09-12 change -- a span counts only on a
     line that can host a transclusion, and the scan reads

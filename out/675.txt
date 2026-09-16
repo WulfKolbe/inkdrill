@@ -1,0 +1,81 @@
+675 - the fit score against 45 eye verdicts: every wrong mark is below 0.60
+==========================================================================
+
+pdfdrill declined to ask for a score clause tuned to one row (FO2204,
+out/674 §3a) and said the measurement was worth having either way. This
+is it.
+
+METHOD. `tools/marksample.py`: 45 marked rows from the 21 placed mark
+sets, banded by `formulafind`'s fit score, seed 674, at most two per
+document per band, each rectangle drawn on the LOSSLESS cut of its host
+line at 400 dpi. The label showed the id and the reading, never the
+score. Verdicts: RIGHT covers the reading; OFF covers it but over- or
+under-runs by a token; WRONG covers something else. Verdicts, scores and
+readings: ~/inkdrill-marks/score-verdicts.json.
+
+====================================================================
+1. THE RESULT
+====================================================================
+
+    band        marks      sample verdicts
+    < 0.50         39      3 right                   2 wrong
+    0.50-0.60      93                     4 off      4 wrong
+    0.60-0.70     354      5 right        3 off
+    0.70-0.80   1,364      8 right
+    0.80-0.90   3,656      8 right
+    >= 0.90     2,877      8 right
+    TOTAL       8,383     32 right        7 off      6 wrong
+
+EVERY WRONG MARK IS BELOW 0.60. Every off-by-a-token is below 0.70. All
+24 sampled at 0.70 or above are right.
+
+The six wrong ones, with what the rectangle actually covers:
+
+    0.446  johnston FO2227   takes the "(b)" label, drops the last column
+    0.471  fong-spivak FO2204  a figure region; the reading is not in it
+    0.587  lyche FO3734      the words "nverges for a 2 by 2 matrix A := ["
+    0.590  lyche FO0540      the words "umn k from column k+1 f"
+    0.595  fong-spivak FO3331  starts at "that", ends mid-expression
+    0.598  voloshin FO1639   a span far wider than the reading
+
+WHY THE EXISTING CLAUSES CANNOT CATCH THEM. In all six, MARGIN EQUALS
+THE SCORE to four decimals: the template matches nothing else on the
+line either, so the position is "unique" and out/658's margin clause
+passes it. Margin says how much better the best position is than the
+next; score says whether the best position is a match at all. They are
+different channels and only the second sees these rows.
+
+    cut     suppresses                sample below the cut
+    0.50       39 marks (0.5%)        3 right, 0 off, 2 wrong
+    0.60      132 marks (1.6%)        3 right, 4 off, 6 wrong
+    0.65      257 marks (3.1%)        5 right, 4 off, 6 wrong
+    0.70      486 marks (5.8%)        8 right, 7 off, 6 wrong
+    0.80    1,850 marks (22.1%)      16 right, 7 off, 6 wrong
+
+0.60 removes every wrong mark in the sample at a cost of 3 right per 13
+suppressed -- about 30 correct marks of 8,383 by that rate, against
+roughly 45-60 wrong ones. 0.70 costs nearly twice as many right marks
+and catches no additional wrong one.
+
+WHAT THE RIGHT ONES BELOW 0.60 ARE: all three are small DISPLAY MATRICES
+(`[1 2 / 0 1]`, `(1 2 3 / 4 5 6)`) hosted inline. Their template is a
+bracketed array whose rendering differs from the print, so the score is
+low while the position is right -- which is why a cut costs anything at
+all.
+
+====================================================================
+2. WHAT THIS DOES NOT SAY
+====================================================================
+
+  * 45 verdicts, mine, not blind to the BAND (the sample is stratified,
+    so each montage is one band) though blind to the score itself. The
+    low bands are 5 and 8 rows.
+  * 0 wrong of 32 sampled at 0.60 or above bounds that rate only
+    loosely: the 95% upper bound is about 9%, i.e. it does not prove the
+    upper 8,251 marks are clean.
+  * Nothing is changed. out/658's policy stands until a threshold is
+    decided; this is the measurement it would rest on, and the decision
+    is the user's and pdfdrill's.
+  * The score is `formulafind`'s own profile-correlation fit, not a
+    property of the page: a low score can mean a bad position OR a
+    template that does not look like the print (the matrices above).
