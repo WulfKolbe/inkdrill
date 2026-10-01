@@ -1,0 +1,126 @@
+680 - a fourth and fifth oracle for sweep, and a test file that ran nothing
+==========================================================================
+
+From the CCL reading (Claude.ai chat, 2026-09-30/10-01) came three
+test-only changes, folded into `main` as one commit -- no branch, no
+merge commit -- and verified here. Nothing under `inkdrill/` changed.
+
+====================================================================
+1. WHAT WAS ADDED
+====================================================================
+
+  tests/_hcs2013.py            He, Chao, Suzuki, "An Algorithm for
+  tests/test_hcs2013_oracle.py Connected-Component Labeling, Hole
+                               Labeling and Euler Number Computing",
+                               JCST 28(3) 2013, Sections 2.1 and 3.1.
+                               TOTALS: component count and hole count.
+                               Pixel masks, a representative table with
+                               linked label sets -- no runs, no cycle
+                               rank, no union-find. The FOURTH oracle,
+                               and the first that can refute a HOLE
+                               count rather than only a component count.
+
+  tests/_hole_attribution.py   Per-component ownership: flood-fill ink at
+  tests/test_hole_attribution.py  8, background at 4, credit each hole to
+                               the component of the ink pixel directly
+                               LEFT of the hole's first pixel in raster
+                               order. Closes what the totals oracle
+                               cannot see -- right totals, wrong owner.
+                               Independent of `sweep`; NOT independent of
+                               `nest.py`, which uses the same parent rule
+                               (so it must never be used to check nest).
+
+  tests/test_pnm_stream.py     moved off pytest -- section 3.
+
+====================================================================
+2. MEASURED HERE, AGAINST sweep
+====================================================================
+
+TOTALS ORACLE, 246 masks, 0 disagreements, 5 s:
+
+    seeded noise      210   48/128/256 px, densities 0.05-0.95, 10 seeds
+    structured         27   stripes (h/v), dither, diagonals, combs,
+                            nested rings, full, empty, single column,
+                            at 17/64/129 px
+    real pages          9   384 px windows cut from inspect/pages of
+                            0902.0431 p125, penev_A p20 (a SCAN),
+                            johnston p196
+
+PER-COMPONENT ORACLE, the gap the sandbox left open -- it had run on
+noise, fixtures and checkerboards only. 16 windows of 320 px from four
+documents, each checked on BOTH sweep axes: 32 comparisons, 0
+disagreements, 2 s.
+
+    document            ink      components   holes
+    0902.0431 p125      0-3.8%     0-24        0-4
+    penev_A p20         1.7-26.9%  16-419      3-436   (a scan)
+    johnston p196       2.3-5.5%   18-55       2-8
+    mielke p102         2.9-7.4%   18-48       5-8
+
+penev_A's densest window is the useful one: 419 components and 436
+holes of halftone-grade ink, where a mis-credited hole would be easy to
+produce and hard to notice.
+
+====================================================================
+3. THE REAL DEFECT: A TEST FILE THAT RAN NOTHING
+====================================================================
+
+`tests/test_pnm_stream.py` imported pytest (the suite is stdlib-only).
+Where pytest is MISSING, `unittest` reports an import error and the
+suite is red. Where pytest is INSTALLED -- it is here, 9.1.1 -- the
+import succeeds, its plain functions are not `TestCase`s, and unittest
+collects NOTHING from the file while reporting OK.
+
+Measured by loading each version by path and asking unittest's own
+loader:
+
+    old file (1f7ade6)   unittest collects   0 tests   (pytest: 13 items)
+    new file             unittest collects   9 tests
+
+    suite before   1,293 run, OK, 38 skipped
+    suite after    1,306 run, OK, 38 skipped      (9 + 4 new oracle tests)
+
+So every "full suite green" in out/666-679 was green over a file that
+ran nothing. The 13 pytest items are 9 functions, one parametrised five
+ways. (The sandbox reported 1,294 -> 1,306 with 64 skips: no corpus
+there, so different modules skip.)
+
+**A GREEN SUITE IS NOT EVIDENCE THAT A FILE RAN.** The repo's own rule
+-- "assert every branch of a classification with a fixture that reaches
+it" -- has a precondition nobody had checked: that the file is collected
+at all. A test count is the cheapest guard, and it moved 1,293 -> 1,306
+here.
+
+====================================================================
+4. THE PUBLICATION IS WRONG, NOT THE CODE
+====================================================================
+
+Measured in the sandbox and recorded here as theirs: JCST 28(3) p.471
+states the maximum number of components AND holes is N*M/4 and sets the
+hole label range to it. A checkerboard refutes it -- on 512x512 every
+non-border background pixel is 4-isolated, giving 130,050 holes against
+a bound of 65,536. A literal C transcription returns (3, 130,178)
+instead of (1, 130,050); a Python version with the same bound returns
+4,032 components on a 128x128 checkerboard instead of 1. `_hcs2013.py`
+departs deliberately (D2: N*M/2, and ceil(N/2)*ceil(M/2) for the
+foreground, which the paper also understates for odd sizes) and carries
+a regression test that fails with the paper's bound.
+
+The CCL reading produced NO defect in `sweep`: the errors found were in
+MaxTract's `ccl.c` and `pdfextractor.ml`, in the paper above, and in two
+third-party implementations. That is the useful null result -- any CCL
+change here is about speed, memory or structure, and needs an
+equivalence test plus a performance budget, not another correctness
+oracle.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * `nest.py`'s hole attribution is NOT checked by either oracle: the
+    per-component one shares nest's parent rule. Checking nest needs a
+    third rule (an independent containment test).
+  * The windows are 320-384 px. A full 3400x4677 page has not been put
+    through the pixel oracles -- they are O(pixels) in Python.
+  * Nothing here measures 4-connected foreground, which the package
+    never uses (connectivity is paired: 8 ink, 4 background).

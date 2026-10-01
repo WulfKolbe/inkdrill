@@ -198,6 +198,22 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+21. **A green suite is not evidence that a file RAN** (out/680).
+    `tests/test_pnm_stream.py` imported pytest. Where pytest is missing
+    the suite is red; where it is INSTALLED (9.1.1 here) the import
+    succeeds, its plain functions are not `TestCase`s, and unittest
+    collected ZERO tests from it while reporting OK. Every "full suite
+    green" in out/666-679 was green over a file that ran nothing.
+    Measured by loading each version by path and asking unittest's own
+    loader: old 0 tests, new 9; the suite moved 1,293 -> 1,306.
+    **Watch the test COUNT, not the word OK** -- it is the cheapest
+    guard against a file that is never collected, and stdlib-only is
+    the rule that keeps the question from arising.
+    Two new oracles came with it: He/Chao/Suzuki 2013 totals (246 masks
+    here, 0 disagreements) and per-component hole attribution (32
+    comparisons on real corpus windows, 0 disagreements). The second
+    shares `nest.py`'s parent rule, so it can never check nest.
+
 20. **An eye verdict can remove one mark, by id** (out/679).
     `work/suppressed.json` maps a row id to what was SEEN, and `marks`
     reports `suppressed by eye verdict (...)` and draws nothing. Two
