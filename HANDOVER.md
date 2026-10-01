@@ -198,6 +198,24 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+22. **`nest` is now checked by a third rule: containment** (out/681,
+    `tests/_containment.py`). Parent = the innermost region whose
+    ENCLOSED set contains it, where enclosed = what a flood of the
+    complement cannot reach from the bounding-box ring. No raster order,
+    no neighbour-of-an-extreme-pixel lookup, so it is independent of
+    both `nest` and `_hole_attribution`. 0 disagreements over 12
+    fixtures, 20 noise masks, 2 checkerboards, 16 corpus windows and 6
+    framed-real-ink windows reaching depth 3.
+    **The mutation gate is the reason to keep it**: crediting every hole
+    to the first ink component is caught by this oracle (16 failures)
+    and by `test_nest` (6), and MISSED entirely by `_hole_attribution` --
+    its docstring's warning, demonstrated.
+    Corpus finding: ink at depth >= 2 lives only inside page-wide frames
+    and grids (1,779 and 1,822 px), too large for a pixel oracle in
+    Python, and a window cut from one is no longer enclosed. So the
+    depth-3 case uses REAL glyph ink inside a DRAWN rectangle -- the one
+    semi-synthetic input, stated in the test.
+
 21. **A green suite is not evidence that a file RAN** (out/680).
     `tests/test_pnm_stream.py` imported pytest. Where pytest is missing
     the suite is red; where it is INSTALLED (9.1.1 here) the import

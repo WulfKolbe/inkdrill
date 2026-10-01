@@ -1,0 +1,97 @@
+681 - nest's forest checked by a third rule: containment, not a neighbour lookup
+===============================================================================
+
+out/680 closed with nest unchecked, and said why: `nest` finds a
+region's parent by ONE LOOKUP -- the pixel directly above its
+topmost-leftmost -- and `tests/_hole_attribution.py` credits a hole to
+the pixel directly LEFT of its first pixel in raster order. Same family:
+a neighbour of an extreme pixel in raster order. Neither can refute the
+other.
+
+====================================================================
+1. THE RULE
+====================================================================
+
+`tests/_containment.py` decides parenthood by ENCLOSURE, uniformly for
+ink and background:
+
+    enclosed(R)   flood the COMPLEMENT of R inward from the ring around
+                  R's bounding box; whatever the flood cannot reach is
+                  enclosed by R. Connectivity stays paired: the flood
+                  over the complement of an 8-connected ink region runs
+                  at 4, over a 4-connected background region at 8.
+    parent(X)     the region with the SMALLEST enclosed set among those
+                  enclosing all of X; None when none does.
+
+Smallest-enclosing is "innermost", and it is unique: if two regions both
+enclose X, one encloses the other and their enclosed sets are strictly
+nested. No raster order, no adjacency, no cycle rank, no union-find, no
+run index. Keys are `nest`'s own Region fields -- (kind, bbox, area) --
+so neither side has to expose a pixel.
+
+====================================================================
+2. WHAT IT PROVED, AND THE MUTATION GATE THAT MAKES THAT MEAN SOMETHING
+====================================================================
+
+    fixtures                     12   the cases that separate the four
+                                      relations: a \fbox with text (hole_of
+                                      vs ink_in_hole), nested frames,
+                                      an island with its own hole, a hole
+                                      open to the border, a diagonal wall,
+                                      a 1-px hole, full, empty
+    seeded noise                 20   40 px, densities 0.2-0.8, 4 seeds
+    checkerboards                 2   9 and 16 px
+    corpus windows               16   224 px from 0902.0431 p125, penev_A
+                                      p20 (a SCAN), johnston p196,
+                                      mielke p102 -- up to 220 ink
+                                      regions and 94 holes in one window
+    framed real ink               6   288 px, glyph ink enclosed by a
+                                      drawn rectangle: depth 3, up to 42
+                                      ink regions at depth 2
+    ---------------------------------------------------------------
+    0 disagreements anywhere.
+
+MUTATION GATE. nest's parent line changed so every HOLE is credited to
+the first ink component -- totals unchanged, ownership wrong:
+
+    tests/test_nest_containment.py      16 failures   CAUGHT
+    tests/test_nest.py (existing)        6 failures   caught
+    tests/test_hole_attribution.py       OK           MISSED
+
+The third row is the point. That oracle's own docstring says it shares
+nest's parent rule and must not be used to check nest; the mutant proves
+the warning is not theoretical. `nest.py` was restored unchanged.
+
+====================================================================
+3. A FINDING ABOUT THE CORPUS, NOT THE CODE
+====================================================================
+
+NO SMALL REAL NESTED STRUCTURE EXISTS on the pages searched. Ink at
+depth >= 2 occurs only inside page-wide frames and ruled grids --
+1,779 px on kohlhase-omdoc p49, 1,822 px on cardona p181 -- and a window
+cut out of one is not enclosed, because the rule crosses the window edge
+and the interior stops being a hole. A pixel oracle over 3 Mpx costs
+hundreds of MB in Python sets, so the full frames were not run.
+
+Hence the framed windows: the glyphs, their counters and their positions
+are the page's; the enclosing rectangle is drawn. That is stated in the
+test rather than hidden, and it is the only semi-synthetic input here.
+
+`tests/test_nest_containment_corpus.py` keeps the campaign repeatable,
+opt-in on `INKDRILL_CORPUS`, like the other corpus modules.
+
+    suite   1,306 -> 1,316 (8 hermetic + 2 corpus-gated), 40 skipped
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * The oracle is O(bbox) in Python per region, so it checks WINDOWS,
+    not pages. A whole 3400x4677 page has never been through it.
+  * It checks the forest -- parents, kinds, extents -- not `nest`'s
+    performance claims, and not `InkPass.complete()`.
+  * Page-wide frames and ruled grids, the structures where depth >= 2
+    really occurs in this corpus, remain unchecked by this rule at
+    their true size.
+  * 4-connected foreground is still untested anywhere, because the
+    package never uses it.
