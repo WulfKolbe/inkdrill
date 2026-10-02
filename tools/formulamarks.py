@@ -538,6 +538,7 @@ def verify_document(name, marks_dir: pathlib.Path, library: pathlib.Path,
     local = _marks_of(local_p) if local_p.exists() else None
     deliv = _marks_of(deliv_p) if deliv_p.exists() else None
     row = {"document": name, "fail": [], "warn": [], "parts": 0,
+           "not_placed": 0,
            "marked": (local or {}).get("counts", {}).get("marked"),
            "delivered": deliv is not None, "embedded": 0, "crops": 0}
 
@@ -564,6 +565,26 @@ def verify_document(name, marks_dir: pathlib.Path, library: pathlib.Path,
             dm = deliv.get("counts", {}).get("marked")
             row["fail"].append(f"delivered copy differs in content "
                                f"(marked {dm} against {row['marked']})")
+
+    # EVERY EVIDENCE ROW IS ACCOUNTED FOR. `rows` carries the measured
+    # ones and `not_measured` counts the rest, so the two must sum to
+    # `evidence_rows` exactly. It holds on 24 of 24 documents today --
+    # and it is the identity that settles what an absent id MEANS: if a
+    # row had silently vanished from the set, the sum would fall short,
+    # and if one were counted twice it would exceed. Both sessions spent
+    # an hour reading 116 absent ids as a moved row set when this
+    # identity already said they were declined, not missing.
+    c = local.get("counts") or {}
+    nm = c.get("not_measured") or {}
+    n_nm = sum(nm.values()) if isinstance(nm, dict) else (nm or 0)
+    total = c.get("evidence_rows")
+    accounted = len(local.get("rows") or []) + n_nm
+    row["not_placed"] = n_nm
+    if total is not None and accounted != total:
+        row["fail"].append(
+            f"the mark set does not account for every evidence row: "
+            f"{len(local.get('rows') or [])} measured + {n_nm} not placed "
+            f"= {accounted}, against {total} rows")
 
     doc = library / name
     both = _evidence_both(doc)

@@ -35,8 +35,11 @@ def marks_doc(marked=3, inkdrill="aaaaaaaaaaaa", extra=None):
     d = {"bibkey": "doc", "inkdrill": inkdrill,
          "measured_against": "pdfdrill-1234",
          "counts": {"marked": marked, "evidence_rows": 10},
-         "marks": [{"id": f"doc_FO{i:04d}", "mark": i < marked}
-                   for i in range(10)]}
+         # "rows", as the real artifact spells it. This fixture said
+         # "marks" and nothing noticed until a check read the array:
+         # a fixture whose shape came from nowhere.
+         "rows": [{"id": f"doc_FO{i:04d}", "mark": i < marked}
+                  for i in range(10)]}
     if extra:
         d.update(extra)
     return d
@@ -184,6 +187,28 @@ class TM_1_Verify(unittest.TestCase):
         r = self.row()
         self.assertEqual(r["parts"], 2)
         self.assertTrue(any("built WITHOUT the marks" in f for f in r["fail"]))
+
+    def test_every_evidence_row_must_be_accounted_for(self):
+        """`rows` + `not_measured` == `evidence_rows`, exactly. The
+        identity that distinguishes a row the instrument DECLINED from
+        one that silently went missing -- both sessions misread 116 of
+        the first as the second."""
+        bad = marks_doc()
+        bad["counts"]["evidence_rows"] = 12      # 10 rows, 0 not measured
+        self.build(local=bad)
+        self.assertTrue(any("does not account for every evidence row" in f
+                            for f in self.row()["fail"]))
+
+    def test_not_measured_closes_the_gap(self):
+        """The same document is CORRECT once the declined rows are
+        counted: 10 measured + 2 not placed = 12."""
+        good = marks_doc()
+        good["counts"]["evidence_rows"] = 12
+        good["counts"]["not_measured"] = {"not placed (too short)": 2}
+        self.build(local=good)
+        r = self.row()
+        self.assertEqual(r["fail"], [])
+        self.assertEqual(r["not_placed"], 2)
 
     # ---- the warnings
     def test_crops_on_disk_say_rebuild_not_remeasure(self):
