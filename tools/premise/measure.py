@@ -91,7 +91,8 @@ from inkdrill.sched import Task, page_tasks, run as sched_run  # noqa: E402
 from inkdrill.reeb import contract, graph_of, orient, signature, Direction  # noqa: E402
 from inkdrill.sweep import (Capture, sweep,                  # noqa: E402
                             termini as sweep_termini)
-from inkdrill.type1 import load as t1_load                  # noqa: E402
+from inkdrill.type1 import (STANDARD_ENCODING,              # noqa: E402
+                            load as t1_load)
 from inkdrill.charstring import outline as cs_outline       # noqa: E402
 from inkdrill.scan import render as scan_render             # noqa: E402
 
@@ -3756,8 +3757,11 @@ PAR_FRONT = re.compile(r"\\(title|ShortArticleName|ArticleName|Author"
                        r"|FullAddress|thanks|maketitle|label"
                        r"|bibliographystyle|bibliography|LastPageEnding)")
 _PAR_COMMENT = re.compile(r"(?<!\\)%.*$")
-_PAR_BEGIN = re.compile(r"\\begin\{([^}]*)\}")
-_PAR_END = re.compile(r"\\end\{([^}]*)\}")
+#: `\end {pmatrix}` -- with a space -- is legal LaTeX and sigma26-077
+#: line 261 writes it. Requiring `\end{` missed the close, the depth
+#: counter stuck at 1, and 83% of that document was skipped in silence.
+_PAR_BEGIN = re.compile(r"\\begin\s*\{([^}]*)\}")
+_PAR_END = re.compile(r"\\end\s*\{([^}]*)\}")
 _PAR_ENV = re.compile(r"\\(?:begin|end)\s*\{[^}]*\}")
 _PAR_REF = re.compile(r"\\(?:cite[a-zA-Z]*|ref|eqref|label|autoref|[Cc]ref"
                       r"|pageref|footnote|index|input|includegraphics)\s*"
@@ -3810,7 +3814,10 @@ def _par_gold(tex, lists=False, min_chars=40):
     i = tex.find("\\begin{document}")
     j = tex.rfind("\\end{document}")
     body = tex[i + 16:j if j > i else len(tex)]
-    out, cur, start, depth, listdepth = [], [], 0, 0, 0
+    # KNOWN LIMIT, measured rather than assumed: a line carrying prose
+    # AND a display open is skipped whole, so that prose is lost. On
+    # sigma26 it is 4 of 1,103 display opens (0.4%).
+    out, cur, start, stack = [], [], 0, []
     counts = Counter()
 
     def flush():
@@ -3826,20 +3833,27 @@ def _par_gold(tex, lists=False, min_chars=40):
                 counts["kept"] += 1
             cur = []
 
+    # A STACK, NOT A COUNTER. A counter that misses one close never
+    # recovers: it skips the whole rest of the document and reports a
+    # plausible paragraph count for the fraction it did read -- 30 of
+    # sigma26-077's 107. The stack pops BY NAME, so an unmatched `\end`
+    # is ignored and an inner environment left open is discarded when
+    # its parent closes.
+    lines_total = 0
     for ln, line in enumerate(body.split("\n"), 1):
+        lines_total = ln
         line = _PAR_COMMENT.sub("", line)
         for e in _PAR_BEGIN.findall(line):
+            stack.append(e)
             if e in PAR_NON_PROSE:
-                depth += 1
                 counts[f"spanned: {e}"] += 1
-            elif e in PAR_LIST_ENV:
-                listdepth += 1
-        skip = depth or (listdepth and not lists)
+        skip = any(e in PAR_NON_PROSE for e in stack) or (
+            (not lists) and any(e in PAR_LIST_ENV for e in stack))
         for e in _PAR_END.findall(line):
-            if e in PAR_NON_PROSE:
-                depth = max(0, depth - 1)
-            elif e in PAR_LIST_ENV:
-                listdepth = max(0, listdepth - 1)
+            if e in stack:
+                del stack[stack.index(e):]
+            else:
+                counts["unmatched \\end"] += 1
         if skip:
             continue
         if not line.strip() or "\\par" in line:
@@ -3849,6 +3863,13 @@ def _par_gold(tex, lists=False, min_chars=40):
             start = ln
         cur.append(line)
     flush()
+    # The instrument states its own coverage. 077 was found by a peer,
+    # not here, because nothing printed that the gold stopped at line
+    # 257 of 1,531.
+    counts["body lines"] = lines_total
+    counts["last paragraph at line"] = out[-1][0] if out else 0
+    if stack:
+        counts["ended inside: " + ",".join(sorted(set(stack))[:3])] = 1
     return out, counts
 
 
@@ -4081,7 +4102,7 @@ def m_paragraphs(root, n, rng, indent=(1.0, 3.0), gap=0.3, lists=False,
                                         or p["width"] <= 0.55)
 
     kept, lost_all, per_doc = Counter(), Counter(), []
-    rows = []
+    rows, coverage = [], []
     for d in docs:
         gold, found, counts, lost = _par_locate(d, lists)
         # Read ONCE. This sat inside the page loop and re-parsed a 10 MB
@@ -4094,6 +4115,11 @@ def m_paragraphs(root, n, rng, indent=(1.0, 3.0), gap=0.3, lists=False,
             bytype[L["page"]].append(L)
         kept.update(counts)
         lost_all.update(lost)
+        # How far down the source the gold actually reached. sigma26-077
+        # stopped at 27.1% and nothing said so; a peer found it.
+        if counts.get("body lines"):
+            coverage.append((counts["last paragraph at line"]
+                             / counts["body lines"], d.name))
         frames, refused = page_frames(d.parent, d.name)
         bypage = defaultdict(list)
         for f in found:
@@ -4151,11 +4177,21 @@ def m_paragraphs(root, n, rng, indent=(1.0, 3.0), gap=0.3, lists=False,
           f"of bands)")
     print(f"\nthe filter, on the author's source:")
     for k, v in kept.most_common():
-        if k.startswith("spanned:"):
+        if k.startswith("spanned:") or k in ("body lines",
+                                             "last paragraph at line"):
             continue
         print(f"  {v:>6}  {k}")
     print(f"  {sum(v for k, v in kept.items() if k.startswith('spanned:')):>6}"
           f"  display environments spanned (NOT breaks)")
+    if coverage:
+        coverage.sort()
+        med = coverage[len(coverage) // 2][0]
+        print(f"\nhow far down the source the gold reached: median "
+              f"{med:.1%} of body lines, worst {coverage[0][0]:.1%} "
+              f"({coverage[0][1]})")
+        low = [(c, n) for c, n in coverage if c < 0.6]
+        for c, n in low:
+            print(f"  ** {n} reaches only {c:.1%} -- the walk stopped early")
     print(f"\nlocating the gold on the page -- "
           f"{sum(d[2] for d in per_doc)} of {sum(d[1] for d in per_doc)} "
           f"({100*sum(d[2] for d in per_doc)/max(1,sum(d[1] for d in per_doc)):.1f}%):")
@@ -4210,6 +4246,118 @@ def m_paragraphs(root, n, rng, indent=(1.0, 3.0), gap=0.3, lists=False,
               f"{hit/max(1,nband):>8.1%}{pred:>11}")
 
 
+
+# --------------------------------------------------------------------------
+# Is "a StandardEncoding name in a CMEX font is a fallback" safe?
+# --------------------------------------------------------------------------
+
+#: the Computer Modern EXTENSION fonts, by font name after any subset tag.
+#: Not a substring test: `yhcmex` and `lcmex8` carry `cmex` in their names
+#: and a full Latin alphabet in their glyphs.
+_CMEX_RE = re.compile(r"^(?:cmex|tex-cmex)(\d*)$", re.I)
+_SUBSET_RE = re.compile(r"^[A-Z]{6}\+")
+
+
+def _font_base(name):
+    """A pdffonts name reduced to its font, subset tag removed.
+
+    Real corpus shapes: `ABCDEF+CMEX10`, `AbcdefCMEX10` with NO `+`,
+    `CMEX10~154`, and `CMEX1048`, which is CMEX10 instance 48 and not a
+    1048 pt font.
+    """
+    base = name.split("+")[-1]
+    base = base.split("~")[0]
+    m = re.match(r"^[A-Z][a-z]{5}([A-Za-z].*)$", base)
+    if m:                                  # subset tag without the plus
+        base = m.group(1)
+    return base
+
+
+def m_fallbacks(root, n, rng, type1_dir=None):
+    """pdf2mmd premise: may a standard glyph name in a CMEX font be
+    distrusted as a fallback?
+
+    Two halves, and they answer different questions. The TeX TREE says
+    whether the rule is SAFE -- a family that legitimately names a glyph
+    `X` cannot be subject to it. The corpus PROBES say whether it
+    MATTERS, and on how many documents.
+
+    Nothing here opens a PDF: inkdrill has no PDF parser by design, so
+    whether a given embedded subset exposes a fallback name is
+    pdf2mmd's measurement, not this one.
+    """
+    tree = pathlib.Path(type1_dir or "/usr/share/texmf-dist/fonts/type1")
+    std = {g for g in STANDARD_ENCODING.values() if g and g != ".notdef"}
+    print(f"StandardEncoding names: {len(std)}")
+
+    if tree.is_dir():
+        pfbs = sorted(tree.rglob("*.pfb"))
+        if n:
+            pfbs = sorted(rng.sample(pfbs, min(n, len(pfbs))))
+        fam = defaultdict(lambda: [0, 0, 0])
+        cmex_like, reference = [], []
+        for path in pfbs:
+            try:
+                f = t1_load(path)
+            except Exception:
+                fam["unreadable"][0] += 1
+                continue
+            names = set(f.charstrings) - {".notdef"}
+            hit = sorted(names & std)
+            key = re.sub(r"[\d.]+$", "", f.name or path.stem).lower() or "?"
+            a = fam[key]
+            a[0] += 1
+            a[1] += len(hit)
+            a[2] += 1 if hit else 0
+            if "cmex" in (f.name or path.stem).lower():
+                cmex_like.append((f.name, len(names), len(hit), hit[:6]))
+            elif re.match(r"^(cmr|cmmi|cmsy)\d+$", f.name or ""):
+                reference.append((f.name, len(names), len(hit)))
+        print(f"\n{len(pfbs)} font programs under {tree}")
+        print("\nevery font whose NAME contains cmex:")
+        for nm, g, h, sample in sorted(cmex_like):
+            print(f"  {nm:<12} {g:>4} glyphs  {h:>3} standard  {sample}")
+        print("\nfor reference, the text and maths families:")
+        for nm, g, h in sorted(reference)[:6]:
+            print(f"  {nm:<12} {g:>4} glyphs  {h:>3} standard")
+    else:
+        print(f"\nno Type 1 tree at {tree}; skipping the safety half")
+
+    probes = sorted(root.glob("*/probe-pdffonts.txt"))
+    docs, dvips, textenc = set(), set(), []
+    bases, encs = Counter(), Counter()
+    for p in probes:
+        for line in p.read_text(errors="replace").split("\n")[2:]:
+            nm = line[:36].strip()
+            if not nm or "cmex" not in nm.lower():
+                continue
+            rest = line[36:]
+            enc = rest[18:35].strip()
+            base = _font_base(nm)
+            bases[base] += 1
+            encs[enc] += 1
+            docs.add(p.parent.name)
+            if base.lower().startswith("tex-"):
+                dvips.add(p.parent.name)
+            if enc in ("WinAnsi", "MacRoman", "Identity-H"):
+                textenc.append((p.parent.name, nm, enc))
+    print(f"\ncorpus: {len(probes)} documents probed, {len(docs)} embed a "
+          f"cmex-named font, {sum(bases.values())} instances")
+    print(f"  named the dvips way (TeX-cmex*): {len(dvips)} documents")
+    print(f"  recognised by the family rule:   "
+          f"{sum(v for k, v in bases.items() if _CMEX_RE.match(k))} instances")
+    print(f"  NOT recognised (a different font): "
+          f"{sum(v for k, v in bases.items() if not _CMEX_RE.match(k))} "
+          f"-- {sorted(k for k in bases if not _CMEX_RE.match(k))[:6]}")
+    print("\n  declared encoding:")
+    for k, v in encs.most_common():
+        print(f"    {v:>6}  {k or '(none)'}")
+    print(f"\n  a cmex font declared with a text or CID encoding is a "
+          f"fallback by construction: {len(textenc)} instances")
+    for d, nm, e in textenc[:8]:
+        print(f"    {e:<11} {nm:<22} {d[:44]}")
+
+
 MEASUREMENTS = {
     "banding": (m_banding, 3),
     "border": (m_border, 10),
@@ -4246,6 +4394,7 @@ MEASUREMENTS = {
     "contraction": (m_contraction, 3),
     "rotation": (m_rotation, 158),
     "paragraphs": (m_paragraphs, 0),
+    "fallbacks": (m_fallbacks, 0),
 }
 
 
@@ -4318,6 +4467,9 @@ def build_parser():
     ap.add_argument("--first-page", type=int, default=0,
                     help="substitutions only: skip pages numbered below "
                          "this. Front matter is not in the transcription.")
+    ap.add_argument("--type1-dir", default=None,
+                    help="fallbacks only: the Type 1 tree to read font "
+                         "programs from. Defaults to the TeX tree.")
     ap.add_argument("--par-indent-lo", type=float, default=1.0,
                     help="paragraphs only: least indent counted as a "
                          "paragraph indent, in median band heights.")
@@ -4388,6 +4540,9 @@ def main():
             fn(root, args.n or default_n, random.Random(args.seed),
                truth_tex=args.truth_tex, ocr_dir=args.ocr_dir,
                first_page=args.first_page)
+        elif name == "fallbacks":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               type1_dir=args.type1_dir)
         elif name == "paragraphs":
             fn(root, args.n or default_n, random.Random(args.seed),
                indent=(args.par_indent_lo, args.par_indent_hi),

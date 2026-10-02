@@ -98,8 +98,13 @@ Every figure below is reproducible via `tools/premise/measure.py`.
   outline route needs one parser and no PDF handling at all
 - `type1.py` parses **7,616 fonts / 3,413,996 charstrings** with none in
   the wrong class and no file rejected
+- a Computer Modern EXTENSION font carries exactly ONE StandardEncoding
+  glyph name, `space` (cmex7/8/9/10), against 113 in cmr10, 59 in cmmi10
+  and 37 in cmsy10 — so pdf2mmd's "a standard name in a CMEX font is a
+  fallback" is safe for that family and ruinous one family over
+  (`measure.py fallbacks`, out/684)
 - a paragraph boundary IS in the ink on one column: indent OR gap reaches
-  **86.5%** recall on 20 SIGMA documents and **88.2%** on 13
+  **86.3%** recall on 20 SIGMA documents and **88.2%** on 13
   single-column documents from elsewhere, against the authors' own
   `\par` structure. The union transfers; the individual channels swap
   over between publishers (`measure.py paragraphs`, out/683)

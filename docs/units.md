@@ -3046,9 +3046,9 @@ prior: **is a paragraph boundary in the ink?** Gold is the author's own
 `\par` structure, read from the `.tex` beside the PDF and placed on the
 page through the reader's words; the join is measured, not assumed.
 
-**Population.** 20 SIGMA documents, 531 pages carrying at least one
-located boundary, 22,100 ink bands, 2,954 gold paragraphs of which
-**2,247 (76.2%) could be located**. Split rule: list environments do not
+**Population.** 20 SIGMA documents, 549 pages carrying at least one
+located boundary, 22,786 ink bands, 3,032 gold paragraphs of which
+**2,306 (76.2%) could be located**. Split rule: list environments do not
 count (`--par-lists` flips it); front matter (190) and paragraphs under
 40 characters (294) are dropped and printed. Both channels are in units
 of the page's own median band height, so a dpi change cannot retune
@@ -3056,17 +3056,17 @@ them.
 
 | channel | recall | precision |
 |---|---|---|
-| indent in [1.0, 3.0] band heights | 52.4% | 56.2% |
-| gap ≥ 0.3 band heights | 54.0% | 37.5% |
-| indent OR gap | **86.5%** | **42.9%** |
-| indent OR (gap, not after a display) | 66.4% | 51.1% |
+| indent in [1.0, 3.0] band heights | 52.1% | 56.6% |
+| gap ≥ 0.3 band heights | 53.9% | 37.5% |
+| indent OR gap | **86.3%** | **42.9%** |
+| indent OR (gap, not after a display) | 66.2% | 51.4% |
 
 over the bands the reader types as prose; 85.8% / 31.7% unrestricted.
 The reader restricts the population and breaks the residual down — it is
 never a channel.
 
 **The residual, which is the finding.** A gap below a display with no
-indent: **421 are a paragraph boundary, 1,081 are the same paragraph
+indent: **431 are a paragraph boundary, 1,116 are the same paragraph
 continuing.** Ink cannot separate them. The gap belongs to the display,
 not to the break, and LaTeX sets no indent in exactly this case — nor
 after a heading, nor under `\noindent`. 1,586 displays were spanned in
@@ -3087,6 +3087,19 @@ not indented", which is not true of LaTeX:
    includes the leading, so it landed on the line above. Median indent
    at a gold boundary 0.02 → **1.32** band heights.
 
+**A fifth, found by pdfdrill's cross-check and not here — corrected
+2026-10-02.** sigma26-077 line 261 writes `\end {pmatrix}` WITH A SPACE,
+which is legal LaTeX; `_PAR_END` required `\end{`, and because the walk
+counted DEPTH rather than keeping a stack, one missed close skipped the
+rest of the document in silence: **30 paragraphs where there are 107,
+27.1% of the body**. The walk now pops a stack BY NAME and reports its
+own coverage per document, flagging anything under 60%. Their mirror
+defect was `\n[ \t]*\n` not admitting the `\r` of a CRLF file, which
+returned a whole paper as ONE paragraph. One class, one character
+apart, both silent, both returning a plausible count. Gold 2,954 →
+3,032; the union moved 86.5% → 86.3% and the residual 421/1,081 →
+431/1,116, so the finding is unchanged.
+
 Precision is a floor, not an estimate: 23.8% of gold could not be
 located, and a rule hit on an unlocatable boundary counts against it.
 
@@ -3096,9 +3109,9 @@ transfers; the channels do not:
 
 | channel | SIGMA (20) | mixed, 1-column (13) |
 |---|---|---|
-| indent | 52.4% / 56.2% | 27.7% / 46.2% |
-| gap | 54.0% / 37.5% | 70.0% / 63.8% |
-| indent OR gap | **86.5% / 42.9%** | **88.2% / 57.9%** |
+| indent | 52.1% / 56.6% | 27.7% / 46.2% |
+| gap | 53.9% / 37.5% | 70.0% / 63.8% |
+| indent OR gap | **86.3% / 42.9%** | **88.2% / 57.9%** |
 
 SIGMA indents and barely spaces; the mixed sample spaces and barely
 indents. A rule tuned on either channel alone would have been retuned by

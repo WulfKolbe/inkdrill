@@ -446,7 +446,7 @@ class T13_13_ArgvProvenanceLine(unittest.TestCase):
                  min_block=200, truth_tex=None, ocr_dir=None,
                  first_page=0, split="document",
                  par_indent_lo=1.0, par_indent_hi=3.0, par_gap=0.3,
-                 par_lists=False, what=["maths"])
+                 par_lists=False, type1_dir=None, what=["maths"])
         d.update(over)
         return argparse.Namespace(**d)
 

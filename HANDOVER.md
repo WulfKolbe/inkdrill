@@ -198,6 +198,31 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+25. **"A standard name in a CMEX font is a fallback" is safe — for
+    FOUR fonts, and ruinous for the fifth** (out/684,
+    `measure.py fallbacks`). pdf2mmd proposed it after a dvips PDF
+    rendered a display Sigma as the glyph `X` in `TeX-cmex9`; a
+    Claude.ai chat listed it as unverified, so it was measured here.
+    cmex7/8/9/10 carry exactly ONE StandardEncoding name, `space`,
+    against 113 in cmr10, 59 in cmmi10 and 37 in cmsy10 — so the rule
+    is safe for the Computer Modern extension fonts and would distrust
+    every italic letter of every formula one family over.
+    **But `cmex` is not a family, it is a substring.** `yhcmex` carries
+    149 standard names and `lcmex8` 122, legitimately, and FIVE corpus
+    documents embed `Yhcmex`. The family has to be resolved before the
+    rule is applied; `tests/test_fontnames.py` pins the real name
+    shapes, including a subset tag with NO `+` (`VpqhhbCMEX10`), a
+    tilde suffix, and `CMEX1048`, which is CMEX10 instance 48 and not a
+    1048 pt font.
+    **It matters beyond the one paper**: 939 of 2,555 probed documents
+    embed a cmex font and 19 name it the dvips way, 18 of them other
+    than the paper. 18 instances declare a WinAnsi/MacRoman/Identity-H
+    encoding on a maths extension font — a contradiction, and the
+    place to look first.
+    inkdrill opens no PDF here by design: this is the TeX tree plus
+    each document's `pdffonts` probe. Whether a given embedded subset
+    exposes a fallback name is pdf2mmd's measurement.
+
 24. **The union of two weak channels transferred; neither channel did**
     (out/683, `measure.py paragraphs`). Paragraph boundaries from ink,
     against the authors' own `\par` structure read from the `.tex`
@@ -230,6 +255,16 @@ last touched the file.
     was filed under "the instrument cannot see this" with a 93.3%
     recall. Misfiling a result as unmeasurable hides it as well as any
     filter does. Count prose lines only.
+    **A sixth, found by pdfdrill's cross-check and not by me**: the
+    gold's environment walk counted DEPTH, and sigma26-077 line 261
+    writes `\end {pmatrix}` WITH A SPACE. One missed close is
+    unrecoverable for a counter, so 83% of that document was skipped in
+    silence — 30 paragraphs where there are 107. It now pops a STACK by
+    name and prints how far down the source it reached, per document.
+    Their mirror defect was a separator regex that did not admit the
+    `\r` of a CRLF file, returning a whole paper as ONE paragraph. Same
+    class, one character apart, both silent, both returning a plausible
+    count. Gold 2,954 -> 3,032; the headline moved 86.5% -> 86.3%.
 
 23. **A reader's geometry is not only its LINES** (out/682). Measuring
     ink against `lines[].region` alone called a full-page TikZ figure

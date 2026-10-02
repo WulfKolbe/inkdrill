@@ -73,23 +73,23 @@ function:
             predecessor than the page's median pitch.
 
 POPULATION: 20 SIGMA documents (Symmetry, Integrability and Geometry),
-531 pages carrying at least one located boundary, 22,100 ink bands,
-2,954 gold paragraphs of which 2,247 (76.2%) could be located and put in
+549 pages carrying at least one located boundary, 22,786 ink bands,
+3,032 gold paragraphs of which 2,306 (76.2%) could be located and put in
 a band. SPLIT RULE: list environments do NOT count as paragraphs
 (`--par-lists` flips it); front matter and paragraphs under 40
 characters are dropped, 190 and 294 of them, printed beside the result.
 
     channel                         recall   precision    (prose bands)
-    indent in [1.0, 3.0]             52.4%      56.2%
-    gap >= 0.3                       54.0%      37.5%
-    indent OR gap                    86.5%      42.9%
+    indent in [1.0, 3.0]             52.1%      56.6%
+    gap >= 0.3                       53.9%      37.5%
+    indent OR gap                    86.3%      42.9%
     indent OR (gap, not after a display)
-                                     66.4%      51.1%
+                                     66.2%      51.4%
 
 "Prose bands" are the bands the reader types as text or list_item --
 the reader is used to RESTRICT THE POPULATION and to break the residual
 down, never as a channel. Over every band, unrestricted, the union is
-85.8% at 31.7%.
+85.7% at 31.7%.
 
 ====================================================================
 3. THE RESIDUAL IS THE PRODUCT: THE POST-DISPLAY BREAK
@@ -97,8 +97,8 @@ down, never as a channel. Over every band, unrestricted, the union is
 
 A gap below a display, with no indent, on a prose band:
 
-    421   ARE a paragraph boundary
-   1081   are the same paragraph continuing
+    431   ARE a paragraph boundary
+   1116   are the same paragraph continuing
 
 Ink geometry cannot separate them, and neither can the gap: the vertical
 space belongs to the display, not to the break. The indent is the only
@@ -140,9 +140,9 @@ render. 20 of them sampled at `--seed 683`, 190 rendered pages, 1,961
 gold paragraphs, 81.5% located:
 
     channel                         SIGMA (20)    mixed, 1-column (13)
-    indent in [1.0, 3.0]          52.4% / 56.2%     27.7% / 46.2%
-    gap >= 0.3                    54.0% / 37.5%     70.0% / 63.8%
-    indent OR gap                 86.5% / 42.9%     88.2% / 57.9%
+    indent in [1.0, 3.0]          52.1% / 56.6%     27.7% / 46.2%
+    gap >= 0.3                    53.9% / 37.5%     70.0% / 63.8%
+    indent OR gap                 86.3% / 42.9%     88.2% / 57.9%
 
 THE UNION TRANSFERS; THE CHANNELS DO NOT. Recall of the union is within
 two points across two unrelated publishers, while the channel carrying
@@ -236,3 +236,46 @@ byte-identical duplicate renders under both spellings -- `p5.png` AND
 2+2, Cat2Type 3+3; the sigma26 shelf is clean). Anything addressing a
 page by name is unaffected; anything globbing `*.png` double-counts,
 and the first cut of the measurement above did until it de-duplicated.
+
+====================================================================
+6. A SIXTH DEFECT, FOUND BY THE PEER AND NOT BY ME
+====================================================================
+
+pdfdrill ran its own `_prose_chunks` over the same twenty sources and
+the diff found one defect per side. Neither was visible from inside its
+own implementation, which is the entire argument for two golds.
+
+MINE: sigma26-077's gold reached line 257 of 1,531 -- 27.1% of the body,
+30 paragraphs where there are 107. Line 261 writes
+
+    ... \bm{0} & 1 \end {pmatrix} \in \UU(n).
+
+`\end {pmatrix}` WITH A SPACE, which is legal LaTeX. `_PAR_END` required
+`\end{`, so the close was never seen -- and because the walk counted
+DEPTH, one missed close is unrecoverable: the counter stays >= 1 and
+every remaining line is skipped. It now keeps a STACK and pops BY NAME,
+so an unmatched `\end` is ignored and an inner environment left open is
+discarded when its parent closes. Both halves are mutation-tested.
+
+THEIRS: a blank line in a CRLF file is `\r\n\r\n` and their separator
+was `\n[ \t]*\n`, which does not admit the `\r`. Five of the twenty
+returned ONE chunk -- the whole paper as a single paragraph.
+
+ONE CLASS, ONE CHARACTER APART. A separator regex slightly too strict,
+failing silently, returning a PLAUSIBLE number: one enormous paragraph,
+or thirty ordinary ones. No suite on either side noticed, because
+nothing asserted how much of the source was consumed. The measurement
+now prints how far down the source the gold reached, per document, and
+flags anything under 60%.
+
+WHAT IT COST, AND WHAT IT DID NOT:
+
+    gold, 20 documents           2,954  ->  3,032
+    sigma26-077                     30  ->    107   (pdfdrill's: 105)
+    077 coverage of its body      27.1% ->   89.0%
+    indent OR gap                 86.5% ->   86.3% recall, 42.9% precision
+    post-display residual      421/1081  ->  431/1116
+    the mixed sample            unchanged -- none of those 20 carried it
+
+The headline and the negative result both survive, which is the useful
+thing to report: the correction moved the third digit, not the finding.

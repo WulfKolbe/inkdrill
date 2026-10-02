@@ -1,6 +1,7 @@
 {
  "produced_by": "inkdrill measure.py paragraphs (_par_gold), out/683",
  "rule": "a paragraph breaks at a blank line or \\par AT PROSE LEVEL. A display environment is SPANNED, not a break. List environments are skipped entirely (--par-lists False). Front matter macros are dropped and counted separately.",
+ "corrected": "2026-10-02: `\\end {pmatrix}` with a space was not recognised, and a DEPTH COUNTER never recovers from one missed close -- sigma26-077 reached 27.1% of its body and reported 30 paragraphs instead of 107. The walk now keeps a stack and pops by name, and reports its own coverage. Found by pdfdrill's cross-check.",
  "non_prose": [
   "align",
   "align*",
@@ -47,6 +48,8 @@
    "at_least_40_chars": 170,
    "dropped_front_matter": 9,
    "displays_spanned": 61,
+   "body_lines": 1329,
+   "last_paragraph_at_line": 1099,
    "list": [
     {
      "texline": 3,
@@ -1166,6 +1169,8 @@
    "at_least_40_chars": 168,
    "dropped_front_matter": 10,
    "displays_spanned": 22,
+   "body_lines": 1667,
+   "last_paragraph_at_line": 1359,
    "list": [
     {
      "texline": 3,
@@ -2315,6 +2320,8 @@
    "at_least_40_chars": 161,
    "dropped_front_matter": 10,
    "displays_spanned": 88,
+   "body_lines": 2865,
+   "last_paragraph_at_line": 2518,
    "list": [
     {
      "texline": 3,
@@ -3386,6 +3393,8 @@
    "at_least_40_chars": 314,
    "dropped_front_matter": 9,
    "displays_spanned": 77,
+   "body_lines": 2543,
+   "last_paragraph_at_line": 2406,
    "list": [
     {
      "texline": 3,
@@ -5551,10 +5560,12 @@
   },
   "sigma26-077": {
    "main_tex": "sigma26-077.tex",
-   "paragraphs": 38,
-   "at_least_40_chars": 30,
+   "paragraphs": 121,
+   "at_least_40_chars": 107,
    "dropped_front_matter": 10,
    "displays_spanned": 56,
+   "body_lines": 1531,
+   "last_paragraph_at_line": 1368,
    "list": [
     {
      "texline": 3,
@@ -5780,9 +5791,507 @@
     },
     {
      "texline": 257,
-     "chars": 77,
+     "chars": 278,
      "short": false,
      "anchor": "beginlemmalabellembnnletnge2letvbeahaardistribut"
+    },
+    {
+     "texline": 269,
+     "chars": 34,
+     "short": true,
+     "anchor": "thenextlemmawillbeusedseveraltimes"
+    },
+    {
+     "texline": 271,
+     "chars": 319,
+     "short": false,
+     "anchor": "beginlemmalabellemwgforrletxtransx1dotsxnbeaunif"
+    },
+    {
+     "texline": 286,
+     "chars": 621,
+     "short": false,
+     "anchor": "beginprooftherandomvectorxhasthesamedistribution"
+    },
+    {
+     "texline": 300,
+     "chars": 672,
+     "short": false,
+     "anchor": "beginremarklabelremgaussianizationthislemmacanal"
+    },
+    {
+     "texline": 317,
+     "chars": 45,
+     "short": false,
+     "anchor": "subsectionweingartencalculusforarankonematrix"
+    },
+    {
+     "texline": 319,
+     "chars": 115,
+     "short": false,
+     "anchor": "insteadofworkingdirectlywithrwedealwithppij1leij"
+    },
+    {
+     "texline": 331,
+     "chars": 327,
+     "short": false,
+     "anchor": "letusfixsomenotationforasequencebmii1dotsimofpos"
+    },
+    {
+     "texline": 344,
+     "chars": 39,
+     "short": true,
+     "anchor": "thefollowingtheoremisourfirstmainresult"
+    },
+    {
+     "texline": 346,
+     "chars": 428,
+     "short": false,
+     "anchor": "begintheoremlabelthmmomentspletmlbenonnegativein"
+    },
+    {
+     "texline": 369,
+     "chars": 60,
+     "short": false,
+     "anchor": "wepostponetheproofoftheoremrefthmmomentsptothene"
+    },
+    {
+     "texline": 371,
+     "chars": 49,
+     "short": false,
+     "anchor": "beginexamplelabelexmomentspexamplesquadendexampl"
+    },
+    {
+     "texline": 416,
+     "chars": 27,
+     "short": true,
+     "anchor": "subsectionproofofthetheorem"
+    },
+    {
+     "texline": 418,
+     "chars": 388,
+     "short": false,
+     "anchor": "werewritetheoremrefthmmomentspinanequivalentform"
+    },
+    {
+     "texline": 431,
+     "chars": 332,
+     "short": false,
+     "anchor": "begintheoremlabelthmmomentsp2letaaij1leijlenandb"
+    },
+    {
+     "texline": 450,
+     "chars": 737,
+     "short": false,
+     "anchor": "beginproofbythedefinitioneqrefmatrixpofpijwehave"
+    },
+    {
+     "texline": 493,
+     "chars": 510,
+     "short": false,
+     "anchor": "wecontinuethecalculationsofthelastserieswherefal"
+    },
+    {
+     "texline": 514,
+     "chars": 43,
+     "short": false,
+     "anchor": "subsectionsomeexamplesforreflectionmatrices"
+    },
+    {
+     "texline": 516,
+     "chars": 213,
+     "short": false,
+     "anchor": "byutilizingtheoremrefthmmomentsportheoremrefthmm"
+    },
+    {
+     "texline": 519,
+     "chars": 234,
+     "short": false,
+     "anchor": "ingeneralthecalculationstendtobecomplexhoweverth"
+    },
+    {
+     "texline": 522,
+     "chars": 497,
+     "short": false,
+     "anchor": "beginpropositionlabelpropmomentrex1letmlqbenonne"
+    },
+    {
+     "texline": 548,
+     "chars": 271,
+     "short": false,
+     "anchor": "beginproofapplyingthebinomialtheoremtorssq1pssqw"
+    },
+    {
+     "texline": 569,
+     "chars": 89,
+     "short": false,
+     "anchor": "nextwedealwiththecasesnasimilarapproachgivesthis"
+    },
+    {
+     "texline": 578,
+     "chars": 59,
+     "short": false,
+     "anchor": "beginexamplelabelexrssqletqbeapositiveintegerthe"
+    },
+    {
+     "texline": 589,
+     "chars": 43,
+     "short": false,
+     "anchor": "beginexamplelabelexmixedrifn2thenendexample"
+    },
+    {
+     "texline": 601,
+     "chars": 400,
+     "short": false,
+     "anchor": "beginpropositionlabelproptworletmlbenonnegativei"
+    },
+    {
+     "texline": 627,
+     "chars": 119,
+     "short": false,
+     "anchor": "beginproofexpandrss21pssoverlinepsspssoverlineps"
+    },
+    {
+     "texline": 632,
+     "chars": 219,
+     "short": false,
+     "anchor": "beginexamplelabelexampletworletn1fromproposition"
+    },
+    {
+     "texline": 647,
+     "chars": 324,
+     "short": false,
+     "anchor": "beginpropositionletmbeapositiveintegerandconside"
+    },
+    {
+     "texline": 667,
+     "chars": 524,
+     "short": false,
+     "anchor": "beginproofwemayassumethatihjhfor1lehlefandihnotj"
+    },
+    {
+     "texline": 695,
+     "chars": 80,
+     "short": false,
+     "anchor": "thefollowingexampleplaysanimportanttheoreticalro"
+    },
+    {
+     "texline": 697,
+     "chars": 209,
+     "short": false,
+     "anchor": "beginexamplelabelexpermutationrforknandsigmainsk"
+    },
+    {
+     "texline": 708,
+     "chars": 217,
+     "short": false,
+     "anchor": "beginremarkwecanexpressthefunctiongivenineqrefeq"
+    },
+    {
+     "texline": 723,
+     "chars": 91,
+     "short": false,
+     "anchor": "subsectioncalculationofhaardistributedmatricesfr"
+    },
+    {
+     "texline": 726,
+     "chars": 49,
+     "short": false,
+     "anchor": "thefollowinglemmaisareformulationoflemmareflembn"
+    },
+    {
+     "texline": 728,
+     "chars": 434,
+     "short": false,
+     "anchor": "beginlemmalabellembnngletx1x2dotsxnbeindependent"
+    },
+    {
+     "texline": 739,
+     "chars": 290,
+     "short": false,
+     "anchor": "usingthislemmaonecancalculatemomentsofpolynomial"
+    },
+    {
+     "texline": 742,
+     "chars": 801,
+     "short": false,
+     "anchor": "letnge2andletuuijbeahaardistributedunitarymatrix"
+    },
+    {
+     "texline": 806,
+     "chars": 189,
+     "short": false,
+     "anchor": "thisapproachworksforanyintegralofamonomialinuija"
+    },
+    {
+     "texline": 810,
+     "chars": 523,
+     "short": false,
+     "anchor": "moreimportantlynorestrictionrelatingthedegreeoft"
+    },
+    {
+     "texline": 815,
+     "chars": 779,
+     "short": false,
+     "anchor": "beginexamplelabelexu2highdegreeletn2andletkbeana"
+    },
+    {
+     "texline": 835,
+     "chars": 223,
+     "short": false,
+     "anchor": "itremainstoidentifytheunderpinningalgebraicandco"
+    },
+    {
+     "texline": 838,
+     "chars": 72,
+     "short": false,
+     "anchor": "sectionanewrecursiveformulaforweingartenfunction"
+    },
+    {
+     "texline": 840,
+     "chars": 27,
+     "short": true,
+     "anchor": "subsectionarecursiveformula"
+    },
+    {
+     "texline": 842,
+     "chars": 745,
+     "short": false,
+     "anchor": "inthissectionwerelyontheachievementsofthepreviou"
+    },
+    {
+     "texline": 864,
+     "chars": 82,
+     "short": false,
+     "anchor": "weintroduceanewelementofmathbbcskwhichhasalready"
+    },
+    {
+     "texline": 866,
+     "chars": 266,
+     "short": false,
+     "anchor": "begindefinitionlabeldeffunctionaletkandnbepositi"
+    },
+    {
+     "texline": 879,
+     "chars": 172,
+     "short": false,
+     "anchor": "beginexamplefortheidentitypermutationekinskwehav"
+    },
+    {
+     "texline": 892,
+     "chars": 329,
+     "short": false,
+     "anchor": "recalltheweingartenfunctionwhichalreadyappearedi"
+    },
+    {
+     "texline": 902,
+     "chars": 128,
+     "short": false,
+     "anchor": "begintheoremlabelthmrecursiveletkandnbepositivei"
+    },
+    {
+     "texline": 910,
+     "chars": 291,
+     "short": false,
+     "anchor": "beginremarktheoremrefthmrecursivedoesnotholdwith"
+    },
+    {
+     "texline": 916,
+     "chars": 62,
+     "short": false,
+     "anchor": "thefollowinglemmawillbeusedfortheproofoftheoremr"
+    },
+    {
+     "texline": 918,
+     "chars": 200,
+     "short": false,
+     "anchor": "beginlemmalabellemexpressionaletxtransx1dotsxnbe"
+    },
+    {
+     "texline": 927,
+     "chars": 263,
+     "short": false,
+     "anchor": "beginproofwedenotethesetofallfixedpointsofsigmab"
+    },
+    {
+     "texline": 950,
+     "chars": 626,
+     "short": false,
+     "anchor": "beginproofproofoftheoremrefthmrecursiveletthemat"
+    },
+    {
+     "texline": 989,
+     "chars": 717,
+     "short": false,
+     "anchor": "thefinalstepintheproofistoshowthatwidetilderaise"
+    },
+    {
+     "texline": 1016,
+     "chars": 45,
+     "short": false,
+     "anchor": "subsectionsomepropertiesforascensionfunctions"
+    },
+    {
+     "texline": 1018,
+     "chars": 183,
+     "short": false,
+     "anchor": "inthissubsectionweinvestigatesomepropertiesofthe"
+    },
+    {
+     "texline": 1022,
+     "chars": 385,
+     "short": false,
+     "anchor": "considerthefunctiongkncolonsktomathbbcdefinedbyg"
+    },
+    {
+     "texline": 1045,
+     "chars": 1580,
+     "short": false,
+     "anchor": "nextweconsidercharacterexpansionsforthesefunctio"
+    },
+    {
+     "texline": 1087,
+     "chars": 60,
+     "short": false,
+     "anchor": "beginytableaugray30gray30gray90gray90gray30gray9"
+    },
+    {
+     "texline": 1094,
+     "chars": 244,
+     "short": false,
+     "anchor": "herelambda5541anddlambda3thedarkgrayboxesarethes"
+    },
+    {
+     "texline": 1097,
+     "chars": 48,
+     "short": false,
+     "anchor": "finallywediscusstheinverseoftheascensionfunction"
+    },
+    {
+     "texline": 1099,
+     "chars": 260,
+     "short": false,
+     "anchor": "begindefinitionlabeldeffunctiondletkandnbepositi"
+    },
+    {
+     "texline": 1115,
+     "chars": 67,
+     "short": false,
+     "anchor": "notethatthedefinitionofthefallingfactorialrequir"
+    },
+    {
+     "texline": 1117,
+     "chars": 119,
+     "short": false,
+     "anchor": "beginpropositionletkandnbepositiveintegerssuchth"
+    },
+    {
+     "texline": 1129,
+     "chars": 906,
+     "short": false,
+     "anchor": "beginproofthesecondformulafollowsfromtheoremreft"
+    },
+    {
+     "texline": 1149,
+     "chars": 488,
+     "short": false,
+     "anchor": "similarlywedefineraisekzsigmagkz1wgkzsigmasumt0f"
+    },
+    {
+     "texline": 1175,
+     "chars": 162,
+     "short": false,
+     "anchor": "beginremarkwehaveprovedtheoremrefthmrecursiveusi"
+    },
+    {
+     "texline": 1179,
+     "chars": 70,
+     "short": false,
+     "anchor": "subsectionweingartenfunctionsinthecaseoflowdimen"
+    },
+    {
+     "texline": 1181,
+     "chars": 495,
+     "short": false,
+     "anchor": "inthepreviousdiscussionsweoftenassumedthatklenth"
+    },
+    {
+     "texline": 1191,
+     "chars": 736,
+     "short": false,
+     "anchor": "beginremarkletusassumethatkninadditiontoeqrefeqp"
+    },
+    {
+     "texline": 1211,
+     "chars": 510,
+     "short": false,
+     "anchor": "unfortunatelytheoremrefthmrecursivedoesnotholdfo"
+    },
+    {
+     "texline": 1228,
+     "chars": 177,
+     "short": false,
+     "anchor": "begintheoremlabelthmdimequaldegreeforpiinsnwehav"
+    },
+    {
+     "texline": 1243,
+     "chars": 46,
+     "short": false,
+     "anchor": "notethatanpitaudiffersslightlyfromraisennpitau"
+    },
+    {
+     "texline": 1245,
+     "chars": 300,
+     "short": false,
+     "anchor": "accordingtothistheoremtheincorrectformulaeqrefeq"
+    },
+    {
+     "texline": 1261,
+     "chars": 847,
+     "short": false,
+     "anchor": "beginproofproofoftheoremrefthmdimequaldegreethep"
+    },
+    {
+     "texline": 1310,
+     "chars": 365,
+     "short": false,
+     "anchor": "finallyletusassumeknandletpiinskbyrepeatedlyappl"
+    },
+    {
+     "texline": 1327,
+     "chars": 357,
+     "short": false,
+     "anchor": "beginpropositionlabelpropwgasasasletkandnbeposit"
+    },
+    {
+     "texline": 1342,
+     "chars": 93,
+     "short": false,
+     "anchor": "thispropositionallowstheweingartenfunctiontobeca"
+    },
+    {
+     "texline": 1345,
+     "chars": 294,
+     "short": false,
+     "anchor": "beginexampleletk3andn4propositionrefpropwgasasas"
+    },
+    {
+     "texline": 1360,
+     "chars": 26,
+     "short": true,
+     "anchor": "subsectionacknowledgements"
+    },
+    {
+     "texline": 1362,
+     "chars": 511,
+     "short": false,
+     "anchor": "bcissupportedbyjspsgrantinaidforscientificresear"
+    },
+    {
+     "texline": 1368,
+     "chars": 25,
+     "short": true,
+     "anchor": "pdfbookmark1referencesref"
     }
    ]
   },
@@ -5792,6 +6301,8 @@
    "at_least_40_chars": 53,
    "dropped_front_matter": 10,
    "displays_spanned": 16,
+   "body_lines": 571,
+   "last_paragraph_at_line": 488,
    "list": [
     {
      "texline": 3,
@@ -6169,10 +6680,12 @@
   },
   "sigma26-079": {
    "main_tex": "sigma26-079.tex",
-   "paragraphs": 217,
-   "at_least_40_chars": 200,
+   "paragraphs": 218,
+   "at_least_40_chars": 201,
    "dropped_front_matter": 9,
    "displays_spanned": 152,
+   "body_lines": 1898,
+   "last_paragraph_at_line": 1797,
    "list": [
     {
      "texline": 3,
@@ -7400,9 +7913,15 @@
     },
     {
      "texline": 1657,
-     "chars": 3046,
+     "chars": 2440,
      "short": false,
      "anchor": "letnowgammamathbbsgammadenotethegraphlabeledinsm"
+    },
+    {
+     "texline": 1692,
+     "chars": 894,
+     "short": false,
+     "anchor": "itemforthesecondclaimassumingthatvarphihvarphihf"
     },
     {
      "texline": 1702,
@@ -7484,6 +8003,8 @@
    "at_least_40_chars": 243,
    "dropped_front_matter": 8,
    "displays_spanned": 34,
+   "body_lines": 1923,
+   "last_paragraph_at_line": 1397,
    "list": [
     {
      "texline": 3,
@@ -9053,6 +9574,8 @@
    "at_least_40_chars": 171,
    "dropped_front_matter": 10,
    "displays_spanned": 86,
+   "body_lines": 2666,
+   "last_paragraph_at_line": 2467,
    "list": [
     {
      "texline": 2,
@@ -10148,6 +10671,8 @@
    "at_least_40_chars": 132,
    "dropped_front_matter": 10,
    "displays_spanned": 157,
+   "body_lines": 1584,
+   "last_paragraph_at_line": 1406,
    "list": [
     {
      "texline": 3,
@@ -11035,10 +11560,12 @@
   },
   "sigma26-083": {
    "main_tex": "sigma26-083.tex",
-   "paragraphs": 284,
-   "at_least_40_chars": 260,
+   "paragraphs": 288,
+   "at_least_40_chars": 259,
    "dropped_front_matter": 9,
    "displays_spanned": 177,
+   "body_lines": 4380,
+   "last_paragraph_at_line": 4080,
    "list": [
     {
      "texline": 3,
@@ -11540,9 +12067,33 @@
     },
     {
      "texline": 944,
-     "chars": 40,
-     "short": false,
-     "anchor": "begincenterscalebox05endcenterendexample"
+     "chars": 21,
+     "short": true,
+     "anchor": "begincenterscalebox05"
+    },
+    {
+     "texline": 971,
+     "chars": 9,
+     "short": true,
+     "anchor": "nodeat110"
+    },
+    {
+     "texline": 979,
+     "chars": 8,
+     "short": true,
+     "anchor": "nodeat06"
+    },
+    {
+     "texline": 989,
+     "chars": 9,
+     "short": true,
+     "anchor": "nodeat116"
+    },
+    {
+     "texline": 999,
+     "chars": 33,
+     "short": true,
+     "anchor": "endtikzpictureendcenterendexample"
     },
     {
      "texline": 1003,
@@ -11930,7 +12481,7 @@
     },
     {
      "texline": 1971,
-     "chars": 724,
+     "chars": 738,
      "short": false,
      "anchor": "forthespacethetaqpermrrofstabilityparametersanyt"
     },
@@ -12266,7 +12817,7 @@
     },
     {
      "texline": 2721,
-     "chars": 720,
+     "chars": 1139,
      "short": false,
      "anchor": "toshoweqrefeqdegreelinebdlmainandeqrefeqdegreeli"
     },
@@ -12278,7 +12829,7 @@
     },
     {
      "texline": 2777,
-     "chars": 1272,
+     "chars": 1409,
      "short": false,
      "anchor": "forthetaincletrho0rho1rho2rho3betheraysinsigmac1"
     },
@@ -12752,6 +13303,8 @@
    "at_least_40_chars": 113,
    "dropped_front_matter": 9,
    "displays_spanned": 70,
+   "body_lines": 540,
+   "last_paragraph_at_line": 447,
    "list": [
     {
      "texline": 3,
@@ -13481,6 +14034,8 @@
    "at_least_40_chars": 35,
    "dropped_front_matter": 10,
    "displays_spanned": 16,
+   "body_lines": 1750,
+   "last_paragraph_at_line": 1558,
    "list": [
     {
      "texline": 3,
@@ -13738,10 +14293,12 @@
   },
   "sigma26-086": {
    "main_tex": "sigma26-086.tex",
-   "paragraphs": 203,
-   "at_least_40_chars": 193,
+   "paragraphs": 204,
+   "at_least_40_chars": 194,
    "dropped_front_matter": 9,
    "displays_spanned": 216,
+   "body_lines": 5934,
+   "last_paragraph_at_line": 5679,
    "list": [
     {
      "texline": 3,
@@ -14573,9 +15130,15 @@
     },
     {
      "texline": 3478,
-     "chars": 446,
+     "chars": 223,
      "short": false,
      "anchor": "beginproplabelintcomptheelementlambdaiw3hasthefo"
+    },
+    {
+     "texline": 3549,
+     "chars": 268,
+     "short": false,
+     "anchor": "endenumerateendpropbeginproofthisresultcanbeeasi"
     },
     {
      "texline": 3558,
@@ -14969,6 +15532,8 @@
    "at_least_40_chars": 124,
    "dropped_front_matter": 9,
    "displays_spanned": 71,
+   "body_lines": 1939,
+   "last_paragraph_at_line": 1613,
    "list": [
     {
      "texline": 3,
@@ -15794,6 +16359,8 @@
    "at_least_40_chars": 142,
    "dropped_front_matter": 9,
    "displays_spanned": 30,
+   "body_lines": 1130,
+   "last_paragraph_at_line": 1024,
    "list": [
     {
      "texline": 3,
@@ -16787,6 +17354,8 @@
    "at_least_40_chars": 32,
    "dropped_front_matter": 9,
    "displays_spanned": 108,
+   "body_lines": 996,
+   "last_paragraph_at_line": 870,
    "list": [
     {
      "texline": 3,
@@ -17024,6 +17593,8 @@
    "at_least_40_chars": 162,
    "dropped_front_matter": 11,
    "displays_spanned": 117,
+   "body_lines": 2270,
+   "last_paragraph_at_line": 2012,
    "list": [
     {
      "texline": 2,
@@ -18089,6 +18660,8 @@
    "at_least_40_chars": 178,
    "dropped_front_matter": 9,
    "displays_spanned": 19,
+   "body_lines": 964,
+   "last_paragraph_at_line": 814,
    "list": [
     {
      "texline": 3,
@@ -19226,6 +19799,8 @@
    "at_least_40_chars": 73,
    "dropped_front_matter": 11,
    "displays_spanned": 13,
+   "body_lines": 700,
+   "last_paragraph_at_line": 469,
    "list": [
     {
      "texline": 3,

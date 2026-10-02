@@ -65,6 +65,71 @@ class TP_1_ADisplayIsNotABreak(unittest.TestCase):
         self.assertEqual(counts["spanned: equation"], 1)
 
 
+class TP_1b_TheWalkRecoversFromABadlyClosedEnvironment(unittest.TestCase):
+    """Found by pdfdrill's cross-check, not here: sigma26-077's gold
+    stopped at line 257 of 1,531 because line 261 writes `\\end {pmatrix}`
+    WITH A SPACE, which is legal LaTeX. A depth counter that misses one
+    close never recovers -- it skips the rest of the document and reports
+    a plausible paragraph count for the fraction it did read (30 against
+    107). The regex was the proximate cause; the counter was the defect.
+    """
+
+    def test_a_space_before_the_brace_still_closes(self):
+        gold, _ = M._par_gold(doc(
+            LONG + "\n" + r"\begin{equation}" + "\n x=y\n"
+            + r"\end {equation}" + "\n\n" + LONG2))
+        self.assertEqual(len(gold), 2)
+        self.assertIn("conversely", gold[1][1])
+
+    def test_no_space_still_closes(self):
+        gold, _ = M._par_gold(doc(
+            LONG + "\n" + r"\begin{equation}" + "\n x=y\n"
+            + r"\end{equation}" + "\n\n" + LONG2))
+        self.assertEqual(len(gold), 2)
+
+    def test_an_inner_environment_left_open_does_not_swallow_the_document(self):
+        """The stack pops BY NAME, so `pmatrix` left open inside
+        `equation` is discarded when `equation` closes. With a counter
+        this returned one paragraph and dropped everything after it."""
+        gold, _ = M._par_gold(doc(
+            LONG + "\n" + r"\begin{equation}" + "\n" + r"\begin{pmatrix} a"
+            + "\n" + r"\end{equation}" + "\n\n" + LONG2))
+        self.assertEqual(len(gold), 2)
+        self.assertIn("conversely", gold[1][1])
+
+    def test_an_unmatched_end_is_ignored_and_counted(self):
+        gold, counts = M._par_gold(doc(LONG + "\n" + r"\end{equation}"
+                                       + "\n\n" + LONG2))
+        self.assertEqual(len(gold), 2)
+        self.assertEqual(counts["unmatched \\end"], 1)
+
+    def test_the_walk_reports_its_own_coverage(self):
+        """077 was found by a peer because nothing printed that the gold
+        stopped at 27.1% of the body."""
+        gold, counts = M._par_gold(doc(LONG + "\n\n" + LONG2 + "\n" * 40))
+        self.assertGreater(counts["body lines"], 40)
+        self.assertGreater(counts["last paragraph at line"], 0)
+        self.assertLess(counts["last paragraph at line"], counts["body lines"])
+
+
+class TP_1c_ListItemsAreASplitRule(unittest.TestCase):
+    """`--par-lists` decides whether an `\\item` is a paragraph. It is a
+    flag and not a constant BECAUSE it changes the answer, so both of
+    its settings are asserted -- with only the default asserted, the
+    clause can be deleted and the suite still passes."""
+
+    SRC = (LONG + "\n\n" + r"\begin{itemize}" + "\n" + r"\item " + LONG2
+           + "\n" + r"\item " + LONG2 + "\n" + r"\end{itemize}" + "\n")
+
+    def test_list_items_are_not_paragraphs_by_default(self):
+        gold, _ = M._par_gold(doc(self.SRC))
+        self.assertEqual(len(gold), 1)
+
+    def test_with_lists_true_they_are(self):
+        gold, _ = M._par_gold(doc(self.SRC), lists=True)
+        self.assertGreater(len(gold), 1)
+
+
 class TP_2_AnchorIsWordsThePageCanCarry(unittest.TestCase):
     """`\\cite{ACM}` prints as `[1]` and `\\begin{definition}` as
     `Definition 2.1.`, so an anchor containing either is a string no

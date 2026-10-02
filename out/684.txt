@@ -1,0 +1,159 @@
+684 - is "a standard name in a CMEX font is a fallback" safe? Measured
+======================================================================
+
+A Claude.ai chat read pdf2mmd against the paper it implements and found
+a regression: in a dvips-produced PDF the display Sigma of equation (1)
+is the glyph `X` in `TeX-cmex9`, and pdf2mmd's distrust check for
+fallback glyph names no longer runs. It proposed a broader rule --
+**any StandardEncoding name in a CMEX font is a fallback, distrust it**
+-- and listed it as UNVERIFIED across the corpus. That is this project's
+kind of question, and the corpus is here, so it was measured rather
+than argued.
+
+The defects are pdf2mmd's and are not touched here. What follows is the
+evidence pdfdrill needs before acting on the rule.
+
+====================================================================
+1. IS THE RULE SAFE? THE TeX TREE SAYS WHICH FAMILIES IT MAY TOUCH
+====================================================================
+
+Every Type 1 font program in the TeX tree, parsed with `inkdrill.type1`,
+glyph names intersected with Adobe StandardEncoding's 149 names:
+
+    cmr10    132 glyphs   113 standard names   A B C D E F G H I ...
+    cmmi10   130 glyphs    59 standard names   A B C D E F G H I ...
+    cmsy10   130 glyphs    37 standard names   A B C D E F G H I ...
+    cmex10   141 glyphs     1 standard name    space
+
+A Computer Modern extension font names its glyphs `summationdisplay`,
+`parenleftbig`, `bracketrightBigg` -- NOT `X`, not `guillemotleft`. The
+rule is therefore safe there, and it would be catastrophic one family
+over: applied to cmmi it would distrust 59 legitimate names, including
+every italic letter of every formula.
+
+ONE EXCEPTION, AND IT IS REAL: `space`. Exclude it by name, or the rule
+distrusts a glyph that genuinely is what it says it is.
+
+BUT "A CMEX FONT" MUST MEAN THE FONT, NOT THE SUBSTRING. Every font in
+the tree whose name contains `cmex`:
+
+    cmex10  cmex9  cmex8  cmex7     141 glyphs each,   1 standard name
+    cmexb10                         128 glyphs,        0
+    lcmex8      (lxfonts)           128 glyphs,      122   A B C D E F ...
+    yhcmex      (yhmath)            262 glyphs,      149   A AE B C D ...
+
+`lcmex8` and `yhcmex` are extension fonts by name and ordinary alphabets
+by content. A substring match on "cmex" would distrust their letters --
+and this is NOT hypothetical, because the corpus uses one:
+
+    YINZZB+Yhcmex   1712.05204                 LJBZGV+Yhcmex  Geometric_Clifford_Algebra_Networks
+    YVCBJM+Yhcmex   1825_clifford_neural_...   BSQKFK+Yhcmex  annals-v174-n3-p05-s
+    FDIEJH+Yhcmex   zeros_of_eigpols_2013
+
+Five documents, and in them every `A`, `B`, `C` would become untrusted.
+So the rule needs the family resolved first -- cmex7/8/9/10 and their
+subset and dvips aliases -- and a name-contains test is not that.
+
+A MEASUREMENT THAT COULD NOT HAVE FOUND ANYTHING, CAUGHT BY ARITHMETIC
+RATHER THAN BY THE CODE. The first run of this scan reported 0 standard
+names in all 7,616 fonts -- a clean, quotable, publishable zero. It was
+wrong: `type1.STANDARD_ENCODING` is a `{code: name}` dict, so iterating
+it yields the CODES, and the intersection of a set of integers with a
+set of names is empty by construction. The tell was knowing that cmr10
+must contain `A`. An instrument that cannot return a positive is not
+evidence of a negative.
+
+====================================================================
+2. DOES THE REPAIR MATTER BEYOND THAT ONE PAPER?
+====================================================================
+
+From the `probe-pdffonts.txt` beside every drilled document, 2,555 of
+them:
+
+    documents embedding a CMEX font            939   (36.8%)
+    CMEX font instances                      1,604   (all embedded)
+    documents naming it the dvips way           19   TeX-cmex7/8/9
+    of those, the chat's own paper               1   1815330.1815393
+
+SO THE ANSWER IS YES, AND THE LIST IS SHORT ENOUGH TO RUN: eighteen
+documents other than the paper carry `TeX-cmex*` and would exercise the
+same path.
+
+    0905.2720                      MG12_FA
+    COSIT_2009_Adams_Raubal        P10-1087
+    D19                            PersDB08_proc
+    Discrete Differential Geometry Pourfath Mahdi - 2007
+    Discrete_geometric_mechanics   Tensors and Riemannian Geometry
+    Thesis-final                   bommes_zimmer_2009_siggraph_011
+    p_247                          qftbook
+    saarland.univ.web.rev          tiling
+    towler_pauli                   webdb2009-final
+
+AND A SHARPER SUBSET. A CMEX font declared with a LATIN TEXT encoding is
+a contradiction -- a maths extension font cannot be WinAnsi -- so those
+are fallbacks by construction, before any glyph is read:
+
+    Builtin      858      Custom       728
+    WinAnsi       12      Identity-H     5      MacRoman   1
+
+18 instances across 9 documents, listed in the JSON beside this file.
+307 documents have at least one CMEX font that is not Builtin-encoded.
+
+I CORRECTED MYSELF HERE ONCE. The first count said ZERO documents use
+the dvips naming, because the classifier tested `^[A-Z]{6}\+` before
+testing for `TeX-`, and every real instance is `OZBJDZ+TeX-cmex7` --
+subset tag AND dvips name. The listing showed it immediately; the
+summary had hidden it. Same shape as the two defects above: the
+instrument answered a question I had not asked.
+
+====================================================================
+3. THE NAME SHAPES A MATCHER MUST SURVIVE
+====================================================================
+
+Every distinct CMEX base name in the corpus, after stripping `+`:
+
+    CMEX10 CMEX9 CMEX8 CMEX7        the ordinary case, 1,496 instances
+    TeX-cmex9 TeX-cmex8 TeX-cmex7   dvips, 26
+    Yhcmex                          yhmath, 5
+    cmex10 cmex9 cmex7 Cmex10       case varies, 7
+    CMEX102 ... CMEX1048            an INSTANCE COUNTER, not a size
+    CMEX10~112  CMEX10~154          tilde plus a number
+    VpqhhbCMEX10 RkgmpsCMEX10       a subset tag with NO `+`
+
+    a case-sensitive match on "CMEX" catches 1,560 of 1,604 -- 44 missed
+
+The two that will bite a parser: `CMEX102` is CMEX10 instance 2, not a
+102 pt font, so anything reading the trailing digits as a size is wrong
+on 30 documents; and a subset tag is not always separated by `+`, so
+splitting on `+` leaves `VpqhhbCMEX10` unrecognised.
+
+====================================================================
+4. WHAT PDFDRILL SHOULD DO WITH THIS
+====================================================================
+
+Not my code to change, so this is evidence and not a patch:
+
+  * The rule is SAFE, for cmex7/8/9/10 only, with `space` excepted.
+  * Resolve the FAMILY before applying it. `yhcmex` and `lcmex8` are
+    extension fonts by name and alphabets by content, and five corpus
+    documents embed `Yhcmex`.
+  * The matcher must survive `ABCDEF+NAME`, `AbcdefNAME` (no `+`),
+    `NAME~NN`, case variation, and a trailing INSTANCE COUNTER that
+    looks like a size (`CMEX102` is CMEX10 number 2).
+  * The dvips path is worth fixing on its own evidence: 19 corpus
+    documents name it `TeX-cmex*`, 18 of them other than the paper.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * It measures FONT PROGRAMS in the TeX tree and the `pdffonts` probe
+    beside each document. It does NOT open a PDF: whether an embedded
+    subset exposes a fallback name in a given file is pdf2mmd's
+    measurement, not mine -- inkdrill has no PDF parser by design.
+  * "Standard name" is Adobe StandardEncoding's 149 names. A WinAnsi or
+    MacRoman fallback would offer a few names outside that set.
+  * The 18 text/CID-encoded instances are a STRONG indicator of a
+    fallback, not proof of one. They are where to look first.
+  * 2,555 of the library's documents carry a pdffonts probe; the rest
+    were not drilled that far and are not in these counts.
