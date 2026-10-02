@@ -3873,6 +3873,27 @@ def _par_gold(tex, lists=False, min_chars=40):
     return out, counts
 
 
+#: paragraphs per KB of source below which the SPLIT is suspect.
+#: Two instruments are needed, not one. Coverage catches a walk that
+#: STOPS EARLY (sigma26-077 reached 27.1%); it is blind to a walk that
+#: NEVER SPLITS, because one chunk spanning the whole body scores ~100%
+#: coverage -- higher than a healthy document. pdfdrill hit exactly that
+#: with a CRLF separator defect and measured that my coverage check
+#: would not have caught it.
+#: Measured over 29 documents: the healthy MINIMUM is 0.52 paragraphs
+#: per KB and a whole body as one chunk scores at most 0.029. The cut
+#: sits in the MIDDLE of that gap, not on either edge -- 5x below the
+#: lowest healthy document and 3x above the worst defect.
+PAR_SPLIT_FLOOR = 0.1
+
+
+def _par_split_suspect(paragraphs, source_bytes):
+    """True when a source this large yielded too few paragraphs to be
+    believable. A body of several kilobytes is never one paragraph."""
+    kb = max(1.0, source_bytes / 1024)
+    return (paragraphs / kb) < PAR_SPLIT_FLOOR
+
+
 def _par_reader_lines(doc):
     """The reader's lines -- used ONLY to put a gold paragraph on the
     page and to break the residual down afterwards. No ink channel reads
@@ -3911,8 +3932,9 @@ def _par_locate(doc, lists=False, min_chars=40):
                 names[0] if names else None)
     if main is None:
         return [], [], Counter(), []
-    gold, counts = _par_gold(z.read(main).decode("utf-8", "replace"),
-                             lists, min_chars)
+    raw = z.read(main).decode("utf-8", "replace")
+    gold, counts = _par_gold(raw, lists, min_chars)
+    counts["source bytes"] = len(raw.encode("utf-8", "replace"))
     lines = _par_reader_lines(doc)
     hay, starts, pos = [], [], 0
     for L in lines:
@@ -4102,7 +4124,7 @@ def m_paragraphs(root, n, rng, indent=(1.0, 3.0), gap=0.3, lists=False,
                                         or p["width"] <= 0.55)
 
     kept, lost_all, per_doc = Counter(), Counter(), []
-    rows, coverage = [], []
+    rows, coverage, suspect = [], [], []
     for d in docs:
         gold, found, counts, lost = _par_locate(d, lists)
         # Read ONCE. This sat inside the page loop and re-parsed a 10 MB
@@ -4120,6 +4142,9 @@ def m_paragraphs(root, n, rng, indent=(1.0, 3.0), gap=0.3, lists=False,
         if counts.get("body lines"):
             coverage.append((counts["last paragraph at line"]
                              / counts["body lines"], d.name))
+        if _par_split_suspect(len(gold), counts.get("source bytes", 0)):
+            suspect.append((d.name, len(gold),
+                            counts.get("source bytes", 0) / 1024))
         frames, refused = page_frames(d.parent, d.name)
         bypage = defaultdict(list)
         for f in found:
@@ -4177,7 +4202,7 @@ def m_paragraphs(root, n, rng, indent=(1.0, 3.0), gap=0.3, lists=False,
           f"of bands)")
     print(f"\nthe filter, on the author's source:")
     for k, v in kept.most_common():
-        if k.startswith("spanned:") or k in ("body lines",
+        if k.startswith("spanned:") or k in ("body lines", "source bytes",
                                              "last paragraph at line"):
             continue
         print(f"  {v:>6}  {k}")
@@ -4192,6 +4217,14 @@ def m_paragraphs(root, n, rng, indent=(1.0, 3.0), gap=0.3, lists=False,
         low = [(c, n) for c, n in coverage if c < 0.6]
         for c, n in low:
             print(f"  ** {n} reaches only {c:.1%} -- the walk stopped early")
+    # The OTHER direction, which coverage cannot see.
+    for nm, k, kb in suspect:
+        print(f"  ** {nm}: {k} paragraphs for {kb:.0f} KB of source "
+              f"({k / max(1.0, kb):.3f}/KB, floor {PAR_SPLIT_FLOOR}) -- "
+              f"the split may not be firing at all")
+    if not suspect:
+        print(f"  split check: every document clears "
+              f"{PAR_SPLIT_FLOOR} paragraphs per KB of source")
     print(f"\nlocating the gold on the page -- "
           f"{sum(d[2] for d in per_doc)} of {sum(d[1] for d in per_doc)} "
           f"({100*sum(d[2] for d in per_doc)/max(1,sum(d[1] for d in per_doc)):.1f}%):")

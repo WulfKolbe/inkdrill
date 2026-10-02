@@ -1,0 +1,93 @@
+685 - one instrument sees one direction of failure
+==================================================
+
+out/683 ended with a self-report added to the paragraph gold: how far
+down the source the walk reached, flagged under 60%. It was added
+because pdfdrill's cross-check found that sigma26-077's gold stopped at
+27.1% of its body and NOTHING SAID SO.
+
+pdfdrill implemented the same check and then measured whether it would
+have caught THEIR defect. It would not.
+
+====================================================================
+1. THE TWO DIRECTIONS
+====================================================================
+
+    mine    the walk STOPS EARLY.   `\end {pmatrix}` with a space was
+            never matched, a depth counter never recovers, 83% of the
+            document was skipped. Coverage 27.1%: far BELOW the healthy
+            median of 88%.
+
+    theirs  the walk NEVER SPLITS.  A blank line in a CRLF file is
+            `\r\n\r\n` and their separator did not admit the `\r`, so a
+            whole paper came back as ONE chunk. That chunk spans
+            everything, so it scores ~100% coverage: ABOVE the healthy
+            median.
+
+A coverage check is a lower bound. It cannot flag the failure that
+makes coverage look perfect, and the defect that produces it is worse
+than the one it does catch -- a single enormous paragraph is still a
+plausible-looking object, and theirs survived a full suite and a
+downstream pipeline.
+
+Their tell was the corpus looking wrong in the UNUSUAL direction: the
+five CRLF documents held the five HIGHEST coverage figures, 99.0-99.7%.
+
+====================================================================
+2. THE COMPLEMENTARY CHECK, WITH THE FLOOR MEASURED
+====================================================================
+
+A body of several kilobytes is never one paragraph. So the second
+instrument is the paragraph COUNT against the source SIZE, and the only
+question is where the cut goes. Measured over 29 documents of this
+corpus (20 SIGMA plus 9 arXiv):
+
+    healthy, paragraphs per KB of source   min 0.52   median 1.51   max 4.50
+    the whole body as a single chunk       at most 0.029
+
+    PAR_SPLIT_FLOOR = 0.1
+
+Five times below the lowest healthy document and three times above the
+worst a single chunk can score. THE CUT IS IN THE MIDDLE OF THE GAP,
+not on either edge -- the lesson from pdfdrill's gutter constant one
+task ago, where 4.5% was the value a two-column page SHOWS and placing
+the cut there would have detected nothing. A test asserts the floor lies
+strictly between the two measured populations, so narrowing it toward
+either edge fails.
+
+A FIRST CANDIDATE WAS REJECTED BY ITS OWN MEASUREMENT. The obvious
+signal is the longest paragraph as a fraction of the body. On this
+corpus that reaches 60.8% in a HEALTHY document (sigma26-085, whose
+last paragraph is followed by a long appendix), against 100% for the
+defect -- a 1.6x gap with no room for a cut. Paragraphs-per-KB gives
+18x. The rejected measurement is recorded because it is the more
+instructive of the two.
+
+====================================================================
+3. WHAT WAS ASSERTED RATHER THAN LEFT TO LUCK
+====================================================================
+
+This walk is CRLF-safe, but only by accident of implementation: it
+splits on `\n` and then calls `.strip()`, so the orphan `\r` is
+whitespace and a blank line still reads as blank. Nothing asserted it.
+`tests/test_paragraph_gold.py` now does, with a CRLF fixture -- the
+defect that hit a peer is a test here whether or not this code could
+ever have had it.
+
+The `max(1.0, ...)` divisor survived its first mutation because no test
+reached what it guards: a 0-byte source divides by zero and stops the
+whole measurement rather than flagging one document. Asserted now.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * The floor is measured on 29 LaTeX documents from two publishers. A
+    corpus of one-paragraph notes would sit below it legitimately; the
+    divisor floors at 1 KB so a short file cannot trip it, which is a
+    patch on that, not a solution.
+  * Neither check verifies that the paragraphs are RIGHT. They are
+    cheap guards against a whole class of silent instrument failure,
+    and nothing more.
+  * Two instruments cover two known directions. There is no argument
+    here that they are the only two.

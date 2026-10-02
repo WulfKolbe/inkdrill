@@ -198,6 +198,31 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+26. **A coverage check is a LOWER bound: it cannot see the failure
+    that makes coverage look perfect** (out/685, `PAR_SPLIT_FLOOR`).
+    683 added "how far down the source did the gold reach", flagged
+    under 60%, because sigma26-077 stopped at 27.1% and nothing said
+    so. pdfdrill implemented the same check and measured that it would
+    NOT have caught their own defect: a CRLF file that came back as one
+    chunk SPANS everything, so it scores ~100% — above the healthy
+    median, not below it. Their five CRLF documents held the five
+    HIGHEST coverage figures.
+    The complementary instrument is the paragraph COUNT against source
+    SIZE, since a body of several kilobytes is never one paragraph.
+    Floor measured over 29 documents: healthy minimum **0.52**
+    paragraphs per KB, a single chunk at most **0.029**, so the cut is
+    **0.1** — in the MIDDLE of the gap, which is the gutter-constant
+    lesson from one task earlier. A test asserts it lies strictly
+    between the two populations.
+    **The first candidate signal was rejected by its own measurement**:
+    the longest paragraph as a share of the body reaches 60.8% in a
+    HEALTHY document against 100% for the defect, a 1.6x gap with no
+    room for a cut; paragraphs-per-KB gives 18x. Also: this walk is
+    CRLF-safe only by accident (`split("\n")` then `.strip()`), so a
+    CRLF fixture now asserts it, and the `max(1.0, ...)` divisor is
+    tested against the 0-byte source that would otherwise divide by
+    zero and stop the run.
+
 25. **"A standard name in a CMEX font is a fallback" is safe — for
     FOUR fonts, and ruinous for the fifth** (out/684,
     `measure.py fallbacks`). pdf2mmd proposed it after a dvips PDF

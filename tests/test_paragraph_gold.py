@@ -112,6 +112,60 @@ class TP_1b_TheWalkRecoversFromABadlyClosedEnvironment(unittest.TestCase):
         self.assertLess(counts["last paragraph at line"], counts["body lines"])
 
 
+class TP_1d_TwoInstrumentsForTwoDirectionsOfFailure(unittest.TestCase):
+    """Coverage sees a walk that STOPS; it cannot see one that never
+    SPLITS.
+
+    pdfdrill implemented the coverage check I suggested and measured
+    that it would NOT have caught their own defect: a CRLF file that
+    came back as a single chunk spans everything, so it scores ~100%
+    coverage -- higher than the 89% median of healthy documents. My
+    failure mode loses coverage, theirs gains it, and one instrument
+    does not see both.
+
+    The floor is measured, not chosen: 0.52 paragraphs per KB is the
+    lowest of 29 healthy documents and a whole body as one chunk scores
+    at most 0.029, so 0.1 sits in the middle of that gap.
+    """
+
+    def test_a_single_chunk_for_a_large_source_is_suspect(self):
+        self.assertTrue(M._par_split_suspect(1, 60 * 1024))
+
+    def test_a_healthy_document_is_not(self):
+        """The lowest real document measured: 38 paragraphs, 74 KB."""
+        self.assertFalse(M._par_split_suspect(38, 74 * 1024))
+
+    def test_the_floor_sits_between_the_two_populations(self):
+        """Not on an edge. The gutter constant taught this: a cut placed
+        on the observed value is one re-measurement from wrong."""
+        healthy_min, defect_max = 0.52, 0.029
+        self.assertLess(defect_max, M.PAR_SPLIT_FLOOR)
+        self.assertLess(M.PAR_SPLIT_FLOOR, healthy_min)
+
+    def test_a_short_source_is_never_suspect(self):
+        """A one-paragraph note is not a defect; the divisor floors at
+        1 KB so a small file cannot trip the check."""
+        self.assertFalse(M._par_split_suspect(1, 200))
+
+    def test_an_empty_source_does_not_divide_by_zero(self):
+        """What the `max(1.0, ...)` divisor is actually for. A document
+        whose .tex could not be read is 0 bytes, and a check that raises
+        on it stops the whole measurement rather than flagging one
+        document."""
+        self.assertTrue(M._par_split_suspect(0, 0))
+
+    def test_crlf_source_splits(self):
+        """Their defect, on my splitter. A blank line in a CRLF file is
+        `\r\n\r\n`; this walk splits on `\n` and then strips, so the
+        lone `\r` is whitespace and the split fires. Asserted rather
+        than left to luck."""
+        src = (LONG + "\r\n\r\n" + LONG2 + "\r\n")
+        gold, _ = M._par_gold("\\begin{document}\r\n" + src
+                              + "\\end{document}\r\n")
+        self.assertEqual(len(gold), 2)
+        self.assertFalse(M._par_split_suspect(len(gold), len(src)))
+
+
 class TP_1c_ListItemsAreASplitRule(unittest.TestCase):
     """`--par-lists` decides whether an `\\item` is a paragraph. It is a
     flag and not a constant BECAUSE it changes the answer, so both of
