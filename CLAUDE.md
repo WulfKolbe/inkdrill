@@ -83,12 +83,14 @@ is reported here:
   when a test proves it.
 
 **Every measured figure is re-runnable.** `tools/premise/measure.py`
-carries one subcommand per claim, 33 of them —
-`alphabet banding blocks border boxes charstrings classify colour
-contraction convexity edges fontmix fonts halftone maths missed
-moments nesting neutrality outlines premise rasterisers residuals
-rotation schedcost separability skew spacing stitchcost
-substitutions tables throughput white`.
+carries one subcommand per claim, 35 of them —
+`alphabet banding blocks border boxes calibration charstrings
+classify colour contraction convexity edges fontmix fonts halftone
+maths missed moments nesting neutrality outlines paragraphs premise
+rasterisers residuals rotation schedcost separability skew spacing
+stitchcost substitutions tables throughput white`.
+(It read 33 and omitted `calibration` before 683 — the list is now
+generated from `MEASUREMENTS` rather than retyped.)
 If you quote a number, quote the subcommand that produces it. If a measurement decides whether to
 build something, the harness must be committed *before* the decision is
 acted on — that rule exists because it was broken twice.

@@ -444,9 +444,24 @@ class T13_13_ArgvProvenanceLine(unittest.TestCase):
                  min_len=60, quantise=0, doc=None, fill_max=0.10,
                  hole_measure="bbox", merge_tol=0, iou=0.5,
                  min_block=200, truth_tex=None, ocr_dir=None,
-                 first_page=0, split="document", what=["maths"])
+                 first_page=0, split="document",
+                 par_indent_lo=1.0, par_indent_hi=3.0, par_gap=0.3,
+                 par_lists=False, what=["maths"])
         d.update(over)
         return argparse.Namespace(**d)
+
+    def test_the_fixture_carries_every_flag_the_real_parser_defines(self):
+        """The fixture is a COPY of the command line, so it drifts.
+
+        A provenance line is only reproducible if every flag is in it.
+        This fixture lost four flags the hour `paragraphs` added them,
+        and the round-trip test above went on passing -- it compares the
+        fixture with itself. Asking the real parser is the only version
+        of this assertion that can fail.
+        """
+        m = self._mod()
+        real = vars(m.build_parser().parse_args(["maths", "--corpus", "/tmp"]))
+        self.assertEqual(sorted(real), sorted(vars(self._args())))
 
     def test_the_line_parses_back_to_the_arguments_it_was_built_from(self):
         m = self._mod()

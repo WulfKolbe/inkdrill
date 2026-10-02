@@ -198,6 +198,39 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+24. **The union of two weak channels transferred; neither channel did**
+    (out/683, `measure.py paragraphs`). Paragraph boundaries from ink,
+    against the authors' own `\par` structure read from the `.tex`
+    beside the PDF. Indent OR gap: 86.5% recall on 20 SIGMA documents,
+    88.2% on 13 single-column documents from elsewhere in the library --
+    two points apart. The channel CARRYING it swaps over: indent 52.4%
+    -> 27.7%, gap 54.0% -> 70.0%. Tuning either alone would have been
+    retuned by the next publisher and looked well-founded both times.
+    **Two columns break the row-profile band model and it does not
+    degrade gracefully** -- single-column recall median 92.9%,
+    two-column 18.8%, no overlap. That is the instrument, not the page;
+    it is now units.md assumption 10.
+    **The residual is the product here too**: a gap below a display with
+    no indent is 421 real boundaries against 1,081 continuations on
+    SIGMA. The vertical space belongs to the display, and LaTeX sets no
+    indent in exactly that case -- nor after a heading, nor under
+    `\noindent`. That is where under-segmentation comes from; it is not
+    a threshold waiting to be tuned.
+    **Three instrument defects came first, two of them producing the
+    SAME false conclusion** ("paragraph starts are not indented", which
+    is untrue of LaTeX): a gold that broke a paragraph at every display
+    (-17%), anchors containing `\cite`/`\ref`/environment names the
+    page prints differently (27% -> 90% located), and matching a
+    boundary by the reader's box TOP, which includes the leading, so it
+    landed on the line above (median indent at a boundary 0.02 -> 1.32).
+    Each was found by the measurement disagreeing with the page -- one
+    crop settled the third -- never by a test.
+    A fourth sat in the SPLIT RULE: the column estimate counted centred
+    display equations as a second column, so a one-column maths paper
+    was filed under "the instrument cannot see this" with a 93.3%
+    recall. Misfiling a result as unmeasurable hides it as well as any
+    filter does. Count prose lines only.
+
 23. **A reader's geometry is not only its LINES** (out/682). Measuring
     ink against `lines[].region` alone called a full-page TikZ figure
     "100% uncovered"; pdf2mmd records it as a page-level `diagram` plus

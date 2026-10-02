@@ -1,0 +1,201 @@
+683 - paragraph boundaries from ink, against the authors' own \par
+=================================================================
+
+pdfdrill handed this over with a number: its reader infers 132
+paragraphs on arXiv 1102.1889 where the author's source has 332. The
+question behind it is this project's kind of question -- is a paragraph
+boundary IN THE INK, before anything is read? -- so the instrument had
+to come first, and most of this task went into it.
+
+    measure.py paragraphs --doc sigma26        (the 34th subcommand)
+
+====================================================================
+1. THE INSTRUMENT, AND THE THREE DEFECTS IT HAD TO LOSE FIRST
+====================================================================
+
+GOLD IS THE AUTHOR'S OWN `\par` STRUCTURE, read from the `.tex` beside
+the PDF -- not another tool's opinion. It is placed on the page through
+the reader's words, because nothing else joins a source file to ink, and
+THAT JOIN IS MEASURED: a gold paragraph that cannot be located is
+reported, never dropped in silence.
+
+Each of the three defects below changed the answer. Each was found by
+the measurement disagreeing with the page, not by a test.
+
+A DISPLAY IS NOT A PARAGRAPH BREAK. The first gold broke a paragraph
+wherever a display equation OPENED. In LaTeX `text \begin{equation}
+... \end{equation} text` is ONE paragraph and its continuation is set
+unindented.
+
+    gold, three documents      461  ->  382      (-17%)
+
+The tell was not in the source. It was that the median indent AT A GOLD
+BOUNDARY came out at 0.02 line heights -- the measurement was reporting
+that paragraph starts are not indented, which is not true of LaTeX. A
+gold that says that is not describing the document.
+
+AN ANCHOR MUST BE WORDS THE PAGE CAN CARRY. Anchoring on a paragraph's
+first 40 characters located 27% of the gold, because `\cite{ACM}` prints
+as `[1]`, `\ref{s:2}` as `2` and `\begin{definition}` as `Definition
+2.1.`. Anchoring on the first gap-free RUN between such cuts:
+
+    located                     27%  ->  90%     (three documents)
+
+A REPEATED RUN IS NOT A LOCATION. `str.find` returns the first
+occurrence, and on this corpus that is often the abstract, which repeats
+a sentence of the body: a paragraph on page 9 was being located on
+page 1. Now counted and dropped (284 of 2,954 over the twenty).
+
+A BOX TOP IS NOT A LINE. The reader's region top includes the leading
+and sits above the ink, so matching a boundary by its top edge credited
+it to the line ABOVE. One crop settled it -- sigma26-073 p5, where the
+indented `Conversely,` line is band 38 and the gold had landed on 37.
+
+    median indent at a gold boundary   0.02  ->  1.32 line heights
+
+Three instrument defects, and the first and last each produced the SAME
+false conclusion: "paragraph starts are not indented". It would have
+been quotable, reproducible and wrong.
+
+====================================================================
+2. THE MEASUREMENT
+====================================================================
+
+Two channels, both from ink alone, both in units of THE PAGE'S OWN
+median band height -- a threshold in page pixels is silently retuned by
+a dpi change, so the normalisation and the constant live in one
+function:
+
+    INDENT  leftmost ink is 1.0 to 3.0 band heights right of the body
+            margin. A WINDOW, not a floor: a centred display is
+            indented too, by much more.
+    GAP     the band sits >= 0.3 band heights further below its
+            predecessor than the page's median pitch.
+
+POPULATION: 20 SIGMA documents (Symmetry, Integrability and Geometry),
+531 pages carrying at least one located boundary, 22,100 ink bands,
+2,954 gold paragraphs of which 2,247 (76.2%) could be located and put in
+a band. SPLIT RULE: list environments do NOT count as paragraphs
+(`--par-lists` flips it); front matter and paragraphs under 40
+characters are dropped, 190 and 294 of them, printed beside the result.
+
+    channel                         recall   precision    (prose bands)
+    indent in [1.0, 3.0]             52.4%      56.2%
+    gap >= 0.3                       54.0%      37.5%
+    indent OR gap                    86.5%      42.9%
+    indent OR (gap, not after a display)
+                                     66.4%      51.1%
+
+"Prose bands" are the bands the reader types as text or list_item --
+the reader is used to RESTRICT THE POPULATION and to break the residual
+down, never as a channel. Over every band, unrestricted, the union is
+85.8% at 31.7%.
+
+====================================================================
+3. THE RESIDUAL IS THE PRODUCT: THE POST-DISPLAY BREAK
+====================================================================
+
+A gap below a display, with no indent, on a prose band:
+
+    421   ARE a paragraph boundary
+   1081   are the same paragraph continuing
+
+Ink geometry cannot separate them, and neither can the gap: the vertical
+space belongs to the display, not to the break. The indent is the only
+signal that distinguishes them, and in exactly this case LaTeX does not
+set one -- a continuation after a display is unindented, and so is a new
+paragraph whose author wrote `\noindent`, and so is the first paragraph
+after a heading.
+
+That is where the under-segmentation pdfdrill measured comes from, and
+it is not a threshold that needs tuning. 1,586 displays were spanned in
+these twenty documents; every one of them is a place where the page
+stops saying what the author said.
+
+PRECISION IS UNDERSTATED AND CANNOT BE CORRECTED HERE. 23.8% of gold
+could not be located, so every rule hit on an unlocatable boundary is
+counted as a false positive. The ceiling is not known; what is known is
+that the measured precision is a floor.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+  * ONE PUBLISHER, until section 4. Everything above is SIGMA, one
+    journal class, one `\parindent`. See section 4 -- it changes which
+    channel matters.
+  * Pages are those carrying at least one LOCATED boundary (531 of the
+    597 rendered), so a page whose every anchor was lost is absent.
+  * Nothing here segments a document. It measures whether the boundary
+    is VISIBLE in ink; emitting paragraphs is not built.
+  * The gold is the author's `\par`, not the typeset reality: an author
+    who writes a blank line before `\noindent` gets a gold boundary the
+    page deliberately does not show.
+
+====================================================================
+4. THE TRANSFER CHECK -- AND WHAT DID NOT TRANSFER
+====================================================================
+
+The library holds 1,291 documents carrying both LaTeX source and a
+render. 20 of them sampled at `--seed 683`, 190 rendered pages, 1,961
+gold paragraphs, 81.5% located:
+
+    channel                         SIGMA (20)    mixed, 1-column (13)
+    indent in [1.0, 3.0]          52.4% / 56.2%     27.7% / 46.2%
+    gap >= 0.3                    54.0% / 37.5%     70.0% / 63.8%
+    indent OR gap                 86.5% / 42.9%     88.2% / 57.9%
+
+THE UNION TRANSFERS; THE CHANNELS DO NOT. Recall of the union is within
+two points across two unrelated publishers, while the channel carrying
+it swaps over: SIGMA indents and barely spaces, the mixed sample spaces
+and barely indents. A rule tuned on either channel alone would have been
+retuned by the next publisher, and would have looked well-founded both
+times.
+
+TWO COLUMNS BREAK THE INSTRUMENT, AND IT DOES NOT DEGRADE GRACEFULLY.
+Of the 20, seven are two-column, and recall separates COMPLETELY -- no
+overlap between the groups:
+
+    single column   13 documents, 770 boundaries   median 92.9%  (75.0-100)
+    two columns      7 documents, 331 boundaries   median 18.8%  ( 7.7-25.9)
+
+The cause is not a threshold. `_par_bands` takes a row profile across the
+whole page, so on a two-column page a band spans BOTH columns and is not
+a line at all: the body margin becomes one column's, every line of the
+other reads as indented past the window, and the leading of two
+independent columns interleaves. The measurement now reports the column
+class per document and splits the channel table by it, because one
+number over a mixed corpus averages a population the instrument can see
+with one it cannot.
+
+The post-display residual also depends on the corpus, and in the
+direction the mechanism predicts: SIGMA is a maths journal and spans
+1,586 displays, where the gap-after-display case is 421 boundaries
+against 1,081 continuations; the mixed sample spans 340, and there the
+same case is 214 against 123.
+
+A FIFTH DEFECT, IN THE SPLIT RULE ITSELF. The first column estimate
+counted every body-width line that starts mid-page -- and a CENTRED
+DISPLAY EQUATION is exactly that. It called sigma26-085, a one-column
+maths paper, two-column on 16 equations and one sentence, and then filed
+its 93.3% recall under the heading for documents the instrument cannot
+see. A split rule that misfiles a result as "unmeasurable" hides it as
+thoroughly as a filter that excludes the class it exists to compare
+against. The estimate now counts only the lines the reader types as
+prose, and the case is pinned in `tests/test_paragraph_gold.py`.
+
+Both populations were re-run after that fix. SIGMA is unchanged to the
+decimal (86.5% / 42.9%, residual 421 against 1,081) and no SIGMA
+document is two-column; the mixed sample's groups did not move either.
+
+====================================================================
+WHAT SECTION 4 DOES NOT SAY
+====================================================================
+
+  * 20 documents against 1,291 eligible. The column split is clean on
+    this sample; it is not a claim about the library.
+  * The two-column figure measures THE BAND MODEL, not the page. A
+    column-aware band would have to be built and measured before
+    anything is concluded about two-column paragraphs.
+  * `--par-lists False` throughout: list items are not paragraphs here.
+    The flag exists because that choice changes the answer and a reader
+    must be able to change it back.

@@ -98,6 +98,11 @@ Every figure below is reproducible via `tools/premise/measure.py`.
   outline route needs one parser and no PDF handling at all
 - `type1.py` parses **7,616 fonts / 3,413,996 charstrings** with none in
   the wrong class and no file rejected
+- a paragraph boundary IS in the ink on one column: indent OR gap reaches
+  **86.5%** recall on 20 SIGMA documents and **88.2%** on 13
+  single-column documents from elsewhere, against the authors' own
+  `\par` structure. The union transfers; the individual channels swap
+  over between publishers (`measure.py paragraphs`, out/683)
 
 **Refuted, and the design changed:**
 
@@ -110,6 +115,10 @@ Every figure below is reproducible via `tools/premise/measure.py`.
   time; `cycles` survives 80–99%. Exactly translation-invariant.
 - **`pdfminer` boxes agree closely with ink.** 85% 1:1 — the rest is
   structure, not error.
+- **A row profile is a text line.** Only on one column. Paragraph recall
+  is median 92.9% on single-column documents and **18.8%** on two-column
+  ones, with no overlap — a band spans both columns, so it is not a line.
+  The limit is the instrument's, and it does not degrade gracefully.
 
 ## 5. The single highest-value next step
 

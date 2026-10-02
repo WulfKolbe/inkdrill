@@ -37,6 +37,9 @@ charstrings  U9 interpreter premise: which Type 1 operators real fonts
              actually use, and which are subsystems rather than cases
 outlines     U9 rasterizer premise: which outline format maths glyphs are
              in, and whether it is reachable without a PDF parser
+paragraphs   U14 premise: is a paragraph boundary in the ink? Gold is
+             the author's own \\par structure, out of the .tex beside
+             the PDF
 """
 
 from __future__ import annotations
@@ -54,11 +57,16 @@ import struct
 import sys
 import time
 import zlib
+import zipfile
+import bisect
+import subprocess
+import tempfile
 from collections import Counter, defaultdict
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from inkdrill.pngio import _is_neutral, load_mask, read_png  # noqa: E402
+from inkdrill.pnmio import load_mask as pnm_load_mask  # noqa: E402
 from inkdrill.raster import INK, InkMask, binarize, iter_runs  # noqa: E402
 from inkdrill.aggregate import (component_moments, moments_of_mask,  # noqa: E402
                                 moments_per_component)
@@ -3727,6 +3735,481 @@ def m_classify(root, n, rng, split="document"):
         print(f"    {truth!r} read as {pred!r}   x{k}")
 
 
+# --------------------------------------------------------------------------
+# U14 premise: are paragraph boundaries in the ink?
+# --------------------------------------------------------------------------
+
+#: environments whose content is not prose the author paragraphed. THE
+#: FILTER: what it keeps and drops is printed beside the result.
+PAR_NON_PROSE = {"equation", "equation*", "align", "align*", "alignat",
+                 "alignat*", "gather", "gather*", "multline", "multline*",
+                 "eqnarray", "eqnarray*", "displaymath", "array", "figure",
+                 "figure*", "table", "table*", "tabular", "tabular*",
+                 "thebibliography", "verbatim", "lstlisting", "picture",
+                 "tikzpicture", "split", "cases", "pmatrix", "bmatrix",
+                 "matrix", "subequations"}
+PAR_LIST_ENV = {"itemize", "enumerate", "description"}
+#: front matter: commands, not prose the author paragraphed.
+PAR_FRONT = re.compile(r"\\(title|ShortArticleName|ArticleName|Author"
+                       r"|AuthorNameForHeading|Address|EmailD|URLaddressD"
+                       r"|ArticleDates|Abstract|Keywords|Classification"
+                       r"|FullAddress|thanks|maketitle|label"
+                       r"|bibliographystyle|bibliography|LastPageEnding)")
+_PAR_COMMENT = re.compile(r"(?<!\\)%.*$")
+_PAR_BEGIN = re.compile(r"\\begin\{([^}]*)\}")
+_PAR_END = re.compile(r"\\end\{([^}]*)\}")
+_PAR_ENV = re.compile(r"\\(?:begin|end)\s*\{[^}]*\}")
+_PAR_REF = re.compile(r"\\(?:cite[a-zA-Z]*|ref|eqref|label|autoref|[Cc]ref"
+                      r"|pageref|footnote|index|input|includegraphics)\s*"
+                      r"(?:\[[^]]*\])?\s*\{[^}]*\}")
+_PAR_MATH = re.compile(r"\$[^$]*\$|\\\([^)]*\\\)")
+_PAR_MACRO = re.compile(r"\\[a-zA-Z]+\*?|\\[^a-zA-Z]")
+_PAR_KEEP = re.compile(r"[^a-z0-9]+")
+PAR_GAP = "\x00"
+
+
+def _par_norm(s):
+    return _PAR_KEEP.sub("", s.lower())
+
+
+def _par_anchor(raw, least=20):
+    """The first run of WORDS THE PAGE CAN CARRY, and where it starts.
+
+    Everything whose printed form differs from its source form is cut and
+    leaves a gap: inline maths (`$x$` prints as a glyph), a citation
+    (`\\cite{ACM}` prints as `[1]`), a cross-reference, an environment
+    name (`\\begin{definition}` prints as `Definition 2.1.`). Anchoring on
+    the paragraph's first 40 characters instead located 27% of the gold;
+    anchoring on the first gap-free run locates 90%.
+    """
+    s = _PAR_ENV.sub(PAR_GAP, raw)
+    s = _PAR_REF.sub(PAR_GAP, s)
+    s = _PAR_MATH.sub(PAR_GAP, s)
+    s = _PAR_MACRO.sub(PAR_GAP, s)
+    s = re.sub(r"[{}&_^~]", PAR_GAP, s)
+    pos = 0
+    for part in s.split(PAR_GAP):
+        if part.strip() and len(_par_norm(part)) >= least:
+            return pos, re.sub(r"\s+", " ", part).strip()
+        pos += len(part) + 1
+    return None, None
+
+
+def _par_gold(tex, lists=False, min_chars=40):
+    """The author's own paragraphs: [(texline, raw)], plus the filter's
+    accounting.
+
+    A paragraph breaks at a blank line or `\\par` AT PROSE LEVEL. A
+    DISPLAY IS NOT A BREAK: `text \\begin{equation}...\\end{equation}
+    text` is one paragraph in LaTeX and its continuation is set
+    unindented. Treating a display as a break split 17% more paragraphs
+    out of the same source and drove the median indent at a gold
+    boundary to 0.02 line heights -- the measurement read "paragraph
+    starts are not indented", which is false and was the instrument.
+    """
+    i = tex.find("\\begin{document}")
+    j = tex.rfind("\\end{document}")
+    body = tex[i + 16:j if j > i else len(tex)]
+    out, cur, start, depth, listdepth = [], [], 0, 0, 0
+    counts = Counter()
+
+    def flush():
+        nonlocal cur
+        if cur:
+            raw = " ".join(cur).strip()
+            if PAR_FRONT.match(raw):
+                counts["dropped: front matter"] += 1
+            elif len(_par_norm(raw)) < min_chars:
+                counts["dropped: shorter than min_chars"] += 1
+            else:
+                out.append((start, raw))
+                counts["kept"] += 1
+            cur = []
+
+    for ln, line in enumerate(body.split("\n"), 1):
+        line = _PAR_COMMENT.sub("", line)
+        for e in _PAR_BEGIN.findall(line):
+            if e in PAR_NON_PROSE:
+                depth += 1
+                counts[f"spanned: {e}"] += 1
+            elif e in PAR_LIST_ENV:
+                listdepth += 1
+        skip = depth or (listdepth and not lists)
+        for e in _PAR_END.findall(line):
+            if e in PAR_NON_PROSE:
+                depth = max(0, depth - 1)
+            elif e in PAR_LIST_ENV:
+                listdepth = max(0, listdepth - 1)
+        if skip:
+            continue
+        if not line.strip() or "\\par" in line:
+            flush()
+            continue
+        if not cur:
+            start = ln
+        cur.append(line)
+    flush()
+    return out, counts
+
+
+def _par_reader_lines(doc):
+    """The reader's lines -- used ONLY to put a gold paragraph on the
+    page and to break the residual down afterwards. No ink channel reads
+    them."""
+    path = doc / f"{doc.name}.lines.json"
+    if not path.exists():
+        return []
+    j = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    out = []
+    for pg in j.get("pages") or []:
+        for ln in pg.get("lines") or []:
+            reg = ln.get("region") or {}
+            out.append({"page": pg.get("page"), "y": reg.get("top_left_y", 0),
+                        "x": reg.get("top_left_x", 0),
+                        "h": reg.get("height", 0), "type": ln.get("type"),
+                        "w": reg.get("width", 0),
+                        "pw": pg.get("page_width") or 1,
+                        "n": _par_norm(ln.get("text_display")
+                                       or ln.get("text") or "")})
+    return out
+
+
+def _par_locate(doc, lists=False, min_chars=40):
+    """Each gold paragraph placed on a reader line, with the losses NAMED.
+
+    Nothing joins the author's source to the page but the reader's words,
+    so the join is measured, not assumed. A run that occurs twice is
+    DROPPED, never resolved by position: `str.find` returns the first
+    occurrence and on this corpus that is often the abstract, which
+    repeats a sentence of the body -- a paragraph on page 9 was being
+    located on page 1.
+    """
+    z = zipfile.ZipFile(doc / f"{doc.name}.tex.zip")
+    names = [nm for nm in z.namelist() if nm.lower().endswith(".tex")]
+    main = next((nm for nm in names if b"\\begin{document}" in z.read(nm)),
+                names[0] if names else None)
+    if main is None:
+        return [], [], Counter(), []
+    gold, counts = _par_gold(z.read(main).decode("utf-8", "replace"),
+                             lists, min_chars)
+    lines = _par_reader_lines(doc)
+    hay, starts, pos = [], [], 0
+    for L in lines:
+        hay.append(L["n"])
+        starts.append(pos)
+        pos += len(L["n"])
+    hay = "".join(hay)
+    found, lost = [], Counter()
+    for texline, raw in gold:
+        off, seg = _par_anchor(raw)
+        if seg is None:
+            lost["no gap-free run of 20 characters"] += 1
+            continue
+        key = _par_norm(seg)[:48]
+        k = hay.find(key)
+        if k < 0:
+            lost["run not in the reader's text"] += 1
+            continue
+        if hay.find(key, k + 1) >= 0:
+            lost["run occurs more than once"] += 1
+            continue
+        i = bisect.bisect_right(starts, k) - 1
+        rec = dict(lines[i])
+        rec["offset"] = off
+        found.append(rec)
+    return gold, found, counts, lost
+
+
+def _par_columns(reader):
+    """1 or 2, from where the reader's body lines START.
+
+    Not a layout unit -- a SPLIT RULE. `_par_bands` takes a row profile
+    across the whole page, so on a two-column page a band spans both
+    columns and is not a line at all. The rule's recall separates
+    completely on this: single column 92.9%, two column 18.8%, no
+    overlap. Reporting one number over a mixed corpus would average two
+    populations, one of which the instrument cannot see.
+    """
+    xs = []
+    for L in reader:
+        # PROSE LINES ONLY. A centred display equation is wide and starts
+        # mid-page, so counting every line called sigma26-085 -- a
+        # single-column maths paper -- two-column on 16 equations and one
+        # sentence, and then reported its 93.3% recall under a heading
+        # that says the instrument cannot see it.
+        if L.get("type") not in ("text", "list_item"):
+            continue
+        if L.get("w", 0) and L["w"] > 0.1 * L.get("pw", 1):
+            xs.append(L["x"] / max(1, L.get("pw", 1)))
+    if not xs:
+        return 1
+    mid = sum(1 for x in xs if 0.45 < x < 0.75)
+    return 2 if mid > 0.2 * len(xs) else 1
+
+
+def _par_bands(m, min_ink=2):
+    """[(y0, y1, left, right, ink)] -- maximal inked row runs."""
+    data, w, h = m.data, m.width, m.height
+    prof = [data.count(INK, y * w, (y + 1) * w) for y in range(h)]
+    out, y0 = [], None
+    for y in range(h + 1):
+        hot = y < h and prof[y] >= min_ink
+        if hot and y0 is None:
+            y0 = y
+        elif not hot and y0 is not None:
+            left, right, ink = w, 0, 0
+            for yy in range(y0, y):
+                row = data[yy * w:(yy + 1) * w]
+                i = row.find(INK)
+                if i < 0:
+                    continue
+                left = min(left, i)
+                right = max(right, row.rfind(INK) + 1)
+                ink += prof[yy]
+            out.append((y0, y, left, right, ink))
+            y0 = None
+    return out
+
+
+def _par_features(bs):
+    """Each band's geometry IN UNITS OF THE PAGE'S OWN MEDIAN BAND HEIGHT.
+
+    The normalisation and the constants that use it live together on
+    purpose: a threshold in page pixels is silently retuned by a dpi
+    change (CLAUDE.md). Nothing here is in pixels once it leaves.
+    """
+    if len(bs) < 4:
+        return None
+    hs = sorted(b[1] - b[0] for b in bs)
+    bh = hs[len(hs) // 2]
+    if not bh:
+        return None
+    wide = [b for b in bs if b[3] - b[2] > 4 * bh]
+    if not wide:
+        return None
+    q = 8
+    margin = Counter(b[2] // q * q for b in wide).most_common(1)[0][0]
+    rmargin = Counter(b[3] // q * q for b in wide).most_common(1)[0][0]
+    body = max(1, rmargin - margin)
+    pitch = sorted(bs[i][0] - bs[i - 1][1] for i in range(1, len(bs)))
+    pitch = pitch[len(pitch) // 2] if pitch else 0
+    out = []
+    for i, (y0, y1, left, right, ink) in enumerate(bs):
+        out.append({"i": i,
+                    "indent": (left - margin) / bh,
+                    "gap": (((y0 - bs[i - 1][1]) - pitch) / bh) if i else None,
+                    "width": (right - left) / body,
+                    "h": (y1 - y0) / bh})
+    return out
+
+
+def _par_band_at(bs, y, y2):
+    """The band a reader line sits in, by MAXIMAL OVERLAP of its whole
+    box -- not by its top edge, which includes the leading and sits above
+    the ink. Matching the top alone credited an indented line to the
+    unindented one above it, and the indent channel then read 0.02 where
+    the page plainly shows an indent."""
+    best, bo = None, 0
+    for i, b in enumerate(bs):
+        ov = min(b[1], y2) - max(b[0], y)
+        if ov > bo:
+            best, bo = i, ov
+    if best is not None:
+        return best
+    near, nd = None, 1e9
+    for i, b in enumerate(bs):
+        d = min(abs(b[0] - y2), abs(b[1] - y))
+        if d < nd:
+            near, nd = i, d
+    return near if nd <= 30 else None
+
+
+def _par_mask(png, tmp):
+    """magick -> pgm -> pnmio: 41x faster into a mask than png16m
+    (out/682). Falls back to the PNG route, with a note, when magick is
+    not installed."""
+    if shutil.which("magick"):
+        pgm = tmp / "p.pgm"
+        r = subprocess.run(["magick", str(png), "-colorspace", "Gray",
+                            "-depth", "8", str(pgm)], capture_output=True)
+        if r.returncode == 0:
+            return pnm_load_mask(str(pgm), dpi=400)
+    return load_mask(str(png))
+
+
+def m_paragraphs(root, n, rng, indent=(1.0, 3.0), gap=0.3, lists=False,
+                 doc=None):
+    """U14 premise: is a paragraph boundary in the ink?
+
+    GOLD IS THE AUTHOR'S OWN `\\par` STRUCTURE, read from the LaTeX
+    source beside the PDF -- not another tool's opinion. It is placed on
+    the page through the reader's text, and that join is measured first:
+    a gold paragraph that cannot be located is reported, never dropped
+    in silence.
+
+    Two channels, both from ink alone and both in units of the page's own
+    median band height:
+
+        INDENT  the band's leftmost ink sits a window's distance right of
+                the body margin. A window, not a floor: a centred display
+                is indented too, by much more.
+        GAP     the band sits further below its predecessor than the
+                page's median pitch.
+
+    The split rule and the filter are arguments, not constants: --lists
+    decides whether list items count as paragraphs, --par-indent and
+    --par-gap are the thresholds.
+    """
+    from tools.formulafind import frame_rect, page_frames    # noqa: E402
+
+    docs = [d for d in sorted(root.iterdir())
+            if d.is_dir() and (d / f"{d.name}.tex.zip").exists()
+            and (d / f"{d.name}.lines.json").exists()
+            and (d / "inspect" / "pages").is_dir()]
+    if doc:
+        docs = [d for d in docs if d.name.startswith(doc)]
+    if n and n < len(docs):
+        docs = sorted(rng.sample(docs, n))
+    if not docs:
+        print("no document carries both a .tex.zip and a rendered page")
+        return
+    lo, hi = indent
+    IND = lambda r: lo <= r["indent"] <= hi          # noqa: E731
+    GAP_ = lambda r: (r["gap"] or 0) >= gap          # noqa: E731
+    BODY = lambda r: r["width"] >= 0.5               # noqa: E731
+    DISP = lambda p: p is not None and (p["indent"] >= 2.0                # noqa: E731
+                                        or p["width"] <= 0.55)
+
+    kept, lost_all, per_doc = Counter(), Counter(), []
+    rows = []
+    for d in docs:
+        gold, found, counts, lost = _par_locate(d, lists)
+        # Read ONCE. This sat inside the page loop and re-parsed a 10 MB
+        # lines.json per page: 597 pages of sigma26 is 6 GB of JSON for
+        # geometry that never changes.
+        reader = _par_reader_lines(d)
+        ncols = _par_columns(reader)
+        bytype = defaultdict(list)
+        for L in reader:
+            bytype[L["page"]].append(L)
+        kept.update(counts)
+        lost_all.update(lost)
+        frames, refused = page_frames(d.parent, d.name)
+        bypage = defaultdict(list)
+        for f in found:
+            bypage[f["page"]].append(f)
+        drows, npages = [], 0
+        for pno in sorted(bypage):
+            png = d / "inspect" / "pages" / f"p{pno}.png"
+            fr = frames.get(pno)
+            if not (png.exists() and fr):
+                continue
+            with tempfile.TemporaryDirectory() as td:
+                m = _par_mask(png, pathlib.Path(td))
+            bs = _par_bands(m)
+            fs = _par_features(bs)
+            if fs is None:
+                continue
+            npages += 1
+            goldset = set()
+            for f in bypage[pno]:
+                x, y, w, h = frame_rect({"top_left_x": f["x"],
+                                         "top_left_y": f["y"],
+                                         "width": 1, "height": f["h"]}, fr)
+                i = _par_band_at(bs, y, y + h)
+                if i is not None:
+                    goldset.add(i)
+            types = defaultdict(set)
+            for L in bytype.get(pno, ()):
+                x, y, w, h = frame_rect({"top_left_x": L["x"],
+                                         "top_left_y": L["y"],
+                                         "width": 1, "height": L["h"]}, fr)
+                j = _par_band_at(bs, y, y + h)
+                if j is not None:
+                    types[j].add(L["type"])
+            for r in fs:
+                r.update(doc=d.name, page=pno, cols=ncols,
+                         gold=r["i"] in goldset,
+                         types=sorted(types.get(r["i"], ())),
+                         prev=fs[r["i"] - 1] if r["i"] else None)
+                drows.append(r)
+        rows += drows
+        g = [r for r in drows if r["gold"]]
+        hit = sum(1 for r in g if (IND(r) or GAP_(r)) and BODY(r))
+        per_doc.append((d.name + ("  [2-col]" if ncols == 2 else ""),
+                        len(gold), len(found), len(g), npages,
+                        hit, sum(1 for r in drows
+                                 if (IND(r) or GAP_(r)) and BODY(r))))
+
+    g = [r for r in rows if r["gold"]]
+    other = [r for r in rows if not r["gold"]]
+    prose = lambda r: bool(r["types"]) and set(r["types"]) <= {"text",        # noqa: E731
+                                                              "list_item"}
+    print(f"population: {len(docs)} documents, "
+          f"{sum(d[4] for d in per_doc)} pages, {len(rows)} ink bands, "
+          f"{len(g)} located gold boundaries ({100*len(g)/max(1,len(rows)):.1f}% "
+          f"of bands)")
+    print(f"\nthe filter, on the author's source:")
+    for k, v in kept.most_common():
+        if k.startswith("spanned:"):
+            continue
+        print(f"  {v:>6}  {k}")
+    print(f"  {sum(v for k, v in kept.items() if k.startswith('spanned:')):>6}"
+          f"  display environments spanned (NOT breaks)")
+    print(f"\nlocating the gold on the page -- "
+          f"{sum(d[2] for d in per_doc)} of {sum(d[1] for d in per_doc)} "
+          f"({100*sum(d[2] for d in per_doc)/max(1,sum(d[1] for d in per_doc)):.1f}%):")
+    for k, v in lost_all.most_common():
+        print(f"  {v:>6}  lost: {k}")
+
+    def row(name, pred, pop):
+        G = [r for r in g if pop(r)]
+        N = [r for r in other if pop(r)]
+        tp = sum(1 for r in G if pred(r))
+        fp = sum(1 for r in N if pred(r))
+        rec = tp / max(1, len(G))
+        pre = tp / max(1, tp + fp)
+        print(f"  {name:<46} recall {rec:6.1%} precision {pre:6.1%} "
+              f"F1 {2*pre*rec/max(1e-9, pre+rec):6.1%}")
+
+    allb = lambda r: True                                     # noqa: E731
+    one = lambda r: prose(r) and r["cols"] == 1               # noqa: E731
+    two = lambda r: prose(r) and r["cols"] == 2               # noqa: E731
+    pops = [("every ink band", allb),
+            ("bands the reader types as prose", prose)]
+    if any(r["cols"] == 2 for r in rows) and any(r["cols"] == 1 for r in rows):
+        pops += [("prose bands of SINGLE-column documents", one),
+                 ("prose bands of TWO-column documents", two)]
+    for popname, pop in pops:
+        print(f"\nchannels, over {popname}:")
+        row("indent in [%.1f, %.1f]" % (lo, hi), lambda r: IND(r) and BODY(r), pop)
+        row("gap >= %.1f line heights" % gap, lambda r: GAP_(r) and BODY(r), pop)
+        row("indent OR gap", lambda r: (IND(r) or GAP_(r)) and BODY(r), pop)
+        row("indent OR (gap, predecessor not a display)",
+            lambda r: (IND(r) or (GAP_(r) and not DISP(r["prev"]))) and BODY(r),
+            pop)
+
+    after = [r for r in rows if DISP(r["prev"]) and GAP_(r) and not IND(r)
+             and BODY(r) and prose(r)]
+    print(f"\nTHE RESIDUAL -- a gap after a display, with no indent, on a "
+          f"prose band:\n  {sum(1 for r in after if r['gold'])} are a "
+          f"paragraph boundary, {sum(1 for r in after if not r['gold'])} are "
+          f"the same paragraph continuing.\n  Ink geometry does not "
+          f"separate them; nothing in the page says which.")
+
+    print(f"\nunconfirmed predictions, by what the reader says is in the band:")
+    fp = [r for r in other if (IND(r) or GAP_(r)) and BODY(r)]
+    for k, v in Counter("+".join(r["types"]) or "(no reader line)"
+                        for r in fp).most_common(8):
+        print(f"  {v:>6}  {k}")
+
+    print(f"\n{'document':<16}{'gold':>6}{'located':>9}{'in band':>9}"
+          f"{'pages':>7}{'recall':>9}{'predicted':>11}")
+    for name, ngold, nfound, nband, npages, hit, pred in per_doc:
+        print(f"{name:<16}{ngold:>6}{nfound:>9}{nband:>9}{npages:>7}"
+              f"{hit/max(1,nband):>8.1%}{pred:>11}")
+
+
 MEASUREMENTS = {
     "banding": (m_banding, 3),
     "border": (m_border, 10),
@@ -3762,10 +4245,19 @@ MEASUREMENTS = {
     "premise": (m_premise, 3),
     "contraction": (m_contraction, 3),
     "rotation": (m_rotation, 158),
+    "paragraphs": (m_paragraphs, 0),
 }
 
 
-def main():
+def build_parser():
+    """The one definition of the command line.
+
+    Separate from `main` so a test can ask the REAL parser what flags
+    exist. The provenance line (A3a) is only reproducible if every flag
+    appears in it, and the test that checks the round trip carried its
+    own hand-written list of flags -- which silently stopped covering
+    `paragraphs`' four the moment they were added.
+    """
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("what", nargs="+",
                     choices=sorted(MEASUREMENTS) + ["all"])
@@ -3793,7 +4285,9 @@ def main():
                          "before counting. 0 = off, which is the measured "
                          "answer -- quantising destroys the classes.")
     ap.add_argument("--doc", default=None,
-                    help="boxes/border only: measure one named corpus document, "
+                    help="boxes/border/paragraphs only: measure one named corpus "
+                         "document (paragraphs: every document whose name "
+                         "starts with this), "
                          "all of its pages, instead of a random sample.")
     ap.add_argument("--fill-max", type=float, default=0.10,
                     help="boxes only: how hollow a component must be to "
@@ -3824,12 +4318,30 @@ def main():
     ap.add_argument("--first-page", type=int, default=0,
                     help="substitutions only: skip pages numbered below "
                          "this. Front matter is not in the transcription.")
+    ap.add_argument("--par-indent-lo", type=float, default=1.0,
+                    help="paragraphs only: least indent counted as a "
+                         "paragraph indent, in median band heights.")
+    ap.add_argument("--par-indent-hi", type=float, default=3.0,
+                    help="paragraphs only: most indent counted as one. A "
+                         "WINDOW, not a floor -- a centred display is "
+                         "indented too, by much more.")
+    ap.add_argument("--par-gap", type=float, default=0.3,
+                    help="paragraphs only: least extra leading counted as "
+                         "a paragraph gap, in median band heights.")
+    ap.add_argument("--par-lists", action="store_true",
+                    help="paragraphs only: count list items as paragraphs. "
+                         "The split rule is an argument because it changes "
+                         "the answer.")
     ap.add_argument("--split", default="document",
                     choices=("component", "page", "document", "font"),
                     help="classify only: how train and test are divided. "
                          "The split rule IS the experiment -- see the "
                          "U13 premise check in docs/units.md.")
-    args = ap.parse_args()
+    return ap
+
+
+def main():
+    args = build_parser().parse_args()
 
     root = args.corpus.expanduser()
     if not root.is_dir():
@@ -3876,6 +4388,10 @@ def main():
             fn(root, args.n or default_n, random.Random(args.seed),
                truth_tex=args.truth_tex, ocr_dir=args.ocr_dir,
                first_page=args.first_page)
+        elif name == "paragraphs":
+            fn(root, args.n or default_n, random.Random(args.seed),
+               indent=(args.par_indent_lo, args.par_indent_hi),
+               gap=args.par_gap, lists=args.par_lists, doc=args.doc)
         elif name == "classify":
             fn(root, args.n or default_n, random.Random(args.seed),
                split=args.split)

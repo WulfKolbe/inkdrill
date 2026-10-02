@@ -3038,6 +3038,81 @@ the producer's own table boundaries could separate them and this tool does
 not see those.
 
 
+### U14 paragraph boundaries from ink — measured 2026-10-02, `measure.py paragraphs`
+
+Handed over by pdfdrill, whose reader infers 132 paragraphs on arXiv
+1102.1889 against the author's 332. The question here is narrower and
+prior: **is a paragraph boundary in the ink?** Gold is the author's own
+`\par` structure, read from the `.tex` beside the PDF and placed on the
+page through the reader's words; the join is measured, not assumed.
+
+**Population.** 20 SIGMA documents, 531 pages carrying at least one
+located boundary, 22,100 ink bands, 2,954 gold paragraphs of which
+**2,247 (76.2%) could be located**. Split rule: list environments do not
+count (`--par-lists` flips it); front matter (190) and paragraphs under
+40 characters (294) are dropped and printed. Both channels are in units
+of the page's own median band height, so a dpi change cannot retune
+them.
+
+| channel | recall | precision |
+|---|---|---|
+| indent in [1.0, 3.0] band heights | 52.4% | 56.2% |
+| gap ≥ 0.3 band heights | 54.0% | 37.5% |
+| indent OR gap | **86.5%** | **42.9%** |
+| indent OR (gap, not after a display) | 66.4% | 51.1% |
+
+over the bands the reader types as prose; 85.8% / 31.7% unrestricted.
+The reader restricts the population and breaks the residual down — it is
+never a channel.
+
+**The residual, which is the finding.** A gap below a display with no
+indent: **421 are a paragraph boundary, 1,081 are the same paragraph
+continuing.** Ink cannot separate them. The gap belongs to the display,
+not to the break, and LaTeX sets no indent in exactly this case — nor
+after a heading, nor under `\noindent`. 1,586 displays were spanned in
+these twenty documents. That is where under-segmentation comes from, and
+it is not a threshold waiting to be tuned.
+
+**Three instrument defects preceded any of these numbers**, each found
+by the measurement disagreeing with the page rather than by a test, and
+two of them produced the SAME false conclusion — "paragraph starts are
+not indented", which is not true of LaTeX:
+
+1. the gold broke a paragraph wherever a display OPENED (−17% of gold
+   once fixed; a display is not a break);
+2. anchors were the paragraph's first 40 characters, which contain
+   `\cite`/`\ref`/environment names the page prints differently —
+   27% located, 90% once the anchor became the first gap-free run;
+3. a boundary was matched to a band by the reader's box TOP, which
+   includes the leading, so it landed on the line above. Median indent
+   at a gold boundary 0.02 → **1.32** band heights.
+
+Precision is a floor, not an estimate: 23.8% of gold could not be
+located, and a rule hit on an unlocatable boundary counts against it.
+
+**The transfer check, 20 documents sampled from the 1,291 in the library
+that carry both source and render (`--n 20 --seed 683`).** The union
+transfers; the channels do not:
+
+| channel | SIGMA (20) | mixed, 1-column (13) |
+|---|---|---|
+| indent | 52.4% / 56.2% | 27.7% / 46.2% |
+| gap | 54.0% / 37.5% | 70.0% / 63.8% |
+| indent OR gap | **86.5% / 42.9%** | **88.2% / 57.9%** |
+
+SIGMA indents and barely spaces; the mixed sample spaces and barely
+indents. A rule tuned on either channel alone would have been retuned by
+the next publisher and would have looked well-founded both times.
+
+**Two columns break the band model, and it does not degrade
+gracefully.** Recall separates with no overlap — single column 13
+documents, median 92.9% (75.0–100); two column 7 documents, median
+**18.8%** (7.7–25.9). `_par_bands` takes a row profile across the whole
+page, so on two columns a band spans both and is not a line. The
+measurement now reports the column class per document and splits the
+channel table by it. That figure measures THE INSTRUMENT, not the page.
+
+
 ## 4. Assumptions that remain unverified
 
 1. **Reeb signatures discriminate math symbols.** ~~Argued structurally,
@@ -3124,9 +3199,16 @@ not see those.
    largest. What *is* the constraint is the serial stitch — see U7 stitch
    cost in §3. The remaining unverified half is whether the scheduler
    reaches full utilisation, which is assumption 6.
-10. **`inkdrill` is the right package name.** Cosmetic, but the cost of
+10. **A row profile is a text line.** True on one column and FALSE on
+    two, measured 2026-10-02: a band spans both columns, and paragraph
+    recall is median 92.9% on single-column documents against 18.8% on
+    two-column ones, with no overlap between the groups. Everything in
+    this package that works from `_par_bands`-style row profiles
+    inherits that limit. A column-aware band has not been built or
+    measured.
+11. **`inkdrill` is the right package name.** Cosmetic, but the cost of
     changing it rises with every unit.
-11. **The corpus is entirely ghostscript `png16m`.** 400 files sampled
+12. **The corpus is entirely ghostscript `png16m`.** 400 files sampled
     from the full 18,494-page library, IHDR `(8, 2, 0, 0, 0)` × 400 — zero
     variation. The unit fails loudly rather than mis-decoding if that is
     wrong, so the risk is a refused file rather than a wrong answer.
