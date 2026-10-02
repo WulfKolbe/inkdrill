@@ -72,6 +72,19 @@ def collect(marks_dir: pathlib.Path, library: pathlib.Path):
                        for k, v in (("formula", "formula-report.html"),
                                     ("compare", "compare.html"),
                                     ("inspect", f"{name}.inspect.html"))}
+        mf = marks_dir / name / "marks.json"
+        counts = {}
+        if mf.exists():
+            try:
+                counts = (json.loads(mf.read_text()) or {}).get("counts") or {}
+            except ValueError:
+                counts = {}
+        nm = counts.get("not_measured") or {}
+        row["not_placed"] = sum(nm.values()) if isinstance(nm, dict) else (nm or 0)
+        row["not_placed_why"] = "; ".join(f"{v} {k}" for k, v in nm.items()) \
+            if isinstance(nm, dict) else ""
+        row["measured"] = counts.get("measured")
+        row["rows_total"] = counts.get("evidence_rows")
         pages = doc / "inspect" / "pages"
         row["pages_dir"] = pages if pages.is_dir() else None
         row["pages"] = len(list(pages.glob("*.png"))) if pages.is_dir() else 0
@@ -100,7 +113,8 @@ def render(rows):
                             for i, p in enumerate(ps, 1))
         cells.append(f"""<tr>
  <td class="doc">{html.escape(r['document'])}{note}</td>
- <td class="n">{r['marked']}</td>
+ <td class="n">{r['marked']}<div class="w">of {r['rows_total'] or '?'} rows</div></td>
+ <td class="n">{r['not_placed'] or '—'}{f'<div class="w" title="{html.escape(r["not_placed_why"])}">unplaced</div>' if r['not_placed'] else ''}</td>
  <td>{' '.join(kind(k) for k in KINDS)}</td>
  <td>{link(r['report'],'report')} {link(r['residuals'],'residuals')}</td>
  <td>{' '.join(link(v, k) for k, v in r['html'].items())}</td>
@@ -147,7 +161,7 @@ def render(rows):
 Links open the local files.</p>
 {banner}
 <table>
-<tr><th>document</th><th>marked</th><th>evidence PDFs</th><th>report</th>
+<tr><th>document</th><th>marked</th><th>not placed</th><th>evidence PDFs</th><th>report</th>
     <th>html</th><th>pages</th><th>marks in the PDF</th></tr>
 {"".join(cells)}
 </table>
