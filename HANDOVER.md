@@ -198,6 +198,22 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+27. **A PLAUSIBLE AGREEMENT is its own failure class** (out/686 §5).
+    I concluded from `counts.not_measured` that marks.json carried no
+    per-id reasons and needed a schema change. The ids were in the same
+    file one level up, in all 39 sets, 237 rows — and pdfdrill AGREED
+    while holding the disproof: they had printed both fields that
+    morning and built their reader against the per-id one, replying
+    "my reader takes `{id: reason}` already" in the message that
+    accepted the premise.
+    A plausible number is caught by looking at the artifact; a
+    plausible agreement is not, because both sides see a real symptom
+    and the stated cause fits it. **A check written from the same
+    misreading is not a second opinion** — mine read the same summary
+    field and would have agreed forever. Nearly cost a 39-file
+    re-emission against evidence already built from it; the correct
+    number of files to touch was zero.
+
 26. **A coverage check is a LOWER bound: it cannot see the failure
     that makes coverage look perfect** (out/685, `PAR_SPLIT_FLOOR`).
     683 added "how far down the source did the gold reach", flagged

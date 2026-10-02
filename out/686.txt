@@ -113,8 +113,43 @@ WHAT THIS DOES NOT SAY
   * It would have passed both documents that compiled with errors
     (a lone backslash eating a cell's closing dollar; microtype
     refusing xelatex), because by its own measure they were fine.
-  * `rows` in marks.json carries only MEASURED rows, so a row the
-    instrument declined to place is a count without an id. Any
-    consumer asking about that id truthfully finds nothing. The fix is
-    a schema change, deferred until the sigma26 batch finishes rather
-    than leaving half the corpus in each format.
+  * `rows` in marks.json carries only MEASURED rows. A consumer asking
+    about a declined id finds nothing THERE -- but the ids have always
+    been in a top-level `not_measured` mapping of {id: reason}, in all
+    39 mark sets, 237 rows, id count equal to `counts.not_measured` in
+    every one. **CORRECTED 2026-10-02**: this file first said the fix
+    was a schema change. There was nothing to fix. See §5.
+
+====================================================================
+5. A FIFTH FAILURE, ADDED AFTER THE FACT: A PLAUSIBLE AGREEMENT
+====================================================================
+
+The four failures above are all a plausible NUMBER or a plausible
+SILENCE, caught by reading the artifact. This one is neither, and no
+check on either side could have caught it.
+
+I read `counts.not_measured` -- the summary by reason -- saw a count
+with no ids, and concluded the ids were absent and my emitter needed a
+schema change. The ids were in the same file, one level up, in every
+mark set, and had been since the format existed.
+
+pdfdrill agreed. They were holding the disproof: they had printed BOTH
+fields side by side that morning, built their reader against the per-id
+one, and replied "my reader takes `not_measured` as {id: reason}
+already" -- which IS the refutation -- in the same message that accepted
+the premise, treating the current form as a future one.
+
+So: one side read a count and inferred an absence; the other read the
+mapping, USED it, and still accepted it was missing. The artefact
+contradicted both of us throughout.
+
+WHAT MAKES IT ITS OWN CLASS. A plausible number is caught by looking at
+the thing. A plausible agreement is not, because both parties are
+looking at a real symptom, the stated cause fits it, and agreeing costs
+nothing in the moment. The check I had written that morning reads the
+SAME summary field -- a check written from the misreading cannot
+contradict it. A second implementation is only a second opinion when it
+disagrees.
+
+The cost was nearly 39 files re-emitted against evidence already built
+from them. The correct number of files to touch was zero.
