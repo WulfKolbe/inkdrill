@@ -1,0 +1,120 @@
+686 - the artifact, not the date: a delivery check and four failures it was built from
+=====================================================================================
+
+The user asked to inspect the evidence. I reported 20 of 21 documents
+ready, having checked that each evidence PDF was NEWER than the marks
+it should contain. Every one of those 20 contained no marks at all.
+
+This records the four failures behind that sentence, the check that now
+holds them, and the two defects I introduced while writing it.
+
+====================================================================
+1. WHAT A DATE CANNOT SEE
+====================================================================
+
+pdfdrill's evidence build takes the marks as an OFF-BY-DEFAULT option.
+A build without them succeeds, reports success, is newer than the
+marks, and is byte-identical to one produced before marks existed. So
+"rebuilt" and "contains the marks" are different claims with the same
+signature from outside.
+
+    evidence newer than marks       20 of 21     <- what I checked
+    evidence containing the marks    0 of 21     <- what I claimed
+
+The tell is which crop directory the .tex pulls in. Confirmed by eye on
+0902.0431_FO0001: `report-crops-b` is the bare line of text,
+`report-crops-marks` has the red box around $A_n, B_n, C_n, D_n$. The
+MARKED crops existed on disk for all 21 documents -- 9,966 of them,
+generated 09-17 and referenced by nothing.
+
+THREE MORE, ALL THE SAME SHAPE:
+
+  * penev_A had never been delivered. The 09-16 delivery copied
+    marks.json into 20 of 21 document folders and missed one. A build
+    with no marks.json does not fail; it quietly produces evidence
+    without marks, dated after the marks it does not have.
+  * index.json carried the counts of the emission that wrote it, while
+    15 of 21 files had been edited by eye verdict since: a published
+    8,408 against a true 8,256, one document off by 94.
+  * 116 rows of Lie Groups were reported as "no row of this id in the
+    file" and read by BOTH sessions as a moved row set. They are in
+    `counts.not_measured` with a reason. 2,854 measured + 116 not
+    placed = 2,970 = the build's row count exactly. One step from an
+    hour of CPU re-measuring a correct document.
+
+====================================================================
+2. THE CHECK
+====================================================================
+
+`formulamarks.py verify` -- it reads the artifact and never a date.
+
+    FAIL   evidence built WITHOUT the marks (naming the crop dir it used)
+    FAIL   not delivered to the library
+    FAIL   delivered copy differs IN CONTENT
+    FAIL   no evidence .tex at all
+    warn   index count disagrees with the file
+    warn   evidence draws a different number of marks than the file carries
+    warn   marked crops on disk but unused -- a rebuild, not a re-measure
+    warn   two evidence trees, naming the stale one
+    warn   delivered copy emitted by a different inkdrill build, marks identical
+
+Exit 1 if any document fails. 18 tests, one fixture per class INCLUDING
+the clean case, both library layouts, and a split set.
+
+PROVENANCE IS NOT CONTENT. The first version failed three documents
+whose delivered copies differed only in `inkdrill`, the emitting commit,
+with identical marks -- which would have sent someone re-delivering
+three documents to change one hex string. `measured_against` stays
+content: it names the pdfdrill build the marks were measured against.
+
+A SPLIT SET IS STILL ONE SET. The 22.3 MB Cardona against a 20 MB
+publishing ceiling, already floored at 0.60/q72, is split rather than
+re-encoded, so the check globs `evidence-formula*.tex` and SUMS marks
+across parts. A part covering a stretch of unmarked rows carries none
+legitimately; requiring marks in every part would fail a correct split.
+
+====================================================================
+3. TWO DEFECTS I WROTE WHILE WRITING THE CHECK
+====================================================================
+
+BOTH ARE THE CHECK INVERTED, which is the failure mode that matters for
+a checker: it does not go quiet, it accuses the correct artifact.
+
+  * `_evidence_tex` preferred the NESTED layout by position. pdfdrill's
+    rebuild writes FLAT beside a stale nested copy from 09-17, so a
+    fixed preference reads the stale one and reports a correct rebuild
+    as "built without marks". Now newest by mtime, with a warning
+    naming the older.
+  * The split-set version then dropped the stale half as `both[1:]` --
+    by POSITION again. `both` is in layout order, so that expression
+    means "the flat one", which after a rebuild is the NEW one. Same
+    inversion, reintroduced an hour later, in the fix for a different
+    thing. Now by age.
+
+The suite catches the second; I had spot-checked before running it,
+which is the actual lesson. Confirmed by re-introducing the mutation:
+1 failure.
+
+====================================================================
+4. WHAT IT READS NOW, ON THE REAL TREE
+====================================================================
+
+    before          1 of 21 delivered AND built with their marks
+    after pdfdrill's rebuilds  22 of 23, 8,355 marks
+    unplaced rows   181 across 8 documents, now shown with their reason
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * The check tests that the marks are IN the PDF. It says nothing
+    about whether they are in the RIGHT PLACE -- that is an eye verdict,
+    and six drawn marks of sigma26-078 were checked that way.
+  * It would have passed both documents that compiled with errors
+    (a lone backslash eating a cell's closing dollar; microtype
+    refusing xelatex), because by its own measure they were fine.
+  * `rows` in marks.json carries only MEASURED rows, so a row the
+    instrument declined to place is a count without an id. Any
+    consumer asking about that id truthfully finds nothing. The fix is
+    a schema change, deferred until the sigma26 batch finishes rather
+    than leaving half the corpus in each format.
