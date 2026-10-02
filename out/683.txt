@@ -199,3 +199,40 @@ WHAT SECTION 4 DOES NOT SAY
   * `--par-lists False` throughout: list items are not paragraphs here.
     The flag exists because that choice changes the answer and a reader
     must be able to change it back.
+
+====================================================================
+5. WHAT WOULD FIX THE TWO-COLUMN CASE, MEASURED
+====================================================================
+
+Assumption 10 says a row profile is a text line and that this is false
+on two columns. The complementary profile says where to cut. Longest
+interior blank run of the VERTICAL ink profile, as a fraction of the
+inked body width, over 30 pages whose column class was labelled
+independently (by where the reader's prose lines start):
+
+    1 column, 16 pages   0.00 on every one -- not small, exactly zero
+    2 columns, 14 pages  0.00 0.00 0.07 0.50 0.53 1.18 1.77
+                         4.21 4.35 4.39 4.41 4.41 4.41 4.45
+
+The populations do not touch, so a cut has a whole gap to sit in rather
+than an edge to balance on. Two things it must not be:
+
+  * NOT 4.5%. That is the value a clean two-column page SHOWS, and it
+    is the maximum here -- a cut there is above the entire class it
+    exists to detect. The middle of the gap is about 2%.
+  * NOT per document. 4 of the 14 two-column pages have NO gutter and
+    three more are under 1.8%, because a figure or table spans the
+    break. On those pages banding the whole width is correct, and a
+    document-level answer is wrong exactly where it matters.
+
+This is pdfdrill's constant (their 848), re-measured here on 30 pages
+against their two, because inkdrill holds the renders and an
+independent label. The column-aware band is NOT built in inkdrill;
+what this records is that the signal is there and where the cut goes.
+
+A CORPUS FINDING, not a result: several library documents carry
+byte-identical duplicate renders under both spellings -- `p5.png` AND
+`page-0005.png` (bommes_zimmer 3+3, 2306.04271 9+9, p1713-suchanek
+2+2, Cat2Type 3+3; the sigma26 shelf is clean). Anything addressing a
+page by name is unaffected; anything globbing `*.png` double-counts,
+and the first cut of the measurement above did until it de-duplicated.

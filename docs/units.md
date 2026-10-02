@@ -3204,8 +3204,13 @@ channel table by it. That figure measures THE INSTRUMENT, not the page.
     recall is median 92.9% on single-column documents against 18.8% on
     two-column ones, with no overlap between the groups. Everything in
     this package that works from `_par_bands`-style row profiles
-    inherits that limit. A column-aware band has not been built or
-    measured.
+    inherits that limit. A column-aware band has not been built --- but
+    the signal for one IS measured (out/683 §5): the longest interior
+    blank run of the VERTICAL profile is **0.00% of body width on all 16
+    single-column pages** and 4.21-4.45% on a clean two-column page, with
+    no overlap. The cut belongs near 2%, in the middle of that gap, and
+    must be PER PAGE: 4 of 14 two-column pages have no gutter at all
+    because a figure spans the break.
 11. **`inkdrill` is the right package name.** Cosmetic, but the cost of
     changing it rises with every unit.
 12. **The corpus is entirely ghostscript `png16m`.** 400 files sampled
