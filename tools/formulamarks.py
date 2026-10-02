@@ -470,13 +470,31 @@ MARKED_CROPS = "report-crops-marks"
 
 
 def _evidence_tex(doc: pathlib.Path, stem: str = "evidence-formula"):
-    """Both layouts in the library: `<doc>/<stem>/<stem>.tex` and the flat
-    `<doc>/<stem>.tex`. Assuming one of them reported four documents as
-    missing evidence when it was there all along."""
-    for p in (doc / stem / f"{stem}.tex", doc / f"{stem}.tex"):
-        if p.exists():
-            return p
-    return None
+    """The evidence .tex, NEWEST FIRST when both layouts exist.
+
+    Two layouts are in the library -- `<doc>/<stem>/<stem>.tex` and the
+    flat `<doc>/<stem>.tex` -- and assuming only the first had earlier
+    reported four documents as missing evidence that was there.
+
+    Order matters now, not just existence. pdfdrill's `ensure_doc_folder`
+    had promoted 17 of 21 documents' evidence into a nested folder; today's
+    build writes FLAT, so a rebuild leaves the stale nested copy in place
+    beside the fresh one. A fixed preference reads whichever the author of
+    the preference happened to pick, which for the nested one means
+    reporting a correct rebuild as "built without marks". Newest wins, and
+    the caller is told both exist.
+    """
+    found = [p for p in (doc / stem / f"{stem}.tex", doc / f"{stem}.tex")
+             if p.exists()]
+    if not found:
+        return None
+    return max(found, key=lambda p: p.stat().st_mtime)
+
+
+def _evidence_both(doc: pathlib.Path, stem: str = "evidence-formula"):
+    """Both copies, when the nested and flat layouts coexist."""
+    return [p for p in (doc / stem / f"{stem}.tex", doc / f"{stem}.tex")
+            if p.exists()]
 
 
 def _marks_of(path: pathlib.Path):
@@ -532,6 +550,14 @@ def verify_document(name, marks_dir: pathlib.Path, library: pathlib.Path,
                                f"(marked {dm} against {row['marked']})")
 
     doc = library / name
+    both = _evidence_both(doc)
+    if len(both) > 1:
+        newest = max(both, key=lambda p: p.stat().st_mtime)
+        stale = [p for p in both if p != newest]
+        row["warn"].append(
+            f"two evidence trees: reading {newest.relative_to(doc)}, "
+            f"{', '.join(str(p.relative_to(doc)) for p in stale)} is older "
+            f"and will be read by anything that prefers a fixed layout")
     tex = _evidence_tex(doc)
     if tex is None:
         row["fail"].append("no evidence-formula.tex")

@@ -128,6 +128,28 @@ class TM_1_Verify(unittest.TestCase):
         (self.lib / "doc").mkdir(parents=True)
         self.assertIn("no local marks.json", self.row()["fail"])
 
+    def test_when_both_layouts_exist_the_NEWER_is_read(self):
+        """pdfdrill promoted 17 of 21 documents' evidence into a nested
+        folder and today's build writes flat, so a rebuild leaves a stale
+        nested copy beside the fresh one. A fixed preference reports a
+        correct rebuild as 'built without marks'."""
+        import os, time
+        doc = self.build(crops_dir="report-crops-b")          # nested, stale
+        flat = doc / "evidence-formula.tex"
+        flat.write_text("\\includegraphics{%s/doc_FO0000.jpg}\n" % MARKED)
+        nested = doc / "evidence-formula" / "evidence-formula.tex"
+        old = time.time() - 3600
+        os.utime(nested, (old, old))
+        r = self.row()
+        self.assertEqual(r["fail"], [])                       # the flat one wins
+        self.assertEqual(r["embedded"], 1)
+        self.assertTrue(any("two evidence trees" in w for w in r["warn"]))
+
+    def test_a_single_layout_warns_about_nothing(self):
+        self.build()
+        self.assertFalse(any("two evidence trees" in w
+                             for w in self.row()["warn"]))
+
     # ---- the warnings
     def test_crops_on_disk_say_rebuild_not_remeasure(self):
         self.build(crops_dir="report-crops-b", n_crops=7)
