@@ -1,0 +1,120 @@
+687 - the first mark sets measured against a free reader
+========================================================
+
+Nineteen SIGMA documents, prepared for inspection at the user's
+request. Every mark set in this corpus until today was measured against
+a MathPix reading; these are the first against pdf2mmd, which is free,
+local, and had never carried the formula/marks pipeline.
+
+    18 of 19 measured      13,761 rows      1,973 marks
+    1 refused               sigma26-080, with its reason
+    scale                   0.710 to 0.730, median 0.720
+
+====================================================================
+1. THE SCALE BAND IS THE RESULT
+====================================================================
+
+    pdf2mmd, 18 documents     0.710 - 0.730      a 0.02 band
+    MathPix, 21 documents     0.455 - 0.785      a 0.33 band
+
+pdfdrill predicted it would be tighter, because pdf2mmd derives the
+page box from the PDF while MathPix reports the dimensions of a
+server's raster, which vary per document. The prediction was right and
+the effect is an order of magnitude larger than the argument needed.
+
+It is also usable: a nineteenth SIGMA document voting outside 0.70-0.74
+is now worth looking at BEFORE trusting its marks. That is the whole
+value of a prior -- and 080, the one refusal, voted 0.535.
+
+A PREDICTION THAT WAS WRONG, AND WHY THE WRONG ONE WAS USEFUL. The same
+argument also predicted the scale would be a constant 0.625, the
+inverse of the 1.6 page ratio. It is not, because the voted scale is the
+published CROP's rendering factor, not the page factor -- the 1.6 is
+applied earlier, by `frame_rect`. Two quantities, one name. The pilot
+caught it: six marks drawn on sigma26-078 and looked at, three at 0.99
+and three at 0.62-0.71, all six on the right expression. A 16% scale
+error would have been visible in every one.
+
+====================================================================
+2. 14.3% IS NOT A HIT RATE. THE DENOMINATOR IS THE FINDING
+====================================================================
+
+Why a measured row carries no mark, over all 18 documents:
+
+    7,454   position not unique
+    2,849   too short to carry a position
+    1,082   short expression cut by a rectangle edge
+      383   host region is not a line
+       20   the fit is not a match
+    ------
+   11,788   suppressed, of 13,761 measured (85.7%)
+
+The first three are the same thing: AN EXPRESSION THAT APPEARS IN
+TWENTY PLACES CANNOT BE POINTED AT. `G`, `{}^{g}`, `A_n`, `\sup-` are
+not failures of the instrument or of the reader; they are a property of
+mathematical typesetting.
+
+Take them out and the figure inverts:
+
+    measured                 13,761
+    not pointable            11,385   (83%)
+    POINTABLE                 2,376
+    marked                    1,973 = 83.0% OF POINTABLE, 14.3% of all
+
+So the instrument marks 83% of the rows that can carry a unique
+position. Quoting 14.3% as a quality figure measures the corpus's
+typography, not the tool. (pdfdrill read 54% from the largest class
+alone and got ~31%; the classes are exclusive and sum to the measured
+count, which is what makes 83.0% the right reading.)
+
+====================================================================
+3. THE REFUSAL IS THE PRODUCT: sigma26-080
+====================================================================
+
+829 rows, no marks, and that is the correct output.
+
+    409 of 415 sampled rows rejected for margin below 0.10
+    their fits SCORE 0.87 to 1.00 -- good fits, not unique ones
+    6 rows left to vote a document scale, which landed at 0.535
+
+The odd scale looks like the cause and is not. Measured directly: 60
+rows at the voted 0.535 and at the siblings' 0.72.
+
+    scale 0.535    60 of 60 placed, 1 with margin >= 0.10
+    scale 0.72     60 of 60 placed, 3 with margin >= 0.10
+
+Forcing the right scale rescues two rows of sixty. The scale is
+downstream of having six rows to vote with; the document is a paper
+whose inline maths is single letters. A tool that produced marks here
+would be producing them at random.
+
+====================================================================
+4. ONE DOCUMENT'S ROWS THE PRODUCER DID NOT RENDER
+====================================================================
+
+sigma26-085: 28 unplaced of 226, against 0-9 everywhere else.
+
+       27   not rendered by the producer (no \FitMath)
+        1   not placed (this instrument)
+
+Diagnosed by pdfdrill: 16 are fragments of ONE inline 2x2 matrix whose
+entries sit OUTSIDE `$...$`, so the span split leaves `\left` in one
+span and `\right` in another and each fragment is refused as unbalanced;
+11 have no reading at all. Not fixed, and deliberately not fixed after
+a batch had been measured against the current output.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * One publisher. SIGMA is a maths journal, which is exactly the
+    population where "too short to point at" dominates. The 83%
+    pointable-rate figure is not a general claim.
+  * The marks were checked by eye on TWO documents -- six on
+    sigma26-078 and four each on 076 and 089. 1,973 marks were not
+    individually inspected.
+  * The scale band is 18 documents from one producer on one journal.
+    It is a prior to check against, not a constant.
+  * Nothing here says the readings are RIGHT. A mark says "this
+    expression is at this place on the page", not "this LaTeX is what
+    the author wrote".
