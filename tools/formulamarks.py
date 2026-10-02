@@ -469,6 +469,23 @@ def marks(library, bib, work):
 MARKED_CROPS = "report-crops-marks"
 
 
+def _evidence_parts(doc: pathlib.Path, stem: str = "evidence-formula"):
+    """Every .tex that makes up the evidence set.
+
+    A set is ONE file normally and SEVERAL when it had to be split: a
+    22.3 MB Cardona against a 20 MB publishing ceiling, already floored
+    at scale 0.60/q72, so the only remaining move was to cut it into
+    parts. Anything that reads the evidence by one exact name goes blind
+    the moment that happens, and reports a complete document as having
+    no evidence at all.
+
+    Both layouts, flat and nested, and both spellings -- `evidence-formula.tex`
+    and `evidence-formula-1.tex`.
+    """
+    return sorted(set(list(doc.glob(f"{stem}*.tex"))
+                      + list((doc / stem).glob(f"{stem}*.tex"))))
+
+
 def _evidence_tex(doc: pathlib.Path, stem: str = "evidence-formula"):
     """The evidence .tex, NEWEST FIRST when both layouts exist.
 
@@ -484,15 +501,14 @@ def _evidence_tex(doc: pathlib.Path, stem: str = "evidence-formula"):
     reporting a correct rebuild as "built without marks". Newest wins, and
     the caller is told both exist.
     """
-    found = [p for p in (doc / stem / f"{stem}.tex", doc / f"{stem}.tex")
-             if p.exists()]
+    found = _evidence_parts(doc, stem)
     if not found:
         return None
     return max(found, key=lambda p: p.stat().st_mtime)
 
 
 def _evidence_both(doc: pathlib.Path, stem: str = "evidence-formula"):
-    """Both copies, when the nested and flat layouts coexist."""
+    """The nested and flat copies of the SAME part, when both exist."""
     return [p for p in (doc / stem / f"{stem}.tex", doc / f"{stem}.tex")
             if p.exists()]
 
@@ -521,7 +537,7 @@ def verify_document(name, marks_dir: pathlib.Path, library: pathlib.Path,
     deliv_p = library / name / "marks.json"
     local = _marks_of(local_p) if local_p.exists() else None
     deliv = _marks_of(deliv_p) if deliv_p.exists() else None
-    row = {"document": name, "fail": [], "warn": [],
+    row = {"document": name, "fail": [], "warn": [], "parts": 0,
            "marked": (local or {}).get("counts", {}).get("marked"),
            "delivered": deliv is not None, "embedded": 0, "crops": 0}
 
@@ -558,14 +574,30 @@ def verify_document(name, marks_dir: pathlib.Path, library: pathlib.Path,
             f"two evidence trees: reading {newest.relative_to(doc)}, "
             f"{', '.join(str(p.relative_to(doc)) for p in stale)} is older "
             f"and will be read by anything that prefers a fixed layout")
-    tex = _evidence_tex(doc)
-    if tex is None:
+    # A SPLIT SET IS STILL ONE SET. Marks are summed across the parts:
+    # a part covering a stretch of unmarked rows legitimately carries
+    # none, and requiring each part to have some would fail a correct
+    # split.
+    # Drop the OLDER of a nested/flat pair -- by age, never by position.
+    # `both` is built in layout order, so `both[1:]` is "the flat one",
+    # which after a rebuild is the NEW one: excluding it reads the stale
+    # nested copy and calls a correct rebuild unmarked, which is this
+    # check inverted.
+    stale = set()
+    if len(both) > 1:
+        newest = max(both, key=lambda q: q.stat().st_mtime)
+        stale = {q for q in both if q != newest}
+    parts = [p for p in _evidence_parts(doc) if p not in stale]
+    row["parts"] = len(parts)
+    if not parts:
         row["fail"].append("no evidence-formula.tex")
     else:
-        src = tex.read_text(encoding="utf-8", errors="replace")
-        row["embedded"] = src.count(MARKED_CROPS + "/")
+        used = None
+        for tex in parts:
+            src = tex.read_text(encoding="utf-8", errors="replace")
+            row["embedded"] += src.count(MARKED_CROPS + "/")
+            used = used or re.search(r"\{(report-crops[^/]*)/", src)
         if not row["embedded"]:
-            used = re.search(r"\{(report-crops[^/]*)/", src)
             row["fail"].append(
                 "evidence built WITHOUT the marks"
                 + (f" (it uses {used.group(1)})" if used else ""))

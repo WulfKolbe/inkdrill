@@ -39,10 +39,24 @@ from tools.formulamarks import (MARKED_CROPS, _evidence_both,  # noqa: E402
 KINDS = ("formula", "equation", "image", "table")
 
 
-def _newest(doc: pathlib.Path, stem: str, ext: str):
-    found = [p for p in (doc / stem / f"{stem}.{ext}", doc / f"{stem}.{ext}")
-             if p.exists()]
-    return max(found, key=lambda p: p.stat().st_mtime) if found else None
+def _parts(doc: pathlib.Path, stem: str, ext: str):
+    """Every PDF of one evidence kind, in order.
+
+    A kind is normally one file and SEVERAL when it had to be split to
+    sit under the publishing ceiling. Linking only `<stem>.<ext>` would
+    show a split document as having part one and nothing else.
+    """
+    found = sorted(set(list(doc.glob(f"{stem}*.{ext}"))
+                       + list((doc / stem).glob(f"{stem}*.{ext}"))))
+    flat = {p.name for p in found if p.parent == doc}
+    # drop the nested copy of a part that also exists flat and is newer
+    out = []
+    for p in found:
+        twin = doc / p.name
+        if p.parent != doc and p.name in flat and twin.stat().st_mtime >= p.stat().st_mtime:
+            continue
+        out.append(p)
+    return out
 
 
 def collect(marks_dir: pathlib.Path, library: pathlib.Path):
@@ -51,9 +65,9 @@ def collect(marks_dir: pathlib.Path, library: pathlib.Path):
         name = mf.parent.name
         doc = library / name
         row = verify_document(name, marks_dir, library)
-        row["evidence"] = {k: _newest(doc, f"evidence-{k}", "pdf") for k in KINDS}
-        row["report"] = _newest(doc, "report", "pdf")
-        row["residuals"] = _newest(doc, "residuals", "pdf")
+        row["evidence"] = {k: _parts(doc, f"evidence-{k}", "pdf") for k in KINDS}
+        row["report"] = (_parts(doc, "report", "pdf") or [None])[-1]
+        row["residuals"] = (_parts(doc, "residuals", "pdf") or [None])[-1]
         row["html"] = {k: (doc / v) if (doc / v).exists() else None
                        for k, v in (("formula", "formula-report.html"),
                                     ("compare", "compare.html"),
@@ -76,10 +90,18 @@ def render(rows):
         note = ("" if not r["warn"] else
                 '<div class="w">' + "<br>".join(html.escape(w) for w in r["warn"])
                 + "</div>")
+        def kind(k):
+            ps = r["evidence"][k]
+            if not ps:
+                return '<span class="no">—</span>'
+            if len(ps) == 1:
+                return link(ps[0], k)
+            return " ".join(link(p, f"{k}&nbsp;{i}")
+                            for i, p in enumerate(ps, 1))
         cells.append(f"""<tr>
  <td class="doc">{html.escape(r['document'])}{note}</td>
  <td class="n">{r['marked']}</td>
- <td>{' '.join(link(r['evidence'][k], k) for k in KINDS)}</td>
+ <td>{' '.join(kind(k) for k in KINDS)}</td>
  <td>{link(r['report'],'report')} {link(r['residuals'],'residuals')}</td>
  <td>{' '.join(link(v, k) for k, v in r['html'].items())}</td>
  <td class="n">{link(r['pages_dir'], str(r['pages'])) if r['pages'] else '—'}</td>

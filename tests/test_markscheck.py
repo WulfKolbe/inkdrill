@@ -150,6 +150,41 @@ class TM_1_Verify(unittest.TestCase):
         self.assertFalse(any("two evidence trees" in w
                              for w in self.row()["warn"]))
 
+    def test_a_SPLIT_evidence_set_sums_its_parts(self):
+        """Cardona is 22.3 MB against a 20 MB publishing ceiling and is
+        already floored at scale 0.60/q72, so the user's answer was to
+        split it. Anything reading the evidence by one exact name goes
+        blind the moment that happens and reports a complete document as
+        having no evidence."""
+        doc = self.build(n_refs=2)                       # part 1: 2 marks
+        (doc / "evidence-formula-2.tex").write_text(
+            "".join(f"\\includegraphics{{{MARKED}/doc_FO{i:04d}.jpg}}\n"
+                    for i in (2, 3, 4)))                 # part 2: 3 marks
+        r = self.row()
+        self.assertEqual(r["parts"], 2)
+        self.assertEqual(r["embedded"], 5)
+        self.assertEqual(r["fail"], [])
+
+    def test_a_part_with_no_marks_is_not_a_failure(self):
+        """A part covering a stretch of unmarked rows legitimately
+        carries none; requiring marks in every part would fail a correct
+        split."""
+        doc = self.build(n_refs=3)
+        (doc / "evidence-formula-2.tex").write_text(
+            "\\includegraphics{report-crops/doc_FO0009.jpg}\n")
+        r = self.row()
+        self.assertEqual(r["parts"], 2)
+        self.assertEqual(r["embedded"], 3)
+        self.assertEqual(r["fail"], [])
+
+    def test_a_split_where_NO_part_carries_marks_still_fails(self):
+        doc = self.build(crops_dir="report-crops-b", n_refs=2)
+        (doc / "evidence-formula-2.tex").write_text(
+            "\\includegraphics{report-crops-b/doc_FO0009.jpg}\n")
+        r = self.row()
+        self.assertEqual(r["parts"], 2)
+        self.assertTrue(any("built WITHOUT the marks" in f for f in r["fail"]))
+
     # ---- the warnings
     def test_crops_on_disk_say_rebuild_not_remeasure(self):
         self.build(crops_dir="report-crops-b", n_crops=7)
