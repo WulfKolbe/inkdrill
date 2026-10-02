@@ -33,7 +33,10 @@ MARKED = FM.MARKED_CROPS
 
 def marks_doc(marked=3, inkdrill="aaaaaaaaaaaa", extra=None):
     d = {"bibkey": "doc", "inkdrill": inkdrill,
-         "measured_against": "pdfdrill-1234",
+         # a MAPPING of input -> sha256, as the artifact has it. This
+         # said "pdfdrill-1234" and crashed the first check that read it:
+         # the second fixture-shape defect in this file today.
+         "measured_against": {"evidence rows (id, math)": "abc123"},
          "counts": {"marked": marked, "evidence_rows": 10},
          # "rows", as the real artifact spells it. This fixture said
          # "marks" and nothing noticed until a check read the array:
@@ -209,6 +212,34 @@ class TM_1_Verify(unittest.TestCase):
         r = self.row()
         self.assertEqual(r["fail"], [])
         self.assertEqual(r["not_placed"], 2)
+
+    def test_a_reading_rewritten_after_measurement_fails(self):
+        """`measured_against` names the inputs by hash. A reading
+        rewritten afterwards leaves the mark set looking perfect while
+        every rect points into a page the reader no longer describes."""
+        import hashlib
+        doc = self.build()
+        reading = doc / "doc.lines.json"
+        reading.write_text('{"pages": []}')
+        m = marks_doc()
+        m["measured_against"] = {"doc.lines.json":
+                                 hashlib.sha256(reading.read_bytes()).hexdigest()}
+        (self.marks / "doc" / "marks.json").write_text(json.dumps(m))
+        (doc / "marks.json").write_text(json.dumps(m))
+        self.assertEqual(self.row()["fail"], [])          # unchanged: passes
+        reading.write_text('{"pages": [1]}')              # rewritten
+        self.assertTrue(any("has changed since this mark set was measured" in f
+                            for f in self.row()["fail"]))
+
+    def test_a_non_file_key_in_measured_against_is_skipped(self):
+        """`evidence rows (id, math)` is a digest of content, not a file
+        beside the document; hashing it as a path would fail every set."""
+        doc = self.build()
+        m = marks_doc()
+        m["measured_against"] = {"evidence rows (id, math)": "deadbeef"}
+        (self.marks / "doc" / "marks.json").write_text(json.dumps(m))
+        (doc / "marks.json").write_text(json.dumps(m))
+        self.assertEqual(self.row()["fail"], [])
 
     # ---- the warnings
     def test_crops_on_disk_say_rebuild_not_remeasure(self):

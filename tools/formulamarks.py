@@ -586,7 +586,28 @@ def verify_document(name, marks_dir: pathlib.Path, library: pathlib.Path,
             f"{len(local.get('rows') or [])} measured + {n_nm} not placed "
             f"= {accounted}, against {total} rows")
 
+    # THE INPUTS MUST NOT HAVE MOVED. `measured_against` names the files
+    # this mark set was measured from, by hash. A reading rewritten
+    # afterwards leaves every rect pointing into a page the reader no
+    # longer describes -- and the mark set still looks perfect, because
+    # nothing in it changed. pdfdrill's fix for 2,783 dead links would
+    # have rewritten all 19 sigma26 readings as a side effect; it was
+    # caught by asking, not by noticing afterwards.
     doc = library / name
+    ma = local.get("measured_against")
+    if ma and not isinstance(ma, dict):    # a checker must survive a bad file
+        row["warn"].append(f"measured_against is {type(ma).__name__}, not a "
+                           f"mapping; the inputs cannot be checked")
+        ma = {}
+    for key, want in (ma or {}).items():
+        f = doc / key
+        if not f.exists():                 # non-file keys: the row digest
+            continue
+        got = hashlib.sha256(f.read_bytes()).hexdigest()
+        if got != want:
+            row["fail"].append(f"{key} has changed since this mark set was "
+                               f"measured -- the marks describe an older reading")
+
     both = _evidence_both(doc)
     if len(both) > 1:
         newest = max(both, key=lambda p: p.stat().st_mtime)
