@@ -439,9 +439,168 @@ def marks(library, bib, work):
     return 0
 
 
+
+# --------------------------------------------------------------------------
+# verify: is a set of marks actually DELIVERED, and did the build use them?
+# --------------------------------------------------------------------------
+
+#: Each check below exists because that exact thing failed on 2026-10-02,
+#: and every one of them was invisible to the obvious test. Dates and
+#: timestamps said the set was complete; it was not.
+#:
+#:   not delivered     the 09-16 delivery copied marks.json into 20 of 21
+#:                     document folders and missed penev_A. A build with no
+#:                     marks.json does not fail -- it produces evidence
+#:                     without marks.
+#:   stale delivery    same class, one step on: a delivered copy older than
+#:                     the marks it claims to be.
+#:   built without     pdfdrill's build takes the marks as an OFF-BY-DEFAULT
+#:                     option, so a build without them succeeds, is newer
+#:                     than the marks, and is byte-identical to one from
+#:                     before marks existed. 20 of 21 were in this state and
+#:                     a date-based check called all 20 ready.
+#:   index disagrees   index.json carried the 09-11 emission's counts while
+#:                     15 of 21 files had been edited by eye verdict since:
+#:                     8,408 against a true 8,256.
+#:
+#: The tell in every case is the ARTIFACT, never the date. So this reads
+#: what the build actually references, not when it ran.
+
+MARKED_CROPS = "report-crops-marks"
+
+
+def _evidence_tex(doc: pathlib.Path, stem: str = "evidence-formula"):
+    """Both layouts in the library: `<doc>/<stem>/<stem>.tex` and the flat
+    `<doc>/<stem>.tex`. Assuming one of them reported four documents as
+    missing evidence when it was there all along."""
+    for p in (doc / stem / f"{stem}.tex", doc / f"{stem}.tex"):
+        if p.exists():
+            return p
+    return None
+
+
+def _marks_of(path: pathlib.Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+#: emitted-by fields: they record WHICH BUILD wrote the file, not what it
+#: says. Everything else, `measured_against` included, is content.
+PROVENANCE = ("inkdrill",)
+
+
+def _content(m):
+    return {k: v for k, v in m.items() if k not in PROVENANCE}
+
+
+def verify_document(name, marks_dir: pathlib.Path, library: pathlib.Path,
+                    index=None):
+    """One document's delivery state. Returns a dict; `fail` is the list
+    of conditions that make it NOT delivered."""
+    local_p = marks_dir / name / "marks.json"
+    deliv_p = library / name / "marks.json"
+    local = _marks_of(local_p) if local_p.exists() else None
+    deliv = _marks_of(deliv_p) if deliv_p.exists() else None
+    row = {"document": name, "fail": [], "warn": [],
+           "marked": (local or {}).get("counts", {}).get("marked"),
+           "delivered": deliv is not None, "embedded": 0, "crops": 0}
+
+    if local is None:
+        row["fail"].append("no local marks.json")
+        return row
+    if deliv is None:
+        row["fail"].append("not delivered to the library")
+    elif deliv != local:
+        # PROVENANCE IS NOT CONTENT. Three documents differed only in
+        # `inkdrill`, the commit that emitted the file -- the marks were
+        # identical, so a rebuild from the delivered copy draws exactly
+        # the same boxes. Failing those would have sent someone
+        # re-delivering three documents to change one hex string.
+        # `measured_against` is NOT volatile: it names the pdfdrill build
+        # the marks were measured against, and a disagreement there is a
+        # real one.
+        if _content(deliv) == _content(local):
+            row["warn"].append(
+                f"delivered copy was emitted by a different inkdrill build "
+                f"({deliv.get('inkdrill')} against {local.get('inkdrill')}); "
+                f"the marks themselves are identical")
+        else:
+            dm = deliv.get("counts", {}).get("marked")
+            row["fail"].append(f"delivered copy differs in content "
+                               f"(marked {dm} against {row['marked']})")
+
+    doc = library / name
+    tex = _evidence_tex(doc)
+    if tex is None:
+        row["fail"].append("no evidence-formula.tex")
+    else:
+        src = tex.read_text(encoding="utf-8", errors="replace")
+        row["embedded"] = src.count(MARKED_CROPS + "/")
+        if not row["embedded"]:
+            used = re.search(r"\{(report-crops[^/]*)/", src)
+            row["fail"].append(
+                "evidence built WITHOUT the marks"
+                + (f" (it uses {used.group(1)})" if used else ""))
+
+    crops = doc / MARKED_CROPS
+    row["crops"] = len(list(crops.glob("*.jpg"))) if crops.is_dir() else 0
+    if row["fail"] and row["crops"]:
+        row["warn"].append(f"{row['crops']} marked crops are already on disk "
+                           f"-- this is a rebuild, not a re-measure")
+    if row["embedded"] and row["marked"] and row["embedded"] != row["marked"]:
+        row["warn"].append(f"evidence draws {row['embedded']} marks, the file "
+                           f"carries {row['marked']}")
+    if index is not None:
+        im = (index.get(name) or {}).get("marked")
+        if im is not None and im != row["marked"]:
+            row["warn"].append(f"index says {im}, the file says {row['marked']}")
+    return row
+
+
+def verify(marks_dir: pathlib.Path, library: pathlib.Path):
+    """Every document under `marks_dir` that carries a marks.json."""
+    names = sorted(p.parent.name for p in marks_dir.glob("*/marks.json"))
+    idx_p = marks_dir / "index.json"
+    index = None
+    if idx_p.exists():
+        index = (_marks_of(idx_p) or {}).get("documents")
+    return [verify_document(n, marks_dir, library, index) for n in names]
+
+
+def verify_cmd(marks_dir: pathlib.Path, library: pathlib.Path, as_json=False):
+    rows = verify(marks_dir, library)
+    if as_json:
+        print(json.dumps({"documents": rows,
+                          "delivered": sum(1 for r in rows if not r["fail"]),
+                          "total": len(rows)}, indent=1))
+    else:
+        ok = [r for r in rows if not r["fail"]]
+        print(f"{len(ok)} of {len(rows)} documents delivered AND built with "
+              f"their marks")
+        for r in rows:
+            if not r["fail"] and not r["warn"]:
+                continue
+            print(f"\n  {r['document']}")
+            for f in r["fail"]:
+                print(f"    FAIL  {f}")
+            for w in r["warn"]:
+                print(f"    warn  {w}")
+        if not any(r["fail"] or r["warn"] for r in rows):
+            print("  nothing to report")
+    return 1 if any(r["fail"] for r in rows) else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
+    v = sub.add_parser("verify")
+    v.add_argument("--marks-dir", type=pathlib.Path,
+                   default=pathlib.Path.home() / "inkdrill-marks")
+    v.add_argument("--library", type=pathlib.Path,
+                   default=pathlib.Path.home() / "pdfdrill-library")
+    v.add_argument("--json", action="store_true")
     for name in ("run", "marks", "update"):
         a = sub.add_parser(name)
         a.add_argument("bibkey")
@@ -451,6 +610,8 @@ def main() -> int:
         if name == "run":
             a.add_argument("--jobs", type=int, default=4)
     args = ap.parse_args()
+    if args.cmd == "verify":
+        return verify_cmd(args.marks_dir, args.library, args.json)
     if args.cmd == "run":
         return run(args.library, args.bibkey, args.work, args.jobs)
     if args.cmd == "update":
