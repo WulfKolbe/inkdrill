@@ -198,6 +198,25 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+23. **A reader's geometry is not only its LINES** (out/682). Measuring
+    ink against `lines[].region` alone called a full-page TikZ figure
+    "100% uncovered"; pdf2mmd records it as a page-level `diagram` plus
+    511 `fills`, and six documents' apparent residuals were that blind
+    spot, not the reader's. Any new producer: read its page-level keys
+    before quoting a residual.
+    The sigma26 round (20 documents, 597 pages, a publisher never
+    measured here): pdf2mmd covers 99.99-100% of ink, MathPix 98.46% --
+    and the whole MathPix residual is the journal's header rule and
+    footnote separator, 10,590 px on every page, which only ink finds.
+    **The vocabulary defect worth remembering**: pdf2mmd's `math` meant
+    PROSE while MathPix's means DISPLAY, so 79.2% of inline spans were
+    invisible to the span scanner that skips `math`. pdfdrill fixed it
+    at the export boundary (their 844); re-measured here 79.2% -> 17.7%,
+    the rest being real display maths. A shared field NAME with an
+    inverted meaning is worse than a missing field -- `font_size` had
+    the same shape (points vs 250-dpi pixels).
+    sigma26-075 keeps BOTH readings for comparison.
+
 22. **`nest` is now checked by a third rule: containment** (out/681,
     `tests/_containment.py`). Parent = the innermost region whose
     ENCLOSED set contains it, where enclosed = what a flood of the

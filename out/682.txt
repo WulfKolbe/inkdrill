@@ -1,0 +1,107 @@
+682 - a publisher nobody had measured, a reader nobody had tested: sigma26 and pdf2mmd
+=====================================================================================
+
+20 documents of SIGMA (Symmetry, Integrability and Geometry), 597 pages,
+drilled by pdfdrill to the probe stage only -- PDF, LaTeX source, fonts,
+facts, and no geometry at all. inkdrill needs a reader's opinion to
+cross-check, so this round produced one: pdfdrill's pdf2mmd, run here
+over all 20 (3.5 min), and the pages rendered at 400 dpi (597 pages,
+38 s).
+
+====================================================================
+1. THE READER'S GEOMETRY AGAINST THE INK
+====================================================================
+
+Every line region, page-level `diagram` and `fill` mapped onto the 400
+dpi render through `page_frames` (MathPix px are the CropBox;
+inspect/pages is the MediaBox), then ink counted inside and outside.
+
+    pdf2mmd, 20 documents, 597 pages    99.99-100.00% of ink inside a region
+    MathPix, sigma26-075, 26 pages      98.46%
+
+    0 of 597 pages refused by `page_frames`: pdf2mmd uses MathPix's
+    250 dpi page, so the 1.6 ratio to a 400 dpi render needs no
+    special case.
+
+THE MATHPIX RESIDUAL IS ONE OBJECT, REPEATED. Exactly 10,590 px per
+page, every page:
+
+    y 263-265, 2,521 px wide    the rule under the running head
+    y 3980-3982, 1,009 px wide  the footnote separator
+
+MathPix emits no line for either; pdf2mmd records both, as `fills` read
+from the PDF's vector operators. A publisher's own furniture, invisible
+to the reader that only sees a raster, found by ink alone.
+
+A MISTAKE OF MINE, CORRECTED BEFORE REPORTING. The first pass counted
+only `lines[].region` and called sigma26-082 p20 "100% uncovered". That
+page is a full-page TikZ figure which pdf2mmd records as one `diagram`
+plus 511 `fills` -- page-level keys the measure ignored. Six documents'
+apparent residuals were mine, not the reader's. **A reader's geometry is
+not only its lines.**
+
+====================================================================
+2. THE VOCABULARY DEFECT, MEASURED AND FIXED
+====================================================================
+
+pdf2mmd's `math` meant the OPPOSITE of MathPix's. In pdf2mmd it was
+prose carrying inline maths ("Definition 1.1. A graphon $\Gamma$ = ...");
+in MathPix `math` is display maths and prose stays `text`. Both
+`inlinectx.load_spans` and inkdrill's copy of the host rule SKIP `math`
+as display maths.
+
+    inline spans over the 20 documents          36,813
+    on lines typed `math`, hence invisible      29,172   = 79.2%
+    the control: sigma26-075 (MathPix)          0 of 565 lost
+
+It ran both ways: `equation` lines (pdf2mmd's display maths) carried
+6,402 spans that were being mined as if they were prose.
+
+Reported to pdfdrill with those numbers; shipped the same day as their
+844/844b (`docmodel_six.to_lines_json`, translated at the EXPORT
+boundary so the reader keeps its own words):
+
+    math -> text · equation -> math · caption -> figure_label
+    formula -> text (166 lines, their finding, not mine)
+    rotated_text KEPT (an arXiv stamp is not a sentence; their
+    paragraph.py excludes it by that name)
+
+RE-MEASURED HERE AFTER THE CHANGE, same 20 documents, same method:
+
+    inline spans invisible to load_spans   79.2%  ->  17.7%
+    lines with no `text_display` key       many   ->  0 of 24,943
+    types outside MathPix's 31             2      ->  0
+    ink coverage                           unchanged (99.99-100%)
+
+The remaining 17.7% (6,580 spans) sit on lines now typed `math` -- they
+ARE display maths, and skipping them is the rule working, not loss.
+
+Their own A/B against an author's LaTeX as gold (arXiv 1102.1889):
+Equations 961 -> 89 against a gold of 83, the worst offenders being the
+paper's ABSTRACT filed as display maths.
+
+====================================================================
+3. WHAT THIS LEAVES
+====================================================================
+
+  * sigma26-075 keeps BOTH readings: `sigma26-075.lines.json` is the
+    MathPix one (restored -- my regeneration had overwritten it), and
+    `sigma26-075.lines.pdf2mmd.json` beside it. The only document in the
+    library where the two readers can be compared row for row.
+  * The other 19 carry pdf2mmd readings and 400 dpi renders.
+  * pdfdrill reports 25 documents still holding a pre-844 reading;
+    the discriminator is a content line with no `text_display` key.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * Coverage is INK INSIDE A RECTANGLE. It says nothing about whether
+    the reader's text is right, only that it claimed the right places.
+    99.99% coverage with a wrong reading is possible and not excluded.
+  * The 17.7% residual spans were not individually checked; they are
+    display-maths lines by type, not by inspection.
+  * One publisher, 20 documents, one reader version. The header-rule
+    finding is SIGMA's layout, not a general claim about MathPix.
+  * No marks were produced for these documents: the formula pipeline
+    has not been run on a pdf2mmd reading yet.
