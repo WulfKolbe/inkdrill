@@ -198,6 +198,22 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+29. **Check that the instrument did not CREATE the quantity being
+    measured — especially when the first answer is a round 100%**
+    (out/690). "How much grey is on these pages" came back as *248 of
+    248, 100%*, from `magick -resize 25%`: a resampler that interpolates
+    and so puts a grey pixel at every glyph edge, measuring renders
+    deliberately produced WITHOUT anti-aliasing. `-sample` is
+    nearest-neighbour and gives 32%. The corpus never changed.
+    100% of anything should be assumed to be about the method until
+    shown otherwise.
+    **And narrow the question before answering it.** "How much grey is
+    there" has no decision attached and 32% answers nothing. "Is there a
+    band blank at 128 and not blank in fact" does — and its answer is a
+    RATIO, band density against page density, because a scan is grey
+    everywhere: an absolute cut on band greyness would have flagged all
+    six scans and been wrong six times.
+
 28. **An identity that changes when the content changes cannot
     detect a content change.** pdfdrill's `equations.json` carries
     `ident = sha(bibkey | page | region | latex)`, unique on 34,317 of
@@ -828,6 +844,16 @@ that PDF at all. `pdfdrill-rows.json` now carries
 mismatch. This is the same class as `report.compare.source`: an
 artifact can be stale against its source AND a result stale against
 the artifact, and only the first had a guard.
+
+**Each session is the only possible auditor of the other's METHOD.**
+pdfdrill cannot see this pipeline and this session cannot see theirs, so
+a result arrives as a fact in a message that looks like every other
+message. The `-resize` figure above would have reached them as "every
+page in the corpus carries grey content", measured, from me — and they
+had no way to find it. The exchanges that caught things this week all
+have the same shape: the method was reported, not just the number. Send
+how it was measured, and the population, even when the result looks
+dull.
 
 **Tasks arriving here that are pdfdrill's** (563, 564, 66, 483-485)
 are reported as theirs rather than executed. `ListAgents` shows no
