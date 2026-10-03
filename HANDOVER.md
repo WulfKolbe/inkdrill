@@ -198,6 +198,23 @@ last touched the file.
     documents and false for those. Item 11's open question (AA on took
     hole instability 75.0% -> 9.4%) is still open and still not acted on.
 
+28. **An identity that changes when the content changes cannot
+    detect a content change.** pdfdrill's `equations.json` carries
+    `ident = sha(bibkey | page | region | latex)`, unique on 34,317 of
+    34,317 rows with zero collisions — and still the wrong key for a
+    mark, because the LaTeX is IN it. Re-read a slot, get different
+    LaTeX, and the row does not read as "same slot, new content": it
+    reads as a NEW row with the old one vanished and any mark on it
+    orphaned against an id that exists nowhere. Nothing in the artefact
+    says so, and every test that asks only "is it unique?" passes.
+    The split is three fields doing three jobs: **identity**
+    (bibkey, page, region) — unique by construction, survives a
+    re-read; **label** (EQnnnn) — human-facing, renumbers freely;
+    **stability** (sha of the content) — same identity with a different
+    hash is a stale measurement. One field doing two of these is good
+    at neither. Same family as `measured_against`: a measurement must
+    be able to notice that its own subject moved.
+
 27. **A PLAUSIBLE AGREEMENT is its own failure class** (out/686 §5).
     I concluded from `counts.not_measured` that marks.json carried no
     per-id reasons and needed a schema change. The ids were in the same
