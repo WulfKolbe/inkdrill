@@ -1,0 +1,89 @@
+690 - was the threshold-128 blind spot ever actually costing anything?
+======================================================================
+
+`binarize` calls everything lighter than 128 background. out/689 found
+what that hides: a 217-grey arrow inside a display equation, 10,768 px
+of visible content that no ink measurement here counts. pdfdrill found
+the same default in their `eqblobs` — the column detector, the gutter
+profile, the short-and-centred display test — and recorded it as
+"limitation known, effect unknown".
+
+This closes that. The effect, on this sample, is nothing.
+
+====================================================================
+1. THE QUESTION HAD TO BE NARROWED FIRST
+====================================================================
+
+"How much grey is there" is not the question. A grey rule inside a REAL
+gutter is harmless — it makes the gutter cleaner, since the detector
+wants a blank column run and a grey rule reads as blank.
+
+The risk is the opposite: a FALSE gutter. A column band that is blank at
+threshold 128 and is not blank in fact, because something grey is drawn
+there. That band a detector accepts and a reader never sees.
+
+====================================================================
+2. THE INSTRUMENT WAS WRONG THE FIRST TIME, AND IT SAID 100%
+====================================================================
+
+The first run reported "248 of 248 pages (100%) carry mid-grey over
+0.1% of their area". That was `magick -resize 25%`, which INTERPOLATES:
+every glyph edge becomes a grey pixel that was never on the page. The
+downsampler manufactured the finding.
+
+    -resize 25%   pages with mid-grey   248 of 248   (100%)
+    -sample 25%   pages with mid-grey    79 of 248   ( 32%)
+
+`-sample` is nearest-neighbour and invents no values. The corpus never
+changed; the measurement did. A rendering pipeline that is PRECISELY
+non-anti-aliased by device default (HANDOVER: ghostscript `pgmraw` and
+`png16m` are byte-identical with `-dTextAlphaBits=1`) had anti-aliasing
+added by the measuring tool.
+
+====================================================================
+3. THE ANSWER
+====================================================================
+
+One page sampled per document, seeded, 248 pages of the 1,436
+documents carrying renders.
+
+    pages with mid-grey over 0.1% of their area            79 (32%)
+    pages with a wide blank-at-128 run holding mid-grey      7 (2.8%)
+    of those, where the band is GREYER THAN THE PAGE         0
+
+The last line is the result. For each candidate, grey density inside
+the band against grey density over the whole page:
+
+    scan_20260530_213818   band 0.14  page 0.18   ratio 0.78
+    scan_20260530_211129   band 0.11  page 0.17   ratio 0.61
+    scan_20260527_202821   band 0.04  page 0.07   ratio 0.54
+    Bruderus_Regelgeraet   band 0.04  page 0.03   ratio 1.23
+    scan_20260530_231215   band 0.01  page 0.06   ratio 0.10
+    scan_20260531_124851   band 0.00  page 0.01   ratio 0.02
+    FIAS_GaugeGravity_05   band 0.00  page 0.02   ratio 0.06
+
+A ratio near 1 means the band is as grey as everything around it —
+grey PAPER, which is what a scan is. Not one band is greyer than its
+page, so nothing is DRAWN in any of them. Six of the seven are scans;
+the seventh is a boiler manual with shaded boxes elsewhere on the page.
+
+So the threshold-128 gutter cut was never at risk here, and pdfdrill's
+3% constant does not need re-taking on account of grey.
+
+====================================================================
+WHAT THIS DOES NOT SAY
+====================================================================
+
+  * ONE PAGE PER DOCUMENT. A grey rule drawn on page 7 of a document
+    whose page 3 was sampled does not appear. This bounds the rate at
+    which documents carry the problem, not the rate at which pages do.
+  * It says nothing about grey content OUTSIDE gutters, which is
+    common — 32% of documents have some — and which every ink
+    measurement in this project still cannot see. out/689's arrow is
+    in that 32% and remains invisible.
+  * 0.1% of area and 50 px in a band are reporting floors chosen to
+    cut noise, not measured cuts. They affect which rows are LISTED,
+    not the ratio that answers the question.
+  * The corpus is 1,436 documents with renders, heavy in arXiv and
+    scans. A publisher using grey column rules as a matter of house
+    style would change this completely, and none is in the sample.
